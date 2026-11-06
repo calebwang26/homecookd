@@ -404,6 +404,15 @@ test('after she says not now, the kid sees it and can’t ask again for a day', 
   assert.equal(C.mapLine({ ...no, asked: true }, NOW), 'Asked Grandma Rajani');
 });
 
+test('a dish the team took off the map says so, and nobody can put it back on', () => {
+  const down = dish({ mine: true, takenDown: true });
+  assert.deepEqual(rowsOf(C.shareChoices([down], NOW).rows)[0], ['Put it on the map', 'Our team took it off the map after a report.', false, true]);
+  assert.deepEqual(rowsOf(C.dishRows([down, dish({ recipeId: 'r2', dish: 'Varan' })], NOW)).map((r) => r.slice(1)), [
+    ['Our team took it off the map after a report.', false, true],
+    ['homie asks Grandma Rajani first. The video stays private.', false, false],
+  ]);
+});
+
 test('a swap offers one of our shared dishes, or none yet', () => {
   assert.deepEqual(rowsOf(C.offerRows([dish({ shared: true }), dish({ recipeId: 'r2', dish: 'Varan', mine: true, shared: true })])), [
     ['Kanda Poha', 'Grandma Rajani’s recipe', true, false],

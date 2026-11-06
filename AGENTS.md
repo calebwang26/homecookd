@@ -68,6 +68,12 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **Purge dead branches (Caleb, Nov 2).** Delete a branch when its PR merges (`gh pr merge --delete-branch`, or delete
+  the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`
+  or `aws-migration`, or whose draft was superseded by a merged PR. Never delete `main`, `aws-migration`, a branch with an
+  open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
+  `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
+  can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
   Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
@@ -89,9 +95,18 @@ follows it, and it wins over the docs below on UI/UX and flows.
   credential or `LINK_JOIN_SECRET` (Convex and Supabase share it to sign join tickets) in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
-- **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout).
+- **Where the checkout lives (Nov 2):** `/Users/calebwang/GitHub/homecookd/homecookd`, outside iCloud, next to
+  `homecookd-backups` in the same `homecookd` folder (Caleb dropped the `hackathon-` from the folder name and, on Nov 2,
+  renamed the GitHub repo to `calebwang26/homecookd`; the old repo URL redirects). One symlink points at it and stays:
+  `~/Documents/GitHub/hackathon-homecookd` (the app won't move a session that runs in one of its worktrees); the
+  worktrees' git metadata names the real path.
+  Every tracked file, script and `.env` link names
+  the real path. Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there
+  ("dataless"), and git, rsync and `mv` all hang on them. The worktrees' installed packages (`node_modules`, `.venv`,
+  `web/.next`) were not copied in the Nov 1 move: run `npm ci` in a worktree that needs them.
+- **One `.env` for every key:** `/Users/calebwang/GitHub/homecookd/homecookd/.env` (the main checkout).
   Add or change keys only there. A worktree never gets its own copy: link it with
-  `ln -s /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env .env` from the worktree root. Only `app/.env`
+  `ln -s /Users/calebwang/GitHub/homecookd/homecookd/.env .env` from the worktree root. Only `app/.env`
   (public `EXPO_PUBLIC_*` settings) and `web/.env.local` (written by the Vercel CLI) stay where their tools read them.
 - **Cartesia (voice):** Ink and Sonic run in the live voice service, plus a Convex action for voice-note
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
@@ -201,10 +216,23 @@ cd app && npx expo start --dev-client                               # the EAS de
 cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
 cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
 cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-testers build on the staging channel (while 1.0 is in App Review)
-scripts/safe-eas-update.sh staging "<what changed>"                # JS-only fix to testers, refusing a family code in the bundle; while 1.0 is in review never the production channel (that reaches build 6, the reviewed build). Never `eas-cli update` by hand
+scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
+cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
+scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
+cd app && node scripts/test-aws.mjs                               # the 1.1 AWS client (src/lib/aws): error shapes, sessions, retries (fake fetch)
+cd app && node scripts/aws-accounts-staging.mjs                    # the same client against AWS staging: read-only Accounts checks
+cd app && node scripts/aws-accounts-flows.mjs                      # Accounts flows on AWS staging with test people (TEST_SIGNIN_KEY; deletes them after)
+cd app && node scripts/test-aws-jobs.mjs                          # the 1.1 Jobs client and live polls (fake fetch and clock)
+cd app && node scripts/aws-jobs-flows.mjs                          # Jobs on AWS staging: a real S3 upload, the job, polls, stops, cook-only (deletes test people)
+cd app && node scripts/test-aws-messages.mjs                      # the 1.1 Messages client and polled reads (fake fetch and clock)
+cd app && node scripts/aws-messages-flows.mjs                      # Messages on AWS staging: chat, questions, uploads, postcards, shares (deletes test people)
+cd app && node scripts/aws-dish-flows.mjs                          # kids' asks on AWS staging: a web card claimed, her requests, voice recipe, dishAskId (deletes test people)
+cd app && node scripts/test-aws-community.mjs                     # the 1.1 Community client (fake fetch)
+cd app && node scripts/aws-community-flows.mjs                     # Community on AWS staging: feed, swaps, a dinner end to end, invite link (no reports: they email the team)
+cd app && node scripts/aws-takedown-flows.mjs make|down|back|off <file>  # the team's takedown and keep on staging (AWS backend runs remove/keep between steps); make then off: share off alone
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 

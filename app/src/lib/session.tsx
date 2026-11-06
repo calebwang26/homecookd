@@ -62,6 +62,8 @@ import { AppState, Platform } from 'react-native';
 
 import { haptic } from '@/components/ui/haptics';
 
+import { AWS_ON } from './aws/config';
+
 import {
   api,
   ApiError,
@@ -910,6 +912,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return failed(null);
       }
       let signedOut = kind === 'own';
+      // On AWS, /v1/account/delete did it all: their phones and sessions ended (ACCOUNTS.md, "Delete account").
+      if (AWS_ON) {
+        if (!signedOut) leaving.current = false;
+        return { ok: true, signedOut };
+      }
       try {
         await api.removeProfile(person.id, { profileId: person.id });
       } catch (e) {

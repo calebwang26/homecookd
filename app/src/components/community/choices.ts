@@ -97,8 +97,8 @@ export function saidNotNow(d: Pick<FamilyDish, 'shared' | 'asked' | 'notNowAt'>,
   return !d.shared && !d.asked && d.notNowAt !== null && now - d.notNowAt < ASK_AGAIN_MS;
 }
 
-/** A dish whose row is only words: on the map, asked, or a "not now" still fresh. */
-const settled = (d: FamilyDish, now: number) => d.shared || d.asked || saidNotNow(d, now);
+/** A dish whose row is only words: on the map, taken off it by the team, asked, or a "not now" still fresh. */
+const settled = (d: FamilyDish, now: number) => d.shared || !!d.takenDown || d.asked || saidNotNow(d, now);
 
 /**
  * What "Put it on the map" says about one dish: on the map, asked, she said not now, mine (it goes on
@@ -108,6 +108,7 @@ const settled = (d: FamilyDish, now: number) => d.shared || d.asked || saidNotNo
 export function mapLine(d: FamilyDish, now: number): string {
   const cook = d.cookName.trim() || 'the cook';
   if (d.shared) return 'It’s on the map.';
+  if (d.takenDown) return 'Our team took it off the map after a report.';
   if (d.asked) return `Asked ${cook}`;
   if (saidNotNow(d, now)) return `${cook.charAt(0).toUpperCase()}${cook.slice(1)} said not now`;
   if (d.mine) return 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from.';

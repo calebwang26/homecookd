@@ -101,6 +101,24 @@ export const forFamily = query({
   },
 });
 
+/**
+ * The signed-in cook's own jobs, newest first: a recording on its way shows only to whoever filmed it
+ * (Caleb, Nov 1; docs/agents/memory/recording-only-filmer.md). forFamily stays for 1.0's build 6.
+ */
+export const mine = query({
+  args: { sessionToken: v.string() },
+  returns: v.array(schema.doc("jobs")),
+  handler: async (ctx, { sessionToken }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_cookId", (q) => q.eq("cookId", signed.person._id))
+      .order("desc")
+      .take(20);
+    return jobs.filter((j) => j.familyId === signed.family._id);
+  },
+});
+
 /** What a cancelled job says; worker.progress leaves a job with it alone, so a worker mid-way can't revive it. */
 export const CANCELLED = "Cancelled.";
 const FINISHED = new Set(["done", "failed"]);

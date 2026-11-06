@@ -97,7 +97,7 @@ export function asSending(u: Unsent, now: number): Unsent | null {
 }
 
 /**
- * A Send-screen upload's Convex job, from the family's newest jobs (jobs.forFamily keeps 20): found, or
+ * A Send-screen upload's Convex job, from the cook's newest jobs (jobs.mine keeps 20): found, or
  * `{ stage: null }` (done, long since handled, like recordingJob) when this phone saw Convex take the job
  * (its row's convex_job 'ok') but it's no longer among the newest, or null: no job.
  */
