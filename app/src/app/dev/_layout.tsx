@@ -1,4 +1,4 @@
-// The /dev screens (gallery, media) are for building the app. In a production build they aren't
+// The /dev screens (gallery, media, consent) are for building the app. In a production build they aren't
 // there: opening one sends you home (your home, else "Who's in the kitchen?").
 import { Redirect, Stack } from 'expo-router';
 
@@ -12,6 +12,7 @@ export default function DevLayout() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}>
       <Stack.Screen name="gallery" options={{ title: 'Gallery' }} />
       <Stack.Screen name="media" options={{ title: 'Media' }} />
+      <Stack.Screen name="consent" options={{ title: 'AI consent' }} />
     </Stack>
   );
 }

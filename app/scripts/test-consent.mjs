@@ -247,4 +247,15 @@ await test('no screen after sign-in: no /consent route, no gate, home and the ta
   }
 });
 
+await test('the sheet names only what each company does now: no cooking help or read-aloud (homie is off), and 1.1 on AWS names just Claude and Cartesia', async () => {
+  const { EN } = await import(pathToFileURL(join(root, 'src/lib/words/en/index.ts')).href);
+  for (const k of ['common.ai.line', 'common.ai.claude', 'common.ai.cartesia']) {
+    assert.doesNotMatch(EN[k], /helps you cook|reads steps aloud|listen while you cook/i, k);
+  }
+  assert.match(EN['common.ai.claude'], /writes the recipe/);
+  assert.match(EN['common.ai.cartesia'], /voice notes/);
+  const sheet = src('components/consent/AiConsentSheet.tsx');
+  assert.match(sheet, /\.\.\.\(AWS_ON\s*\?\s*\[\]/, 'Moss and Gemini are left out under the switch');
+});
+
 console.log(`\n${passed} passed`);
