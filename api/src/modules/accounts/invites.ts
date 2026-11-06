@@ -80,6 +80,62 @@ export async function revokeFamilyLinks(ctx: Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The operator's link: no expiry, for Apple's reviewer in the TEST family. Only src/reviewerLink.ts makes or turns one off; no route does.
+
+export type OperatorRefusal = "no_family" | "family_gone" | "other_family" | "cant_open";
+export type OperatorLink =
+  | { ok: true; made: boolean; linkId: string; url: string; people: number }
+  | { ok: false; code: OperatorRefusal; linkId?: string; otherFamilyId?: string };
+
+/** One run at a time across every family, so two runs can't each find none and both make one. */
+const lockOperatorLinks = (c: Queryable) => c.query(`select pg_advisory_xact_lock(hashtext('homecookd-operator-link'))`);
+
+/**
+ * The family's operator link, the same one on every run while it's on; else a new one. Refused for a family that isn't there or was blanked (it takes nobody in),
+ * while another family has one on (only the TEST family gets one, so that's a wrong id), and for one that can't be opened (a rotated key), which only revoke fixes:
+ * a quiet new link would break the one in Apple's notes.
+ */
+export async function operatorLink(familyRef: string): Promise<OperatorLink> {
+  return tx(async (c) => {
+    await lockOperatorLinks(c);
+    const family = await data.familyByExtId(c, familyRef);
+    if (!family) return { ok: false, code: "no_family" } as const;
+    if (family.blanked_at) return { ok: false, code: "family_gone" } as const;
+    const live = await data.liveOperatorLinks(c);
+    const other = live.find((l) => l.family_id !== family.id);
+    if (other) {
+      const theirs = await data.familyById(c, other.family_id);
+      return { ok: false, code: "other_family", linkId: other.id, otherFamilyId: theirs ? extId(theirs) : other.family_id } as const;
+    }
+    const people = (await data.peopleOf(c, family.id)).filter((p) => !p.removed_at).length;
+    const mine = live[0];
+    if (mine) {
+      const token = await unseal(JOIN_LINK_SALT, mine.id, mine.token_enc);
+      if (!token || !JOIN_TOKEN.test(token)) return { ok: false, code: "cant_open", linkId: mine.id } as const;
+      return { ok: true, made: false, linkId: mine.id, url: `${webUrl()}/i?t=${token}`, people } as const;
+    }
+    for (let i = 0; i < 3; i += 1) {
+      const id = randomUUID();
+      const token = newJoinToken();
+      const tokenEnc = await seal(JOIN_LINK_SALT, id, token); // before the write: with no EDIBLE_CODE_KEY nothing is made
+      if (await data.insertOperatorLink(c, { id, familyId: family.id, tokenHash: sha256Hex(token), tokenEnc })) {
+        return { ok: true, made: true, linkId: id, url: `${webUrl()}/i?t=${token}`, people } as const;
+      }
+    }
+    throw new Error("couldn't make a token no other link has");
+  });
+}
+
+/** Turns the family's operator link off for good: a leaked link stops at once, and the next make is a new one. Its 7-day links stay. Null: no such family. */
+export async function revokeOperatorLink(familyRef: string): Promise<number | null> {
+  return tx(async (c) => {
+    await lockOperatorLinks(c);
+    const family = await data.familyByExtId(c, familyRef);
+    return family ? data.revokeOperatorLinksOf(c, family.id) : null;
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Peeking
 
 /** "Are you Leo?": the one person whose name is exactly the typed one, not removed, with no account and no live phone. Never a list; nothing without a typed name. */

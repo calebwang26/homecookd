@@ -227,14 +227,21 @@ job, which takes the newest.
 The deploy role trusts the GitHub environment's name, so anyone with write access could run the workflow against an
 environment called `production`. **A GitHub environment named `Production` already exists, with no required reviewers**
 (probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
-role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
+role doesn't exist. ~~**Give it required reviewers (Caleb) before production is created.**~~
+
+**Known gap (Nov 5): GitHub can't give it required reviewers on this plan.** The API answers 422, "the billing plan supports the required
+reviewers protection rule": a private repository needs GitHub Team for environment protection rules, as it did for branch protection before Pro. So
+nothing stops a run against `production` but the deploy role's own trust (the environment's name, and `main` as its `deploy_branch`). Until the plan
+changes, the gate is people: the Master Agent reviews every PR that reaches `main`, and production's deploys and applies run only on Caleb's word in the
+AWS backend chat. Add the reviewers if the plan ever allows it: `gh api -X PUT repos/calebwang26/homecookd/environments/Production` with
+`reviewers[][type]=User` and Caleb's user id.
 
 ## Production before launch
 
 `envs/production` has every area's switch on from the start (`docs/build/CUTOVER.md`, "What production has on at launch") and every task at
 0. Each step here is Caleb's: production, DNS and new spending need his OK in chat (AGENTS.md). In order, as CUTOVER.md's step 6.
 
-**1. First.** Required reviewers on the GitHub `Production` environment ("Before production", above). Production's deploys log in only from
+**1. First.** ~~Required reviewers on the GitHub `Production` environment~~: not available on this plan ("Before production", above, the known gap). Production's deploys log in only from
 `main` (its `deploy_branch`), so they wait for CUTOVER.md's step 4, the merge.
 
 **2. The two certificates, before the first apply if possible.** ACM issues them only after a DNS check, so start here. With them in place,
@@ -328,9 +335,35 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
    (Mom, Dad, Grandma, Leo, Maya, Reviewer, `docs/agents/memory/app-review-guard.md`).
 2. Its Chicken Biryani is a real video job, so it waits for step 5. Production has no made-up recipe: `POST /v1/test/recipe` needs
    `TEST_SIGNIN_KEY`, which the env module refuses here.
-3. **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days (contracts/ACCOUNTS.md), and the api keeps a
-   link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend
-   builds a one-off task for it, as `dist/reports.js` is for reports, before step 9.
+3. **The reviewer's link that doesn't expire (#365).** A family's own links last 7 days (contracts/ACCOUNTS.md), so this one is an
+   operator's, made by `api/src/reviewerLink.ts` as a one-off task with the api's image, as `dist/reports.js` is for reports
+   (COMMUNITY-MIGRATION.md, "The team's reports"). No route makes one. `<familyId>` is the TEST family's id, `family.id` in `GET /family`.
+   ```bash
+   export AWS_PROFILE=homecookd AWS_REGION=us-west-2
+   NAME=homecookd-production                                    # homecookd-staging to try it first
+   RUN='["node","dist/reviewerLink.js","make","<familyId>"]'
+   # RUN='["node","dist/reviewerLink.js","revoke","<familyId>"]'    # a leaked link: it stops at once
+   TD=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].taskDefinition' --output text)
+   NETWORK=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].networkConfiguration' --output json)
+   TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$TD" \
+     --network-configuration "$NETWORK" \
+     --overrides "{\"containerOverrides\":[{\"name\":\"api\",\"command\":$RUN}]}" \
+     --query 'tasks[0].taskArn' --output text)
+   aws ecs wait tasks-stopped --cluster "$NAME" --tasks "$TASK"
+   aws ecs describe-tasks --cluster "$NAME" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text
+   aws logs tail "/$NAME/api" --log-stream-names "api/api/${TASK##*/}" --since 1h --format short
+   ```
+   - **`make`** prints the link once, on its own line (`https://homecookd.app/i?t=<22 characters>`, from `EDIBLE_WEB_URL`), and how many
+     people the family has, as a check that the id is the TEST family's (its faces from 8.1, removed ones not counted). Run it again and it prints the same link: the
+     token is kept sealed (`join_links.token_enc`), so it can always be shown again and needs no copy anywhere else.
+   - **Where the link goes:** only the task's own log stream, which keeps it 30 days, and never in its JSON line. That log is read only by
+     the team, who could run `make` again anyway, and the link goes into Apple's reviewer notes. Copy it into the notes, then delete the
+     stream if you like: `aws logs delete-log-stream --log-group-name "/$NAME/api" --log-stream-name "api/api/${TASK##*/}"`.
+   - **Refused (exit 1), nothing changed:** a family that isn't there or was deleted; another family already has a link with no expiry
+     (only the TEST family gets one, so it's a wrong id); or the link can't be opened with this `EDIBLE_CODE_KEY` (`revoke`, then `make`,
+     and put the new link in the notes). A wrong word is exit 2 and never reaches the database.
+   - **`revoke`** turns it off at once. The family's own 7-day links keep working, and the next `make` is a new link, so the reviewer notes
+     change with it.
 4. App Store/web writes in the reviewer notes how 1.1 joins it, under the App Review guard.
 
 **Still open for launch, outside this file:**
@@ -345,7 +378,8 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
   python3 sample_library.py --to homecookd-production-media-$ACCOUNT --media-base https://media.homecookd.app   # dry run
   AWS_PROFILE=homecookd AWS_REGION=us-west-2 python3 sample_library.py --to homecookd-production-media-$ACCOUNT --media-base https://media.homecookd.app --write --library-bucket-caleb-ok
   ```
-- The worker's disk is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md).
+- The worker's disk is Fargate's default 20 GB. The env module's `disk_gib` sets more, 21 to 200 GiB (#364), and `plan_check.py` prices what's past 20.
+  Production's worker leaves it unset until the measured real video job (CUTOVER.md, step 6) gives the number (WORKER-MIGRATION.md).
 
 ## The kid's web flow on staging
 

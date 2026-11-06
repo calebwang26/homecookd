@@ -400,6 +400,10 @@ A retry after a lost answer gets 401 `signed_out` (own phone) or 403 `removed_fr
 
 **Answer:** `{ok: true}`. The next `POST /join-links` makes a new link.
 
+### The reviewer's link (no route)
+
+The TEST family also has one link with no expiry (`expires_at` null, no inviter), for Apple's reviewer. Only the team makes or turns it off, with the one-off task `node dist/reviewerLink.js make|revoke <familyId>` (`api/src/reviewerLink.ts`; `infra/README.md`, "Production before launch", 8.3). It joins like any family link. `POST /join-links` never returns it, and `POST /join-links/revoke` leaves it on. `POST /invites/peek` answers it with `expires_at: null`. Only one family has one at a time.
+
 ### `POST /invites/peek`: what a link says (public; `x-device-key` optional)
 
 **Body:** `{token, name?}`.

@@ -1,9 +1,10 @@
 // The cook's Community switch, one quiet row at the foot of her own recipe page (my-recipe/[id]),
 // in the shape of ShareCookingRow:
 //   Share with people nearby · Off
-//   Neighbors see the recipe text, one line you said and homie’s guess at where it’s from, never your
+//   Neighbors see the recipe text, one line you said and an AI guess at where it’s from, never your
 //   video or voice.
-// (The line is the map card's quote, one of her own step quotes; the guess is Muse's culture label.)
+// (The line is the map card's quote, one of her own step quotes; the guess is the AI's culture label, tagged AI on
+// the card.) Her words read in her language (share.nearby.*).
 // A tap flips it (community.setShare; a failure flips it back with a toast). The first time it goes
 // on, Muse writes the dish's story card, so turning it on asks first the first time (lib/aiConsent;
 // "Not now" leaves it off). Hidden unless this dish has a ready Convex row and the
@@ -17,16 +18,12 @@ import { haptic, PressableScale, Txt, useToast } from '@/components/ui';
 import { ensureAiConsent } from '@/lib/aiConsent';
 import { AWS_ON } from '@/lib/aws/config';
 import { setShare } from '@/lib/live/community';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 import { useFamilyRecipes } from './data';
 import { errorText } from './labels';
 
-// TODO(caleb): the words a cook reads before she shares (the map card shows one line she said and
-// Muse's guess at the dish's culture, tagged AI).
-const WHAT_NEIGHBORS_SEE = 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from, never your video or voice.';
-// errors.taken_down's English (the api's 409 says the same).
-const TAKEN_DOWN = 'Our team took this recipe off the map after a report. It stays with your family.';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -40,6 +37,7 @@ export type ShareNearbyRowProps = {
 
 export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
   const toast = useToast();
+  const { t } = useWords();
   const isCook = me?.role === 'cook';
   const rows = useFamilyRecipes(isCook && !!libraryId);
   const row = rows?.find((r) => r.libraryId === libraryId) ?? null;
@@ -50,17 +48,17 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
   if (!isCook || !row || row.status !== 'ready' || norm(row.cookName) !== norm(me?.name)) return null;
   if (AWS_ON && row.hiddenAt) {
     return (
-      <View style={[styles.wrap, style]} accessible accessibilityLabel={`Off the map. ${TAKEN_DOWN}`}>
+      <View style={[styles.wrap, style]} accessible accessibilityLabel={t('share.nearby.offMapA11y', { why: t('errors.taken_down') })}>
         <View style={styles.row}>
           <Txt variant="label" weight={600} color={colors.muted}>
-            Share with people nearby ·{' '}
+            {t('share.nearby.label')} ·{' '}
             <Txt variant="label" weight={700} color={colors.muted}>
-              Off the map
+              {t('share.nearby.offMap')}
             </Txt>
           </Txt>
         </View>
         <Txt variant="caption" align="center">
-          {TAKEN_DOWN}
+          {t('errors.taken_down')}
         </Txt>
       </View>
     );
@@ -78,7 +76,7 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
       await setShare(row._id, next);
       haptic('selection');
     } catch (e) {
-      toast.show(errorText(e, 'Couldn’t save that. Try again.'), { tone: 'error' });
+      toast.show(errorText(e, t('share.nearby.saveFailed')), { tone: 'error' });
     } finally {
       setSaving(false);
       setWanted(null);
@@ -91,19 +89,19 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
         onPress={flip}
         disabled={saving}
         accessibilityRole="switch"
-        accessibilityLabel="Share with people nearby"
-        accessibilityHint={WHAT_NEIGHBORS_SEE}
+        accessibilityLabel={t('share.nearby.label')}
+        accessibilityHint={t('share.nearby.whatNeighborsSee')}
         accessibilityState={{ checked: on, busy: saving }}
         style={styles.row}>
         <Txt variant="label" weight={600} color={colors.muted}>
-          Share with people nearby ·{' '}
+          {t('share.nearby.label')} ·{' '}
           <Txt variant="label" weight={700} color={on ? colors.green : colors.muted}>
-            {on ? 'On' : 'Off'}
+            {on ? t('share.nearby.on') : t('share.nearby.off')}
           </Txt>
         </Txt>
       </PressableScale>
       <Txt variant="caption" align="center" importantForAccessibility="no" accessibilityElementsHidden>
-        {WHAT_NEIGHBORS_SEE}
+        {t('share.nearby.whatNeighborsSee')}
       </Txt>
     </View>
   );

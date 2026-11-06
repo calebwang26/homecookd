@@ -124,14 +124,14 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   curl -s https://media.homecookd.app/library.json | head
   ```
   It needs from Caleb: his OK for the `--write`; his pick of samples (`TODO(caleb)`): by default the five made-up ones in `data/synthetic/`, read from the repo. The video samples on GCS (`chicken-biryani`, `gordon-stir-fry`, `gordon-gnocchi`, `gordon-cheesecake`) are YouTube creators' videos: each one is `--from-gcs <id>`, which also needs `--real-buckets-read-only-caleb-ok`, his gcloud login and `google-crc32c`. `weed-steak` isn't a sample, so it's refused. A second run writes only what changed (MEDIA-MIGRATION.md, "The sample library").
-  - **The worker's disk** is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md). The measured job above says whether it's enough. If not, the setting comes with the worker's size.
+  - **The worker's disk** is Fargate's default 20 GB. The env module's `disk_gib` sets more, 21 to 200 GiB (#364); production's worker leaves it unset, with a `TODO(caleb)`. The measured job above (`disk_peak_mb`) says whether 20 is enough, and if not, sets `disk_gib` with the worker's size (WORKER-MIGRATION.md).
 - **Back:** nothing depends on it yet. Remove the DNS records, turn off the database's deletion protection (`db_protected`), and `terraform destroy`.
 
 ### 7. The demo and test families: copy once, or start fresh. OK (real data)
 Caleb picks one.
 - **Who:** Caleb decides. AWS backend runs it. App Store/web updates the reviewer notes, under the App Review guard.
 - **Either way:** the TEST family that Apple's reviewer uses exists on production, with its faces (Mom, Dad, Grandma, Leo, Maya, Reviewer) and its Chicken Biryani (`docs/agents/memory/app-review-guard.md`), and the reviewer's link that doesn't expire (ACCOUNTS-MIGRATION.md, "What's needed at the switch"). The notes say how 1.1 joins it.
-- **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days, and the api keeps a link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend builds a one-off task for it, as `dist/reports.js` is for reports, before step 9 (`infra/README.md`, "Production before launch", 8).
+- **The reviewer's link that doesn't expire (#365):** a family's own links last 7 days, so this one is an operator's, made by the one-off task `node dist/reviewerLink.js make <familyId>` on the TEST family once it exists, before step 9. `revoke` turns a leaked one off. The run command, where the link is printed and why: `infra/README.md`, "Production before launch", 8.3.
 - **Starting fresh:** nothing is copied, and `EDIBLE_CODE_KEY` can be production's own. The demo families sign in on 1.1 and start over. What's on Convex, Supabase and GCS stays there until those shut down.
 - **Copying once:**
   1. A fresh `npx convex export --include-file-storage` first, kept outside the repo, as the snapshot that's copied.

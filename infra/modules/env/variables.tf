@@ -34,7 +34,7 @@ variable "db_protected" {
 }
 
 variable "services" {
-  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf). health_port = the load balancer checks /health there, not on port (the api's own thread, api/src/health.ts)."
+  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf). health_port = the load balancer checks /health there, not on port (the api's own thread, api/src/health.ts). disk_gib = the task's disk, unset = Fargate's 20 GiB."
   type = map(object({
     cpu           = number
     memory        = number
@@ -49,7 +49,13 @@ variable "services" {
     uses_database = optional(bool, false)
     entry_point   = optional(list(string))
     autoscale     = optional(object({ min = number, max = number }))
+    disk_gib      = optional(number)
   }))
+  # Fargate's ephemeral storage: 21 to 200 GiB when set. Unset leaves the task definition with no ephemeral_storage block, at the free 20 GiB.
+  validation {
+    condition     = alltrue([for s in values(var.services) : s.disk_gib == null ? true : (s.disk_gib >= 21 && s.disk_gib <= 200 && floor(s.disk_gib) == s.disk_gib)])
+    error_message = "disk_gib is a whole number from 21 to 200, as Fargate allows. Leave it unset for Fargate's default 20 GiB."
+  }
   validation {
     condition = alltrue([for s in values(var.services) : s.autoscale == null ? true : (
       s.autoscale.min >= 1 && s.autoscale.max >= s.autoscale.min && contains([0, s.autoscale.min], s.desired_count)
