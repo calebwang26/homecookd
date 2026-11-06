@@ -355,7 +355,7 @@ LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.
 **Still open for launch, outside this file:**
 - ~~Community reports reach nobody on AWS.~~ Built in #323: a report or block logs a line, and a log alarm emails the alerts topic.
   Proven on staging Nov 2. Production gets it with this apply; confirm its alerts email (CUTOVER.md, step 6).
-- ~~`infra/scripts/load-test.mjs` refuses production's address.~~ It has a production mode (#NNN, step 7 above). Its made-up cards still
+- ~~`infra/scripts/load-test.mjs` refuses production's address.~~ It has a production mode (#368, step 7 above). Its made-up cards still
   need the cleanup task there before they can be deleted.
 - Production's media bucket has no `library.json`, so the public library is empty (contracts/JOBS.md, open item 15).
 - The worker's disk is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md).
