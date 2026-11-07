@@ -11,7 +11,7 @@ Do these in order. Section 1 explains why the steps go this way; sections 3 and 
 
 **Before App Store Connect:**
 
-1. On your phone: TestFlight → homecookd → install **1.0.0 (15)** and use it with your own account as usual (Home, a
+1. On your phone: TestFlight → homecookd → install **1.0.0 (17)** and use it with your own account as usual (Home, a
    recipe, film something short). If anything's wrong, stop here and tell the Master Agent.
 2. On the Mac, copy the reviewer link. In a homecookd Claude chat, type `! pbcopy < docs/build/.test-family-link` (or in
    Terminal: `pbcopy < ~/GitHub/homecookd/homecookd/docs/build/.test-family-link`). Paste it into a note in Notes on your
@@ -26,8 +26,8 @@ Do these in order. Section 1 explains why the steps go this way; sections 3 and 
 2. In the banner at the top, click **remove this version from review**, then **Remove**. The status becomes
    **Developer Rejected**. 1.0 was never on sale, so nothing public changes.
 3. Scroll to **Build**. Hover over build 6 and click the red **−** to remove it. Click **Add Build** (or **+**), pick
-   **15**, then **Done**.
-   **If 15 isn't offered, stop.** Send Apple the message in section 1 from **Contact Us** (App Review), and tell the
+   **17**, then **Done**.
+   **If 17 isn't offered, stop.** Send Apple the message in section 1 from **Contact Us** (App Review), and tell the
    Master Agent. Nothing else needs to be undone.
 4. **Previews and Screenshots** → the **6.9" Display** tab. Delete 1.0's seven (hover over each → ×). Then drag in the
    seven from `docs/app-store/screenshots/1.1/` in name order, 01 to 07. If any other iPhone size tab still has 1.0's,
@@ -70,7 +70,7 @@ Caleb's or Salik's to send, from their account:
 > Our app homecookd (Apple ID 6825621614) version 1.0 was approved and is Pending Developer Release, set to manual
 > release. We never released it. We've rebuilt the app's backend and want version 1.0's first public release to be
 > a newer build. We removed the version from review as described in "Remove a submission from review", and it now shows
-> Developer Rejected, but we can't select our new build (1.0.0, build 15). Could you confirm the supported way to
+> Developer Rejected, but we can't select our new build (1.0.0, build 17). Could you confirm the supported way to
 > submit a new build for this same version, or whether we should create version 1.1 instead?
 
 The other way out, if Apple says so: release nothing, and create version 1.1 once 1.0 is Developer Rejected. Then
@@ -80,7 +80,7 @@ The other way out, if Apple says so: release nothing, and create version 1.1 onc
 
 | Needed | Who | State on Nov 7 |
 |---|---|---|
-| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 15 (`production-aws`, main `df4337659`), started Nov 7 and sent to TestFlight (EAS counted two earlier attempts that never made a build, so there's no 13 or 14 to pick); Caleb tests it on his phone first (the morning section). It replaces build 12 |
+| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 17 (`production-aws`, main `f49ef7ba7`), on App Store Connect Nov 7 at 13:19 PT, TestFlight internal, on no version yet. It's build 15 (which Caleb phone-checked, PRODUCTION-CHECKLIST.md) plus #382, #388 and #392; Caleb re-checks 17 for five minutes before submitting. 13, 14 and 16 never made a build, so pick 17 |
 | The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
 | The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family". To turn it off: `node dist/reviewerLink.js revoke <family id>` (infra/README.md 8.3) |
 | A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
