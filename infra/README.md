@@ -334,11 +334,16 @@ real video job sets the worker's size, disk and count (its `TODO(caleb)`).
 
 The load test, from a laptop on its own address (not a shared office one: the card limit counts per address):
 ```bash
-LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 --rps 200 --minutes 12 --burst 1500
+LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 --rps 200 --ramp 2 --minutes 12 --burst 1500
 ```
 - **Why 200 a second:** two of staging's 0.25 vCPU tasks held about 60 a second at 50% CPU, so production's two 0.5 vCPU tasks hold about
   120. 200 keeps them over their 50% target, so autoscaling has to reach 4. Four run near 40% at 200, well over the 25% that takes one
   away, so none goes mid-load. Pass: under 0.1% not 2xx over the window, and no 5xx in the burst but the 503 with retry-after.
+- **Why a ramp (Caleb, Nov 7):** the first run (Nov 7, no ramp) jumped from 0 to 200 a second onto 2 cold tasks. 730 of its 786 misses
+  came in those first 15 seconds and 55 more mid scale-out, all the api's own 503 with retry-after; autoscaling reached 3 at 37 s and 4 at
+  3 min 37 s, and the last 10 minutes at 4 tasks had none (0.546% overall). Real traffic grows; it doesn't jump from nothing. So `--ramp 2`
+  climbs to the rate over 2 minutes, reports it apart, and the 0.1% is scored only on the 12 minutes after. If the scored window still sheds
+  in its first minute, the tasks are still catching up: say so in the result rather than lengthening the ramp until it passes.
 - **Cost:** each card is one real Claude guess (Haiku, about $0.001), so about $0.002. Nothing after the setup reaches a model.
 - **Limits:** the card limit is real here (6 in 10 minutes, 30 a day, per address), so running it again within 10 minutes stops at
   setup with a 429. Nothing else it calls has a per-address limit.
