@@ -159,7 +159,7 @@ module "env" {
     # EC2, and a bigger disk, from the real video job CUTOVER.md's step 6 measures. Until then it's the size that job is measured at.
     # One task always on: nothing else claims a cook's video, and the service has no autoscaler, so at 0 every job sat in the queue (Nov 7, the TEST
     # family's Biryani). At this size it's about $85 a month (2 vCPU and 8 GB for 730 hours). TODO(caleb): one always on, or 0 to 1 on the queue's
-    # depth (about $4 to $35 a month for 1 to 10 videos a day, and a cook's first video waits about 2 to 4 minutes for a task: #NEXT).
+    # depth (about $4 to $35 a month for 1 to 10 videos a day, and a cook's first video waits about 2 to 4 minutes for a task: #377).
     worker = {
       # TODO(caleb): disk_gib (21 to 200) once the measured job's disk_peak_mb says 20 GiB isn't enough. Unset is Fargate's 20 GiB.
       cpu           = 2048
