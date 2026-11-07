@@ -39,7 +39,8 @@ aren't kept.
 
 The seven framed screens are one folder up, same file names, 1320 × 2868: the caption in Fraunces on the page's sage
 (`#EEF3F0`), the screen below with rounded corners, as 1.0's were. `node scripts/frame-app-store-shots.mjs` remakes them
-from `raw/` (name files to redo only those); it needs `web/node_modules` and Google Chrome.
+from `raw/` (name files to redo only those), and writes a 1206 × 2622 copy of each to `medium/` for App Store
+Connect's default iPhone tab. It needs `web/node_modules`, Google Chrome and macOS's `sips`.
 
 The three flags above, decided:
 

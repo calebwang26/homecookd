@@ -39,9 +39,10 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    Version**) and type **1.1.0**, the same as the build's version, then **Create**.
 2. **Build:** click **Add Build** (or **+**), pick **18**, then **Done**. If 18 isn't there yet, it's still processing
    at Apple; wait for the Master Agent's word.
-3. **Previews and Screenshots** → the **6.9" Display** tab. A new version starts with 1.0's screenshots: delete those
-   seven (hover over each → ×), then drag in the seven from `docs/app-store/screenshots/1.1/` in name order, 01 to 07.
-   If another iPhone size tab still has 1.0's, delete those too. Apple scales the 6.9" ones down.
+3. **Previews and Screenshots:** a new version starts with 1.0's screenshots, so delete those seven (hover over each →
+   ×). Drag the seven from `docs/app-store/screenshots/1.1/medium/` (1206 × 2622) into the default iPhone tab, in name
+   order, 01 to 07. Then open **Media Manager** and put the 1320 × 2868 originals from `screenshots/1.1/` in the 6.9"
+   slot.
 4. Paste from `LISTING-1.1.md`: **Promotional Text**, **Description** and **What's New in This Version**. Keywords stay
    as they are.
 5. **App Review Information:** uncheck **Sign-in required**. Replace **Notes** with section 3's text. Copy the link again
@@ -72,13 +73,18 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
 
 | Needed | Who | State on Nov 8 |
 |---|---|---|
-| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0), uploaded to App Store Connect Nov 8 and processing: build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 once processed |
+| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0): build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 Nov 8 |
 | The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
 | The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family". To turn it off: `node dist/reviewerLink.js revoke <family id>` (infra/README.md 8.3) |
 | A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
 | The APNs key on Expo, so pushes are real | Salik (LAUNCH-LINKS.md 6c) | Done Nov 6: key `S3J2G3P3H3` on Expo |
-| App Privacy: Diagnostics added (section 4) | Caleb or Salik; the Master Agent with Caleb's OK | Not done yet: part C, step 7 |
-| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** created Nov 8 after 1.0 was released (14:35 PT). Promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release: filled and saved. Screenshots going in through Media Manager's 6.9" slot |
+| App Privacy: Diagnostics added (section 4) | The Master Agent, with Caleb's OK | Published Nov 8: Diagnostics → Other Diagnostic Data, App Functionality, not linked, not tracking |
+| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** complete Nov 8: promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release, and the seven screenshots in both sizes (below). Caleb presses Add for Review |
+
+**Screenshot sizes (learned Nov 8).** App Store Connect's default iPhone tab takes only the medium display size,
+1206 × 2622 or 1179 × 2556. The 6.9" shots (1320 × 2868) go in through **Media Manager**'s large-display slot. 1.1.0
+has both: `docs/app-store/screenshots/1.1/medium/` in the default slot and `screenshots/1.1/` in the 6.9" one.
+`scripts/frame-app-store-shots.mjs` writes both sizes each run.
 
 ## 3. Reviewer notes for 1.1
 
