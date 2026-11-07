@@ -796,6 +796,16 @@ def summarize(recipe: Recipe, not_processed: list[dict], usage: Usage, cover: di
             log(line)
 
 
+MAX_QUESTIONS = 3  # Caleb, Nov 7: 8 questions to a cook was "insanely overwhelming"
+
+
+def first_questions(recipe: Recipe) -> Recipe:
+    """The recipe with at most MAX_QUESTIONS follow-up questions: the ingredient check's (seen.py) first, then the
+    writer's, each in its own order."""
+    qs = sorted(recipe.follow_up_questions, key=lambda q: q.ingredient is None)[:MAX_QUESTIONS]
+    return recipe.model_copy(update={"follow_up_questions": qs})
+
+
 def write_recipe(w: writer.Writer, fallback: TextModel, manifest: dict,
                  events: list[dict], n: int, out_dir: Path, usage: Usage, gap_s: int) -> tuple[Recipe, dict]:
     """The writing step: merge + coverage retry with `w`; the whole step again with `fallback` if `w` fails."""
@@ -981,6 +991,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
             recipe = seen.check(recipe, out_dir / "play.mp4", work, usage, log)
         except Exception as e:  # noqa: BLE001 - the recipe stands without it
             log(f"[seen] WARNING: no ingredient check ({type(e).__name__}: {str(e)[:300]})")
+    recipe = first_questions(recipe)
     poster_from = make_cover(*cover_by, recipe, out_dir, usage)
     recipe_path.write_text(json.dumps(recipe.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n")
     (out_dir / "recipe.invalid.json").unlink(missing_ok=True)
