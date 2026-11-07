@@ -89,9 +89,10 @@ top, the screen below.
 | 06 | Hear it in their voice | The kid's card after Mom answered: her quote and Hear Mom | 05 "Keep the stories, too" |
 | 07 | Send home a photo | The "I made it" photo going back to the cook | 06, new UI; 07 "Every family recipe in one place" drops (Apple allows up to 10, 7 kept) |
 
-Who: App screens & recording shoots them on build 11 (or the step-8 production build) against the TEST family,
-with no test-run leftovers on screen ("(test recipe)" names, empty photos). App Store, web & builds frames and
-captions them into `docs/app-store/screenshots/1.1/` and the handoff doc.
+Who: App screens & recording shot them on Nov 6 (`docs/app-store/screenshots/1.1/raw/`, 1320 × 2868, the web build of
+build 12's code on AWS staging; production's TEST family isn't seeded yet), with no test-run leftovers on screen. Its
+README lists what to know before they go to Apple. App Store, web & builds frames and captions them into
+`docs/app-store/screenshots/1.1/` and the handoff doc.
 
 ## App Review guard
 
