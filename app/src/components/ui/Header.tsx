@@ -99,10 +99,12 @@ export function LargeHeader({
   );
   return (
     <Animated.View style={[styles.large, { paddingTop: padTop }, style, fade]}>
-      <View style={[styles.titleCol, { gap: eyebrow ? (eyebrowRight ? EYEBROW_RIGHT_GAP : eyebrowTone === 'parent' ? 4 : 2) : 6 }]}>
-        {eyebrow ? (
+      <View style={[styles.titleCol, { gap: eyebrowRight ? EYEBROW_RIGHT_GAP : eyebrow ? (eyebrowTone === 'parent' ? 4 : 2) : 6 }]}>
+        {eyebrow || eyebrowRight ? (
           <View style={styles.eyebrowRow}>
-            {eyebrowTone === 'parent' ? (
+            {!eyebrow ? (
+              <View style={styles.shrink} />
+            ) : eyebrowTone === 'parent' ? (
               <Txt variant="label" size={16} weight={600} color={colors.ink} style={styles.shrink}>
                 {eyebrow}
               </Txt>
