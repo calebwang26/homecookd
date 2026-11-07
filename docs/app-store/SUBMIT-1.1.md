@@ -18,7 +18,6 @@ Do these in order. Section 1 explains why the steps go this way; sections 3 and 
    phone (Universal Clipboard) and tap it. homecookd opens on **"You're in <your family>. Join Test family instead?"**.
    Close it without joining: joining would move your account into the reviewer's family. Don't use Safari's address
    bar for this: typed there, the link opens the website, whose /i still asks the old backend until CUTOVER step 10.
-3. Make sure the Master Agent has said the TEST family's Chicken Biryani finished processing (AWS backend checks it).
 
 **In App Store Connect:**
 
@@ -82,9 +81,9 @@ The other way out, if Apple says so: release nothing, and create version 1.1 onc
 | Needed | Who | State on Nov 7 |
 |---|---|---|
 | The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 13 (`production-aws`, main `5716d1f57`), started Nov 7 and sent to TestFlight; Caleb tests it on his phone first (the morning section). It replaces build 12 |
-| The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people. The Chicken Biryani was still processing; AWS backend confirms when it's done |
-| The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family" |
-| A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7 |
+| The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
+| The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family". To turn it off: `node dist/reviewerLink.js revoke <family id>` (infra/README.md 8.3) |
+| A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
 | The APNs key on Expo, so pushes are real | Salik (LAUNCH-LINKS.md 6c) | Done Nov 6: key `S3J2G3P3H3` on Expo |
 | App Privacy: Diagnostics added (section 4) | Caleb or Salik | Not done: the morning section, step 8 |
 | The listing and seven screenshots (`LISTING-1.1.md`) | Caleb or Salik; App screens shoots | Text written (#355). Screenshots shot Nov 6 (#374), framed and captioned Nov 7 in `screenshots/1.1/`; 06 may be reshot (its README) |
