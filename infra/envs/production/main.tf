@@ -155,15 +155,18 @@ module "env" {
       }
     }
     # Queue mode (docs/build/WORKER-MIGRATION.md), every step on Claude and Cartesia, as the laptop's worker runs: production has no Gemini or Muse key.
-    # The spend caps are the code's, Caleb's $12 a job and $30 a day (PIPELINE_JOB_CAP_USD, PIPELINE_DAILY_CAP_USD). TODO(caleb): the size, Fargate or
-    # EC2, and a bigger disk, from the real video job CUTOVER.md's step 6 measures. Until then it's the size that job is measured at.
+    # The spend caps are the code's, Caleb's $12 a job and $30 a day (PIPELINE_JOB_CAP_USD, PIPELINE_DAILY_CAP_USD).
     # One task always on: nothing else claims a cook's video, and the service has no autoscaler, so at 0 every job sat in the queue (Nov 7, the TEST
-    # family's Biryani). At this size it's about $85 a month (2 vCPU and 8 GB for 730 hours). TODO(caleb): one always on, or 0 to 1 on the queue's
-    # depth (about $4 to $35 a month for 1 to 10 videos a day, and a cook's first video waits about 2 to 4 minutes for a task: #377).
+    # family's Biryani). TODO(caleb): one always on, or 0 to 1 on the queue's depth (#377).
+    # The size, from the measured jobs (Nov 7, docs/build/WORKER-MIGRATION.md, "Measured"): Fargate, and CPU is all that runs out. Preparing the video
+    # (ffmpeg, libx264) kept 2 vCPU busy for 98 minutes on 51 minutes of iPhone HEVC; memory peaked at 289 MB and disk at 4.2 GB. 4 vCPU halves that.
+    # TODO(caleb): 4 vCPU, about $144 a month always on (a 25-minute video in about 30 minutes, a 51-minute one in about 55), or 2 vCPU and 4 GB at
+    # about $72 (half as fast), or 8 vCPU and 16 GB at about $288 (51 minutes of video in about 30). 8 GB is the least Fargate gives 4 vCPU.
     worker = {
-      # TODO(caleb): disk_gib (21 to 200) once the measured job's disk_peak_mb says 20 GiB isn't enough. Unset is Fargate's 20 GiB.
-      cpu           = 2048
+      # 40 GiB: 4.2 GB at the peak for 51 minutes, so about 20 GB for the 4-hour longest (MAX_HOURS), with room. About $1.60 a month past the free 20.
+      cpu           = 4096
       memory        = 8192
+      disk_gib      = 40
       desired_count = 1
       uses_database = true
       secrets       = local.worker_secrets

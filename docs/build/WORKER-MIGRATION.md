@@ -127,6 +127,22 @@ in place of `DB_CREDENTIALS`, and signs an IAM token per connection (`queue_db.i
 | Follow-up upsert | `questions_one_follow_up` |
 | Link calls to the recipe | `model_calls_job` |
 
+## Measured (Nov 7, production)
+
+Two real jobs, each on its own `--once` task (2 vCPU, 8 GB, 100 GiB), Claude for every step:
+
+| Video | Total | Preparing | Understanding | Writing | Claude cost | cpu_s | Peak memory | Peak disk |
+|---|---|---|---|---|---|---|---|---|
+| Chicken Biryani, 16.8 min, H.264 (the TEST family's) | 18.5 min | 11.8 min | 1.0 min | 5.5 min | $0.56 | 1,487 | 244 MB | 0.6 GB |
+| Swordfish steak, 51.3 min in 2 clips, 1080p HEVC (Caleb's own footage) | 104 min | 98.4 min | 1.6 min | 3.75 min | $0.80 | 11,779 | 289 MB | 4.2 GB |
+
+- **CPU is the only limit.** The Swordfish job kept 1.9 of 2 vCPU busy for its whole 104 minutes. Fargate has no hardware encoder, so `prep.py` decodes the HEVC and encodes two copies with libx264 (`PLAY_ARGS` at 720p, `AI_ARGS` at 360p and 1 fps): about 3.8 CPU-seconds for each second of iPhone video.
+- **Memory and disk aren't close.** 289 MB is the biggest ffmpeg child (`RUSAGE_CHILDREN`), and 4.2 GB of disk includes the 3.5 GB upload.
+- **Fargate, not EC2:** a bigger Fargate size fixes the only limit. EC2 would help only with a hardware encoder, which means a GPU instance and a different image.
+- **The 30-minute target** (SYSTEM-DESIGN) holds, at most, for about 14 minutes of video on 2 vCPU, about 25 minutes on 4, and about 50 minutes on 8. Production runs 4 (`infra/envs/production/main.tf`, its `TODO(caleb)` has the other sizes and their costs).
+- **Cheaper than a bigger task, for Pipeline & recipes:** prep decodes each clip twice (once per copy). One decode feeding both outputs, or `-preset superfast` on the 360p AI copy, could cut its CPU by about a third. Measure before and after.
+- **The Claude cost is lower than the caps' projection:** $0.80 for 51 minutes, against `COST_PER_HOUR_USD` = $2.50.
+
 ## How to measure a real job
 
 **Needs Caleb's OK each time, and only his own consenting test footage, never a family's video:** `/privacy` doesn't list AWS yet. It costs real money, past the caps' Claude-only count.
