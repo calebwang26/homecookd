@@ -22,7 +22,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    `docs/app-store/screenshots/` (01 to 07, the pre-egg UI, hands-free cooking on 03 and 04). That's accurate for build 6,
    which has homie's voice. Leave the listing as it is until 1.1 replaces it.
 
-**B. Before 1.1 goes in**
+**B. Before 1.1 goes in.** Done Nov 8.
 
 1. The Master Agent builds **1.1.0 (18)** (`production-aws`) from main once the version PR merges, and tells you when
    it's on TestFlight. On your phone: TestFlight → homecookd → install **1.1.0 (18)**. It's build 17 with the new
@@ -33,7 +33,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    Close it without joining: joining would move your account into the reviewer's family. Don't use Safari's address
    bar for this: typed there, the link opens the website, whose /i still asks the old backend until CUTOVER step 10.
 
-**C. Submit 1.1 (about ten minutes)**
+**C. Submit 1.1 (about ten minutes).** Done Nov 8: submitted at 15:55 PT on Caleb's word ("and deploy for the app store"). App Store Connect shows **1.1.0 Waiting for Review**, "up to 48 hours". Next is CUTOVER.md step 10: when Apple approves, Caleb presses Release, and the website's values move to the api in the same hour.
 
 1. Wait until 1.0 shows **Ready for Distribution**. Then, in the sidebar next to **iOS App**, click **+** (or **+
    Version**) and type **1.1.0**, the same as the build's version, then **Create**.
@@ -71,7 +71,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
 
 ## 2. What has to exist before Submit
 
-| Needed | Who | State on Nov 8 |
+| Needed | Who | State on Nov 8 (all done; 1.1.0 submitted 15:55 PT) |
 |---|---|---|
 | The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0): build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 Nov 8 |
 | The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
@@ -79,7 +79,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
 | A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
 | The APNs key on Expo, so pushes are real | Salik (LAUNCH-LINKS.md 6c) | Done Nov 6: key `S3J2G3P3H3` on Expo |
 | App Privacy: Diagnostics added (section 4) | The Master Agent, with Caleb's OK | Published Nov 8: Diagnostics → Other Diagnostic Data, App Functionality, not linked, not tracking |
-| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** complete Nov 8: promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release, and the seven screenshots in both sizes (below). Caleb presses Add for Review |
+| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** complete and submitted Nov 8: promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release, and the seven screenshots in both sizes (below). Caleb presses Add for Review |
 
 **Screenshot sizes (learned Nov 8).** App Store Connect's default iPhone tab takes only the medium display size,
 1206 × 2622 or 1179 × 2556. The 6.9" shots (1320 × 2868) go in through **Media Manager**'s large-display slot. 1.1.0
