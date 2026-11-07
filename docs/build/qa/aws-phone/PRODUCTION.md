@@ -22,6 +22,19 @@ Connect): Caleb is adding more changes first. The next build (17, most likely) c
 media.homecookd.app, not GCS), #388 (no date on parent Home), #392 (no homie follow-up questions on Home) and whatever
 else lands, and 1.1 submits with it. Re-check on it: Home (no date, no homie questions), one heart, the steak's video.
 
+### Build 17: the re-check
+
+| # | Check | Result | Time | Notes |
+|---|---|---|---|---|
+| 1 | Home has no date line | ✅ | Nov 8, 13:40 PT | |
+| 2 | Home has no "homie asks about your …" card | ✅ | Nov 8, 13:40 PT | |
+| 3 | One heart on a recipe saves and stays | ✅ | Nov 8, 13:40 PT | |
+| 4 | Uncle Ray's Swordfish Steak video plays | ✅ | Nov 8, 13:40 PT | |
+
+Caleb, relayed by the Master Agent: "Did all the checks and it all works. Home has no date line, no homie asks about
+your card, one heart on the recipe sticks, and Uncle Ray's Swordfish Steak video plays." He is submitting 1.1 with
+build 17.
+
 One thing Caleb saw on build 15: his steak recipe brought eight "homie asks about your swordfish steak" questions to
 Home. The api stops making them (AWS backend), and #392 hides any that already exist.
 
