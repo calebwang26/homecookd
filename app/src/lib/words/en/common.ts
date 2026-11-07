@@ -40,7 +40,6 @@ export const COMMON = {
   'common.mon.9': 'Oct',
   'common.mon.10': 'Nov',
   'common.mon.11': 'Dec',
-  'common.date.long': '{day}, {month} {date}',
   'common.date.short': '{day}, {mon} {date}',
   'common.date.shortYear': '{day}, {mon} {date}, {year}',
   'common.date.monDay': '{mon} {date}',

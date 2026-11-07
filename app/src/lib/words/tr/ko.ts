@@ -41,7 +41,6 @@ const words: Translation = {
   'common.mon.9': '10월',
   'common.mon.10': '11월',
   'common.mon.11': '12월',
-  'common.date.long': '{month} {date}일 {day}',
   'common.date.short': '{mon} {date}일 {day}',
   'common.date.shortYear': '{year}년 {mon} {date}일 {day}',
   'common.date.monDay': '{mon} {date}일',

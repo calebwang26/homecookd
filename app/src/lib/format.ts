@@ -4,7 +4,6 @@
 import { english, type T, type WordKey } from './words/words';
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6].map((i) => `common.day.${i}` as WordKey);
-const MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => `common.month.${i}` as WordKey);
 const MON = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => `common.mon.${i}` as WordKey);
 
 type DateIn = Date | string | number | null | undefined;
@@ -35,12 +34,6 @@ export function dayPart(date: DateIn = new Date()): DayPart {
 export function goodGreeting(date: DateIn = new Date(), t: T = english): string {
   const p = dayPart(date);
   return t(p === 'morning' ? 'common.greet.morning' : p === 'afternoon' ? 'common.greet.afternoon' : 'common.greet.evening');
-}
-
-/** "Monday, October 13". */
-export function longDate(date: DateIn = new Date(), t: T = english): string {
-  const d = toDate(date) ?? new Date();
-  return t('common.date.long', { day: t(DAYS[d.getDay()]), month: t(MONTHS[d.getMonth()]), date: d.getDate() });
 }
 
 /** "Sunday, Sep 28" (adds the year when it isn't this year). */

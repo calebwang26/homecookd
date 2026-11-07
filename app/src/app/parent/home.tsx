@@ -37,7 +37,7 @@ import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/prof
 import { ActionButton, EggMascot, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
 import { WEB_URL } from '@/lib/api';
 import { useCravingAsks } from '@/lib/cravings';
-import { dayPart, longDate } from '@/lib/format';
+import { dayPart } from '@/lib/format';
 import { useMadeMyDish, type MadeMyDish } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import type { Unsent } from '@/lib/unsentLogic';
@@ -93,8 +93,8 @@ export default function ParentHome() {
   const hello = GREETING[part === 'night' ? 'evening' : part];
   const greeting = name ? t(hello.name, { name }) : t(hello.alone);
 
-  // "Mom ▾" on the date line (tap: "Who’s in the kitchen?" with Back) keeps the greeting's full
-  // width, like the bible. It also keeps homie's corner free, so the date never runs under the egg.
+  // "Mom ▾" on its own line above the greeting (tap: "Who’s in the kitchen?" with Back) keeps the
+  // greeting's full width, like the bible, and homie's corner free. No date there (Caleb, Nov 7).
   const avatar = <ProfileButton homieRoom />;
   const pending = usePendingRecipes();
   const live = useMadeMyDish();
@@ -115,7 +115,7 @@ export default function ParentHome() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: tabBar.clearance }}>
           <ScreenWash tone="parent" height={380} />
-          <LargeHeader eyebrow={longDate(undefined, t)} eyebrowTone="parent" title={greeting} size={34} eyebrowRight={avatar} titleRight={<EggMascot mood="hello" size={56} />} scrollY={scrollY} fadeEnd={40} />
+          <LargeHeader title={greeting} size={34} eyebrowRight={avatar} titleRight={<EggMascot mood="hello" size={56} />} scrollY={scrollY} fadeEnd={40} />
           <ActingAsBar />
 
           <View style={styles.col}>
