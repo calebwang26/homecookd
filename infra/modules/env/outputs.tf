@@ -26,3 +26,8 @@ output "deploy_role_name" {
 output "database_endpoint" {
   value = aws_db_instance.main.address
 }
+
+# Where the alarms email, for an env's own alarms outside this module (envs/production/uptime.tf, in us-east-1).
+output "alert_email" {
+  value = var.alert_email
+}
