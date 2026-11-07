@@ -91,8 +91,9 @@ top, the screen below.
 
 Who: App screens & recording shot them on Nov 6 (`docs/app-store/screenshots/1.1/raw/`, 1320 × 2868, the web build of
 build 12's code on AWS staging; production's TEST family isn't seeded yet), with no test-run leftovers on screen. Its
-README lists what to know before they go to Apple. App Store, web & builds frames and captions them into
-`docs/app-store/screenshots/1.1/` and the handoff doc.
+README lists what to know before they go to Apple. App Store, web & builds framed and captioned them into
+`docs/app-store/screenshots/1.1/` on Nov 7 (`scripts/frame-app-store-shots.mjs`); the README's last section says which
+flags were kept and why 06 may be reshot.
 
 ## App Review guard
 

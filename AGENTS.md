@@ -246,6 +246,7 @@ node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
 node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
+node scripts/frame-app-store-shots.mjs [file.png ...]                # caption and frame docs/app-store/screenshots/1.1/raw/ into 1.1/ (needs web/node_modules, Chrome)
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)
