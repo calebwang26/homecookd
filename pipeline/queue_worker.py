@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -52,6 +53,7 @@ MAX_HOLD_S = 43000  # just under SQS's 12 hours
 SWEEP_EVERY_S = 300
 IDLE_BACKOFF_S = 30
 FINISH_TRIES, FINISH_RETRY_S = 4, 20  # stays inside Fargate's 120 seconds after a stop signal
+PROTECT_MIN = MAX_JOB_S // 60 + 15  # a job's longest run and its final save: a stuck worker holds back a release no longer than this
 # Caleb, Nov 1: $12 a job and $30 a day. $12 covers the longest video (MAX_HOURS x COST_PER_HOUR_USD) once, and a bit.
 JOB_CAP_USD = "12"
 DAILY_CAP_USD = "30"
@@ -229,12 +231,44 @@ class Run:
     result_prompt: str | None = None
 
 
+class TaskProtection:
+    """ECS task protection while a job runs, so a release waits for the job instead of stopping it partway and starting it over on
+    the next task (Nov 7: a deploy landed 4 seconds after a job was claimed). Through the ECS agent; the task role needs
+    ecs:UpdateTaskProtection (infra/modules/env/iam.tf). Off ECS there's no agent and this does nothing. A failed call only logs:
+    a job never waits on it, and protection that's left on ends by itself after PROTECT_MIN."""
+
+    def __init__(self, agent_uri: str | None, log: Log, put=None):
+        self.agent_uri, self.log, self.put = agent_uri, log, put or _agent_put
+
+    def set(self, on: bool, log: Log | None = None) -> None:
+        if not self.agent_uri:
+            return
+        body = {"ProtectionEnabled": True, "ExpiresInMinutes": PROTECT_MIN} if on else {"ProtectionEnabled": False}
+        try:
+            answer = self.put(f"{self.agent_uri}/task-protection/v1/state", body)
+            if "failure" in answer or "error" in answer:
+                raise TaskProtectionRefused
+        except Exception as e:  # noqa: BLE001
+            (log or self.log)("task protection not changed", "warning", protected=on, error_type=type(e).__name__)
+
+
+class TaskProtectionRefused(Exception):
+    """The agent answered, with a failure: usually the task role missing ecs:UpdateTaskProtection."""
+
+
+def _agent_put(url: str, body: dict) -> dict:
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PUT", headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read() or b"{}")
+
+
 class Worker:
     def __init__(self, queue, store, storage, runner, job_cap: Decimal, daily_cap: Decimal, log: Log | None = None,
-                 clock=time.monotonic, sleep=time.sleep, reporter=report):
+                 clock=time.monotonic, sleep=time.sleep, reporter=report, protection: TaskProtection | None = None):
         self.queue, self.store, self.storage, self.runner = queue, store, storage, runner
         self.job_cap, self.daily_cap = job_cap, daily_cap
         self.log = log or Log()
+        self.protection = protection or TaskProtection(None, self.log)
         self.clock, self.sleep, self.report = clock, sleep, reporter
         self.stopping = False
         self.swept_at: float | None = None
@@ -364,15 +398,19 @@ class Worker:
             self._fail(run, MSG_EMPTY, "EmptyUpload")
             return
         self.store.upload_finished(claim, max(o["modified"] for o in objects))
-        run.child = self.runner.start(spec_for(claim, objects))
+        self.protection.set(True, log)
         try:
-            outcome = self._watch(run)
-            run.child.kill()  # stopped already, or to be stopped: nothing it does after this counts
-            self._save_calls(run, run.child.calls())
-            self._settle(run, outcome)
+            run.child = self.runner.start(spec_for(claim, objects))
+            try:
+                outcome = self._watch(run)
+                run.child.kill()  # stopped already, or to be stopped: nothing it does after this counts
+                self._save_calls(run, run.child.calls())
+                self._settle(run, outcome)
+            finally:
+                run.child.kill()
+                run.child.cleanup()
         finally:
-            run.child.kill()
-            run.child.cleanup()
+            self.protection.set(False, log)
 
     # ---------- while the child runs ----------
 
@@ -586,9 +624,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"queue_worker: not set: {', '.join(missing)}")
     observability.init_sentry()
     from queue_aws import S3Storage, SqsQueue
+    log = Log(service="worker", release=os.environ.get("RELEASE"))
     worker = Worker(SqsQueue(os.environ["JOBS_QUEUE_URL"]), queue_db.PostgresStore(), S3Storage.from_env(), ChildRunner(),
                     _cap("PIPELINE_JOB_CAP_USD", JOB_CAP_USD), _cap("PIPELINE_DAILY_CAP_USD", DAILY_CAP_USD),
-                    log=Log(service="worker", release=os.environ.get("RELEASE")))
+                    log=log, protection=TaskProtection(os.environ.get("ECS_AGENT_URI"), log))
     signal.signal(signal.SIGTERM, worker.stop)
     signal.signal(signal.SIGINT, worker.stop)
     worker.run(args.once)

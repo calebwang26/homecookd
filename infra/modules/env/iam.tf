@@ -77,13 +77,15 @@ locals {
     Resource = "arn:aws:rds-db:${local.region}:${local.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"
   } }
 
+  # Task protection keeps a task from being stopped by a release: voice while it has a live call, the worker while it runs a job.
+  task_protection = {
+    Effect   = "Allow"
+    Action   = ["ecs:UpdateTaskProtection", "ecs:GetTaskProtection"]
+    Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
+  }
+
   task_permissions = {
-    # Task protection keeps a task with a live call from being stopped by a release.
-    voice = [{
-      Effect   = "Allow"
-      Action   = ["ecs:UpdateTaskProtection", "ecs:GetTaskProtection"]
-      Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
-    }]
+    voice = [local.task_protection]
     api = [
       local.db_connect.api,
       {
@@ -110,6 +112,7 @@ locals {
     ]
     worker = [
       local.db_connect.worker,
+      local.task_protection,
       {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:DeleteObject"]
