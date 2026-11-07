@@ -1,7 +1,7 @@
 // The recording screen with homie switched off (lib/homie/switch): the same shape as useHomieRecording
 // (lib/live/homie), with no /record socket, no mic stream and no voice. Filming starts and ends through Convex
 // alone (live.startFilming, live.endRecording, as the glasses' Start and Stop already do), so the video still goes
-// and nothing asks her a question. The screen starts filming at once (introDone), and ends the recording after
+// and nothing asks her a question. Filming starts on her tap (introDone is true at once), and the screen ends the recording after
 // the last file is saved (app/recording doneInApp), never before.
 import { useCallback, useRef, useState } from 'react';
 

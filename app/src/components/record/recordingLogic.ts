@@ -1,5 +1,5 @@
 // The recording screen's rules, pure (node scripts/test-recording-ui.mjs): the line under the big
-// button in each of homie's phases, when filming starts by itself, the egg for the voice service's
+// button in each of homie's phases, when her tap can start filming, the egg for the voice service's
 // state, what "not now" sends, when homie's centred moment is up and what it shows (a question, or
 // held between the wrap-up's questions), what the mic sends while the phone plays sound (half
 // duplex), and how long the wrap-up may sit still before the app ends the recording without homie.
@@ -19,13 +19,16 @@ export type RecordingView = {
   live: boolean;
 };
 
-/** Before filming the button rests under "homie is saying hello"; while filming it is the stop button. */
-export function recordingView(phase: RecordPhase, w: RecordWords, { homie = true }: { homie?: boolean } = {}): RecordingView {
+/**
+ * Before filming the button rests under "homie is saying hello", then "Tap to start" once she can start
+ * (`ready`: startFromTap's yes, and with homie on, the hello said and played); while filming it is the stop button.
+ */
+export function recordingView(phase: RecordPhase, w: RecordWords, { homie = true, ready = false }: { homie?: boolean; ready?: boolean } = {}): RecordingView {
   switch (phase) {
     case 'connecting':
       return { line: w.line(homie ? 'gettingReady' : 'cameraOpening'), live: false };
     case 'intro':
-      return { line: w.line(homie ? 'sayingHello' : 'cameraOpening'), live: false };
+      return { line: w.line(ready ? 'tapToFilm' : homie ? 'sayingHello' : 'cameraOpening'), live: false };
     case 'recording':
       return { line: w.line('stop'), live: true };
     case 'wrapping_up':
@@ -35,12 +38,18 @@ export function recordingView(phase: RecordPhase, w: RecordWords, { homie = true
 }
 
 /**
- * Filming starts by itself once homie's hello has been said (`introDone`) and the phone has finished
- * playing it: starting while it still plays would make the service cut the hello off. (The screen
- * starts it once.)
+ * Filming never starts by itself (Caleb, Nov 6): the camera shows the shot so she can set the phone up, and
+ * her tap on the record button starts it. She can tap once the recording is open on the server (`intro`),
+ * homie hasn't failed, and the phone isn't still asking for the camera. A tap during homie's hello starts
+ * filming too, as "Skip, start filming" does (the service cuts the hello off).
  */
-export function shouldAutoStart(s: { phase: RecordPhase; introDone: boolean; aiSpeaking: boolean; error: boolean }): boolean {
-  return s.phase === 'intro' && s.introDone && !s.aiSpeaking && !s.error;
+export function canStartFilming(s: { phase: RecordPhase; error: boolean; camAsking: boolean }): boolean {
+  return s.phase === 'intro' && !s.error && !s.camAsking;
+}
+
+/** "Tap to start" shows once she can start and, with homie on, its hello has been said and has played. */
+export function startPrompt(s: { canStart: boolean; homie: boolean; introDone: boolean; aiSpeaking: boolean }): boolean {
+  return s.canStart && (!s.homie || (s.introDone && !s.aiSpeaking));
 }
 
 /** The egg for the voice service's `state` ('speaking' comes from the say itself: pulseLit). */

@@ -22,7 +22,7 @@ type Words = { en: string; hint?: string };
 const WORDS = {
   gettingReady: { en: 'homie is getting ready' },
   sayingHello: { en: 'homie is saying hello' },
-  // homie switched off (lib/homie/switch): the moment before filming starts by itself.
+  // homie switched off (lib/homie/switch): the moment before the camera is ready.
   cameraOpening: { en: 'Opening the camera' },
   stop: { en: 'I’m done', hint: 'Tap when you’re done' },
   wrappingUp: { en: 'Almost done' },
@@ -46,6 +46,8 @@ const WORDS = {
   filmWithoutHomie: { en: 'Film without homie' },
   skipIntro: { en: 'Skip, start filming' },
   tapToStart: { en: 'Tap to start', hint: 'Starts recording from your glasses' },
+  // Filming on the phone: the camera shows the shot first, and filming starts on her tap (Caleb, Nov 6).
+  tapToFilm: { en: 'Tap to start', hint: 'Set up your phone, then tap' },
   leave: { en: 'Leave' },
   // Filming in the app (components/record/useInAppCamera, PlateMoment).
   stopped: { en: 'Recording stopped while you were away', hint: 'Your video so far is saved' },

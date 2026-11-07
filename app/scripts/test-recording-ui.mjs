@@ -177,19 +177,33 @@ test('the line under the button in each phase; it is the stop button only while 
   const quiet = { homie: false };
   assert.deepEqual(R.recordingView('connecting', rhi, quiet), { line: { text: 'कैमरा खुल रहा है', en: 'Opening the camera' }, live: false });
   assert.deepEqual(R.recordingView('intro', rhi, quiet), R.recordingView('connecting', rhi, quiet));
+  // Ready to start: "Tap to start" in her language, the English hint under it.
+  assert.deepEqual(R.recordingView('intro', rhi, { homie: false, ready: true }), { line: { text: 'शुरू करने के लिए छुएँ', en: 'Set up your phone, then tap' }, live: false });
+  assert.deepEqual(R.recordingView('intro', ren, { homie: false, ready: true }), { line: { text: 'Tap to start', en: 'Set up your phone, then tap' }, live: false });
+  assert.deepEqual(R.recordingView('intro', rhi, { ready: true }).line.en, 'Set up your phone, then tap');
   assert.deepEqual(R.recordingView('recording', rhi, quiet), R.recordingView('recording', rhi));
   assert.deepEqual(R.recordingView('wrapping_up', rhi, quiet), R.recordingView('wrapping_up', rhi));
   assert.equal(R.recordingView('recording', ren).line.text, 'I’m done');
 });
 
-test('filming starts by itself once the hello has been said and has played', () => {
-  const s = { phase: 'intro', introDone: true, aiSpeaking: false, error: false };
-  assert.equal(R.shouldAutoStart(s), true);
-  assert.equal(R.shouldAutoStart({ ...s, introDone: false }), false, 'hello not said yet');
-  assert.equal(R.shouldAutoStart({ ...s, aiSpeaking: true }), false, 'still playing: starting would cut it off');
-  assert.equal(R.shouldAutoStart({ ...s, error: true }), false, 'no homie');
-  assert.equal(R.shouldAutoStart({ ...s, phase: 'connecting' }), false);
-  assert.equal(R.shouldAutoStart({ ...s, phase: 'recording' }), false, 'already filming');
+test('filming never starts by itself: her tap starts it once the recording is open (Caleb, Nov 6)', () => {
+  const s = { phase: 'intro', error: false, camAsking: false };
+  assert.equal(R.canStartFilming(s), true);
+  assert.equal(R.canStartFilming({ ...s, camAsking: true }), false, 'still asking for the camera');
+  assert.equal(R.canStartFilming({ ...s, error: true }), false, 'no homie: "Film without homie" instead');
+  assert.equal(R.canStartFilming({ ...s, phase: 'connecting' }), false, 'not open on the server yet');
+  assert.equal(R.canStartFilming({ ...s, phase: 'recording' }), false, 'already filming');
+  // "Tap to start" shows at once with homie off; with homie on, after its hello has been said and played.
+  const p = { canStart: true, homie: false, introDone: false, aiSpeaking: false };
+  assert.equal(R.startPrompt(p), true);
+  assert.equal(R.startPrompt({ ...p, canStart: false }), false);
+  assert.equal(R.startPrompt({ ...p, homie: true }), false, 'hello not said yet');
+  assert.equal(R.startPrompt({ ...p, homie: true, introDone: true, aiSpeaking: true }), false, 'hello still playing');
+  assert.equal(R.startPrompt({ ...p, homie: true, introDone: true }), true);
+  // Nothing on the screen starts filming without her: no effect calls begin() by itself.
+  const screen = readFileSync(new URL('../src/app/recording.tsx', import.meta.url), 'utf8');
+  assert.ok(!/shouldAutoStart|autoStart/.test(screen), 'no auto start left on the recording screen');
+  assert.ok(/if \(canStart\) return startFilmingNow\(\);/.test(screen), 'the record button starts filming');
 });
 
 test('the pot follows the service; speaking comes from the say itself', () => {

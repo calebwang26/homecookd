@@ -26,7 +26,9 @@ Write down the time of each step, to the minute. The chat matches it against pro
 4. **Add someone with no phone.** Your name → **+** → **No phone? Add them to this phone** (a grandparent, say). 📸 the profile.
 5. **Sign out and back in.** Your name → **Account & privacy** → **Sign out of this phone** → **Sign out**, then Sign in
    with Apple again. Same family, same people. 📸 Home.
-6. **A recording, all the way to a recipe.** Record a real dish for a minute or two, with talking. Send it. This uses the
+6. **A recording, all the way to a recipe.** Record → Start recording: the camera shows the shot and doesn't film
+   yet ("Tap to start"). 📸 that screen. Set the phone up, tap the record button, and film a real dish for a minute or two,
+   with talking. Send it. This uses the
    real models, so it takes a few minutes. 📸 the "processing" card, then 📸 the finished recipe with its steps, and play
    one step's video.
 7. **Notifications.** When the app asks "Want a note when … writes back?", tap Yes, then Allow. Lock the phone. From the
