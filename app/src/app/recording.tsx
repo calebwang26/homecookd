@@ -2,8 +2,10 @@
 // (from Record's pre-record sheet). One big red record button in the middle of a warm yolk-tint screen,
 // one line under it, and homie resting top-right, talking with her over the /record socket
 // (lib/live/homie). Her language big, small English under it. Nothing else.
-//   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
-//                      starts by itself; "Skip, start filming" starts it now (homie stops mid-line).
+//   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Filming never
+//                      starts by itself (Caleb, Nov 6): the camera card shows the shot so she can set the
+//                      phone up, the line says "Tap to start", and her tap on the button starts filming.
+//                      "Skip, start filming", or a tap during the hello, starts it now (homie stops mid-line).
 //                      Glasses (the MVP: start and stop are hers): one big button. "Tap to start" ->
 //                      live.startFilming (no hello; homie only connects once filming, for its timed
 //                      questions); then "I'm done" -> live.endRecording (no wrap-up questions). The laptop
@@ -81,7 +83,7 @@ import { GlassesView } from '@/components/record/GlassesView';
 import { addClips, useDraft } from '@/components/record/draft';
 import { PLATE_FLIP_SIDE, PlateControls, PlateDim } from '@/components/record/PlateMoment';
 import { RecordButton } from '@/components/record/RecordButton';
-import { momentView, recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
+import { canStartFilming, momentView, recordingView, startPrompt, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { useInAppCamera } from '@/components/record/useInAppCamera';
 import { usePickVideos } from '@/components/record/usePickVideos';
@@ -175,14 +177,6 @@ export default function RecordingScreen() {
   // A phone recording is over once its camera is back: homie only wraps up.
   const [phoneFilmed, setPhoneFilmed] = useState(false);
   const [starting, setStarting] = useState(false);
-  const view =
-    glasses && !ended
-      ? glassesFilming
-        ? { line: words.line('stop'), live: true }
-        : { line: words.line(starting ? 'gettingReady' : 'tapToStart'), live: false }
-      : devPreview === 'camera' || devPreview === 'ask'
-        ? recordingView('recording', words)
-        : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words, { homie: HOMIE_ON });
 
   // Filmed without homie (its connection was lost before filming): straight to the done view.
   const [filmedAlone, setFilmedAlone] = useState(false);
@@ -351,30 +345,37 @@ export default function RecordingScreen() {
     await filmOnPhoneRef.current();
   }, [homie, cam, toast]);
 
-  // Filming starts by itself once homie's hello has played (once).
-  const started = useRef(false);
-  // Glasses never start by themselves: her Start does it.
-  // In the app it waits for her answer to the camera and microphone prompts.
+  // Filming starts on her tap, never by itself (Caleb, Nov 6): the camera shows the shot first so she can set
+  // the phone up. In the app the tap waits for her answer to the camera and microphone prompts. Glasses have their own Start.
   const camAsking = inAppPossible && cam.usable === null;
-  const autoStart = !glasses && !camAsking && shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
+  const canStart = !glasses && !devPreview && canStartFilming({ phase: homie.phase, error: !!homie.error, camAsking });
+  const view =
+    glasses && !ended
+      ? glassesFilming
+        ? { line: words.line('stop'), live: true }
+        : { line: words.line(starting ? 'gettingReady' : 'tapToStart'), live: false }
+      : devPreview === 'camera' || devPreview === 'ask'
+        ? recordingView('recording', words)
+        : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words, {
+            homie: HOMIE_ON,
+            ready: startPrompt({ canStart, homie: HOMIE_ON, introDone: homie.introDone, aiSpeaking }),
+          });
+
+  // Her tap on the record button starts filming (once): in the app's camera, or the phone's own camera on older builds.
+  const started = useRef(false);
   const begin = useRef(() => {});
   useEffect(() => {
     begin.current = source === 'glasses' ? homie.start : inApp ? () => void filmInApp() : () => void filmOnPhone();
   });
-  useEffect(() => {
-    if (!autoStart || started.current) return;
-    started.current = true;
-    begin.current();
-  }, [autoStart]);
-
-  // She doesn't want the hello: start filming now. The service cuts homie off ({type:"start"} mid-line).
   const [skipped, setSkipped] = useState(false);
-  const skipIntro = () => {
+  const startFilmingNow = () => {
     setSkipped(true);
     if (started.current) return;
     started.current = true;
     begin.current();
   };
+  // She doesn't want the hello: start filming now. The service cuts homie off ({type:"start"} mid-line).
+  const skipIntro = startFilmingNow;
 
   // Glasses: her two taps. Start -> filming (live.startFilming); I'm done -> ended (live.endRecording).
   const startGlasses = async () => {
@@ -400,6 +401,7 @@ export default function RecordingScreen() {
     if (devPreview) return;
     if (camPaused) return void cam.resume();
     if (inApp && cam.phase === 'filming') return void doneInApp();
+    if (canStart) return startFilmingNow();
     if (!glasses) return homie.done();
     void (glassesFilming ? stopGlasses() : startGlasses());
   };
@@ -455,9 +457,9 @@ export default function RecordingScreen() {
             <RecordButton
               live={view.live && !camPaused}
               resume={camPaused}
-              disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !(view.live || camPaused) || !!pick.busy}
+              disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !(view.live || camPaused || canStart) || !!pick.busy}
               onPress={press}
-              accessibilityLabel={camPaused ? 'Keep filming' : view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
+              accessibilityLabel={camPaused ? 'Keep filming' : view.live ? 'Recording. Tap when you’re done.' : canStart ? 'Start recording' : view.line.en ?? view.line.text}
             />
             <Animated.View key={camPaused ? pausedLine.text : view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
               <BiLine line={camPaused ? pausedLine : view.line} size={camPaused ? 24 : 30} weight={700} enSize={15} leading={1.3} />
