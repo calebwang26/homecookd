@@ -1,5 +1,5 @@
 # Caleb's 99.9% picks (Nov 7, docs/agents/memory/uptime-first.md): 99.9% a month is about 43 minutes down. Each switch is one line here, then the same
-# apply. They default to what runs today, so leaving them alone changes nothing. Costs are us-west-2 list prices, and #NEXT has the whole list.
+# apply. They default to what runs today, so leaving them alone changes nothing. Costs are us-west-2 list prices, and #381 has the whole list.
 locals {
   # TODO(caleb): true = a standby database in the second zone. When the host or its zone dies, AWS fails over in 1 to 2 minutes, instead of being down
   # until that zone is back (10 to 30 minutes or more: most of a month's 43 in one event). About +$26 a month (the db.t4g.small and its 50 GB, twice).
