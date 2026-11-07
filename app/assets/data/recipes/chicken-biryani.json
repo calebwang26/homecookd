@@ -18,9 +18,9 @@
     "Biryani"
   ],
   "media": {
-    "video_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/play.mp4?v=1791746790648164",
-    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/voice.m4a?v=1791746791315381",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/poster.jpg?v=1791746850971040",
+    "video_url": "https://media.homecookd.app/chicken-biryani/play.mp4?v=1791746790648164",
+    "audio_url": "https://media.homecookd.app/chicken-biryani/voice.m4a?v=1791746791315381",
+    "poster_url": "https://media.homecookd.app/chicken-biryani/poster.jpg?v=1791746850971040",
     "duration_s": 1008,
     "width": 1282,
     "height": 720
@@ -355,7 +355,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/01.jpg?v=1791749448821467",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/01.jpg?v=1791749448821467",
       "substeps": [
         {
           "text": "Blend the ginger, garlic, chili, and water.",
@@ -401,7 +401,7 @@
       "special_ids": [
         "x1"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/02.jpg?v=1791749449138761",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/02.jpg?v=1791749449138761",
       "substeps": [
         {
           "text": "Whisk the yogurt, spices, salt, and oil.",
@@ -484,7 +484,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/03.jpg?v=1791749449438126",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/03.jpg?v=1791749449438126",
       "substeps": [
         {
           "text": "Crush the saffron in a mortar.",
@@ -537,7 +537,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/04.jpg?v=1791749449801491",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/04.jpg?v=1791749449801491",
       "substeps": [
         {
           "text": "Rinse the rice several times.",
@@ -585,7 +585,7 @@
       "special_ids": [
         "x2"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/05.jpg?v=1791749450180301",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/05.jpg?v=1791749450180301",
       "substeps": [
         {
           "text": "Salt the onions and let them sit **10-15 minutes**.",
@@ -636,7 +636,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/06.jpg?v=1791749450615608",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/06.jpg?v=1791749450615608",
       "substeps": [
         {
           "text": "Cook the chicken and bay leaves on **medium**.",
@@ -686,7 +686,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/07.jpg?v=1791749451213146",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/07.jpg?v=1791749451213146",
       "substeps": [
         {
           "text": "Boil the water, strainer, spices, oil, and vinegar.",
@@ -757,7 +757,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/08.jpg?v=1791749451585494",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/08.jpg?v=1791749451585494",
       "substeps": [
         {
           "text": "Check that the potatoes are soft and the chicken is cooked.",
@@ -818,7 +818,7 @@
       "special_ids": [
         "x3"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/09.jpg?v=1791749451997221",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/09.jpg?v=1791749451997221",
       "substeps": [
         {
           "text": "Place the pot on a flame tamer on **high**.",
@@ -860,7 +860,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/10.jpg?v=1791749452314078",
+      "image_url": "https://media.homecookd.app/chicken-biryani/steps/10.jpg?v=1791749452314078",
       "substeps": [
         {
           "text": "Roast the cumin seeds on **low**.",
