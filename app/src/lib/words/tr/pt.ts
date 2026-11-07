@@ -41,7 +41,6 @@ const words: Translation = {
   'common.mon.9': 'out',
   'common.mon.10': 'nov',
   'common.mon.11': 'dez',
-  'common.date.long': '{day}, {date} de {month}',
   'common.date.short': '{day}, {date} de {mon}',
   'common.date.shortYear': '{day}, {date} de {mon} de {year}',
   'common.date.monDay': '{date} de {mon}',
