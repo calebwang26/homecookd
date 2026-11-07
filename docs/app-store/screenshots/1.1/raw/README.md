@@ -34,3 +34,23 @@ Things to know before they go to Apple:
 How they were made: `listing-seed.mjs` (a staging-only seed) and `listing-shot.mjs` (Playwright, signed in by
 the device key as [AWS-PROOFS.md](../../../../build/qa/AWS-PROOFS.md) section 3 says). Both were scratch scripts and
 aren't kept.
+
+## Framed (Nov 7, App Store, web & builds)
+
+The seven framed screens are one folder up, same file names, 1320 × 2868: the caption in Fraunces on the page's sage
+(`#EEF3F0`), the screen below with rounded corners, as 1.0's were. `node scripts/frame-app-store-shots.mjs` remakes them
+from `raw/` (name files to redo only those); it needs `web/node_modules` and Google Chrome.
+
+The three flags above, decided:
+
+- **The Biryani (01, 05): keep.** It's the same dish and creator credit as 1.0's own first screenshot, which Apple
+  approved, and the app shows the credit on the recipe.
+- **05's ~ amounts: keep.** The caption promises a real amount, and the screen shows one with its ~; the description
+  says "marked with a ~ so you know it's an estimate".
+- **03: keep.** It's Leo's guess, and a kid's guess is meant to be rough; "~1 scallions" is the only slip, and it's
+  small at App Store size.
+- **06: reshoot if Caleb OKs it.** "Mom answered" sits above eight "guess" rows, and "ketchup · guess" is right under
+  her line about ketchup. That contradicts the caption, and it shows at thumbnail size. Real models mark what she said
+  as hers. The reshoot goes on production's TEST family from a **second** request (Maya's, say), so "Leo wants your Sunday
+  eggs" stays waiting for the reviewer. It writes to production and runs the real models once, so it needs Caleb's OK.
+  Without it, today's 06 still passes review: it's a real 1.1 screen.

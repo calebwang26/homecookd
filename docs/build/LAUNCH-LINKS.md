@@ -80,7 +80,12 @@ Expo Go can't get a push token for this project, and the app never asks for noti
   chat. Signing out of the kid's phone removes its token (no more pushes).
 - **Cook mode keeps the screen on:** check it on the same build (dev builds always keep it on).
 
-### 6c. The APNs key is missing (launch blocker, found Nov 3)
+### 6c. The APNs key (found missing Nov 3; closed Nov 6)
+**Closed Nov 6:** Salik made APNs key `S3J2G3P3H3` (team `73UV499FKN`; it also serves Sign in with Apple) and it is on
+Expo for `com.salik.homecookd`, checked on Expo's credentials the same day. Pushes to every build of this bundle id can be
+delivered now; the check below (a test message arriving on a phone) runs on build 12's phone check. The rest of this
+section is the Nov 3 write-up, kept for the record.
+
 On the build 11 phone run the token reached the api and the message reached Expo, but Expo answered
 "Could not find APNs credentials for com.salik.homecookd". No iOS push can be delivered until the key is added.
 - **What's there:** Expo project `@salikm1234/app`, bundle `com.salik.homecookd`, Apple team `73UV499FKN`
