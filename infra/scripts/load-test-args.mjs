@@ -2,9 +2,9 @@
 // Staging is any http(s) address that doesn't look like production. Production is https://api.homecookd.app only, with both
 // --production and LOAD_TEST_PRODUCTION=yes, and the number of cards said out loud: each card is one real Claude call there.
 
-export const USAGE = 'usage: load-test.mjs <staging api url> [--rps 50] [--minutes 15] [--burst 300] [--cards 4]   (never production)';
+export const USAGE = 'usage: load-test.mjs <staging api url> [--rps 50] [--ramp 2] [--minutes 15] [--burst 300] [--cards 4]   (never production)';
 export const PRODUCTION_USAGE =
-  'usage: LOAD_TEST_PRODUCTION=yes load-test.mjs https://api.homecookd.app --production --cards <1 to 6> [--rps 50] [--minutes 15] [--burst 300]';
+  'usage: LOAD_TEST_PRODUCTION=yes load-test.mjs https://api.homecookd.app --production --cards <1 to 6> [--rps 50] [--ramp 2] [--minutes 15] [--burst 300]';
 export const PRODUCTION_HOST = 'api.homecookd.app';
 const LOOKS_LIKE_PRODUCTION = /homecookd\.app|production/;
 
@@ -16,9 +16,9 @@ export function settings(args, env) {
     return i > 0 ? Number(args[i + 1]) : fallback;
   };
   const production = args.includes('--production');
-  // At most 6 cards: the per-address limit is 6 in 10 minutes.
-  const s = { base, rps: flag('rps', 50), minutes: flag('minutes', 15), burst: flag('burst', 300), cards: Math.min(flag('cards', 4), 6), production };
-  const numbers = [s.rps, s.minutes, s.burst, s.cards].every((n) => Number.isFinite(n) && n >= 0);
+  // At most 6 cards: the per-address limit is 6 in 10 minutes. --ramp: minutes climbing to --rps before the scored window (0 = none).
+  const s = { base, rps: flag('rps', 50), ramp: flag('ramp', 2), minutes: flag('minutes', 15), burst: flag('burst', 300), cards: Math.min(flag('cards', 4), 6), production };
+  const numbers = [s.rps, s.ramp, s.minutes, s.burst, s.cards].every((n) => Number.isFinite(n) && n >= 0);
 
   if (!production) {
     if (!/^https?:\/\//.test(base) || LOOKS_LIKE_PRODUCTION.test(base) || !numbers) return { error: USAGE };

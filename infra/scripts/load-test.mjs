@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // The api's load test (SYSTEM-DESIGN.md: 50 RPS for 15 minutes on a realistic mix, p95 under 300 ms, p99 under 1 s, under 0.1% errors), then a burst that runs the
 // database pool dry (AWS-MIGRATION.md, "A production gate: overload"): a full pool must answer 503 with retry-after, never a 500.
-//   node infra/scripts/load-test.mjs <api url> [--rps 50] [--minutes 15] [--burst 300] [--cards 4]
+//   node infra/scripts/load-test.mjs <api url> [--rps 50] [--ramp 2] [--minutes 15] [--burst 300] [--cards 4]
 // Staging only, on fake models (DISH_FAKE_AI=1): it makes a few made-up cards ("LOADTEST …") through the kid's page's own routes, then reads them as the kid's page
 // and Mom's page poll, with a few edits. One machine's address, so it stays inside the per-address limits: cards are made once, and only reads and edits repeat.
 // Times here include the trip from this machine. The load balancer's own p95 and p99 are what the targets mean, and it prints how to read them.
 //
 // Production (CUTOVER.md step 6's gate):
-//   LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 [--rps 200] [--minutes 12] [--burst 1500]
+//   LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 [--rps 200] [--ramp 2] [--minutes 12] [--burst 1500]
+// The ramp climbs from 0 to --rps over --ramp minutes and is reported but not scored: real traffic grows, it doesn't jump from 0 (Caleb, Nov 7, after the
+// first production run's misses all came in its first 15 s, while 2 tasks met 200 a second cold; infra/README.md, "Production before launch", step 7).
 // - Both keys, HTTPS, and only that address (load-test-args.mjs). It prints its plan and waits 10 s, so Ctrl-C stops it before anything is made.
 // - Production ignores DISH_FAKE_AI, so making a card is one real Claude guess (Haiku, about $0.001). Only the setup makes cards, and --cards must be said:
 //   nothing after it reaches a model. Mom's page is read without `lang`, because a peek with one translates her page on Opus (up to about $0.30).
@@ -26,11 +28,12 @@ if (s.error) {
 const { base, production } = s;
 const RPS = s.rps;
 const MINUTES = s.minutes;
+const RAMP = s.ramp;
 const BURST = s.burst;
 const CARDS = s.cards;
 
 if (production) {
-  console.log(`PRODUCTION: ${base}. ${CARDS} made-up cards (${CARDS} Claude guesses, about $${(CARDS * 0.001).toFixed(3)}), then ${RPS} a second for ${MINUTES} minutes, ` +
+  console.log(`PRODUCTION: ${base}. ${CARDS} made-up cards (${CARDS} Claude guesses, about $${(CARDS * 0.001).toFixed(3)}), then a ${RAMP}-minute climb to ${RPS} a second and ${MINUTES} minutes there, ` +
     `then ${BURST} at once. The cards stay until they're deleted. Starting in 10 s; Ctrl-C stops it.`);
   await new Promise((r) => setTimeout(r, 10_000));
 }
@@ -122,20 +125,32 @@ const one = () => {
   return MIX[0][1]();
 };
 
+const inFlight = new Set();
+/** Sends at `rate(elapsed ms)` a second until `ms` have passed, then waits for what's in flight. */
+async function drive(ms, rate) {
+  const started = Date.now();
+  let next = started;
+  while (Date.now() - started < ms) {
+    const p = one().finally(() => inFlight.delete(p));
+    inFlight.add(p);
+    const now = rate(Date.now() - started);
+    next += 1000 / now;
+    const wait = next - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    if (Date.now() % 60_000 < 1000 / now) console.log(`  ${new Date().toISOString().slice(11, 19)} ${Math.round(now)} a second, ${inFlight.size} in flight`);
+  }
+  await Promise.all(inFlight);
+}
+
+if (RAMP > 0) {
+  console.log(`\nRamp: 0 to ${RPS} a second over ${RAMP} minutes (reported, not scored)`);
+  // From a twentieth of the rate, so the first gap isn't seconds long.
+  await drive(RAMP * 60_000, (t) => RPS * Math.max(0.05, Math.min(1, t / (RAMP * 60_000))));
+  report('Ramp (not scored)');
+}
 console.log(`\nSteady: ${RPS} a second for ${MINUTES} minutes`);
 const startedAt = new Date();
-const inFlight = new Set();
-const end = Date.now() + MINUTES * 60_000;
-let next = Date.now();
-while (Date.now() < end) {
-  const p = one().finally(() => inFlight.delete(p));
-  inFlight.add(p);
-  next += 1000 / RPS;
-  const wait = next - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  if (Date.now() % 60_000 < 1000 / RPS) console.log(`  ${new Date().toISOString().slice(11, 19)} ${inFlight.size} in flight`);
-}
-await Promise.all(inFlight);
+await drive(MINUTES * 60_000, () => RPS);
 const steady = report('Steady');
 const endedAt = new Date();
 
