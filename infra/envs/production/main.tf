@@ -156,12 +156,15 @@ module "env" {
     }
     # Queue mode (docs/build/WORKER-MIGRATION.md), every step on Claude and Cartesia, as the laptop's worker runs: production has no Gemini or Muse key.
     # The spend caps are the code's, Caleb's $12 a job and $30 a day (PIPELINE_JOB_CAP_USD, PIPELINE_DAILY_CAP_USD). TODO(caleb): the size, Fargate or
-    # EC2, a bigger disk, and a count of 1 or more, from the real video job CUTOVER.md's step 6 measures. Until then it's the size that job is measured at.
+    # EC2, and a bigger disk, from the real video job CUTOVER.md's step 6 measures. Until then it's the size that job is measured at.
+    # One task always on: nothing else claims a cook's video, and the service has no autoscaler, so at 0 every job sat in the queue (Nov 7, the TEST
+    # family's Biryani). At this size it's about $85 a month (2 vCPU and 8 GB for 730 hours). TODO(caleb): one always on, or 0 to 1 on the queue's
+    # depth (about $4 to $35 a month for 1 to 10 videos a day, and a cook's first video waits about 2 to 4 minutes for a task: #NEXT).
     worker = {
       # TODO(caleb): disk_gib (21 to 200) once the measured job's disk_peak_mb says 20 GiB isn't enough. Unset is Fargate's 20 GiB.
       cpu           = 2048
       memory        = 8192
-      desired_count = 0
+      desired_count = 1
       uses_database = true
       secrets       = local.worker_secrets
       entry_point   = ["python", "pipeline/queue_worker.py"]
