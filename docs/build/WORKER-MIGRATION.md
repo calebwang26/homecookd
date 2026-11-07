@@ -42,7 +42,8 @@ the `:bootstrap` image, so run "Deploy to AWS" for `worker` before running a tas
 **Safe to repeat.** Only a conditional `UPDATE` starts a job (`queued`, or running with a heartbeat older than 10 minutes). It adds 1
 to `attempts`, and every later write names that attempt, so a worker that lost its claim changes nothing. Each attempt publishes to
 its own folder, `<recipe folder>/<job>-a<n>/`, so it can't overwrite another's files. One transaction then saves the recipe, the
-follow-up questions, the job's end and an outbox row (`recipe_published`, ids only).
+job's end and an outbox row (`recipe_published`, ids only). recipe.json's `follow_up_questions` don't become questions for the cook
+(Caleb, Nov 8: only a kid's question asks her).
 
 **Timing.** Heartbeat every 30 s, which is also how late a cancel can be noticed. Visibility is extended to 15 minutes every 2 minutes.
 Lease 10 minutes. A job over 10 hours fails visibly, because SQS can't hold a message past 12 hours from a receive.

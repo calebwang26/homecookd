@@ -374,9 +374,6 @@ class FakeStore:
                   "language": row["language"] or job["language"], **keys}
         recipe_id = job["recipe_id"] if job["recipe_id"] in self.recipes else str(uuid.uuid4())
         self.recipes.setdefault(recipe_id, {}).update(fields)
-        for f in row["follow_ups"]:
-            if not any(q["recipe_id"] == recipe_id and q["follow_up_id"] == f["id"] for q in self.questions):
-                self.questions.append({"recipe_id": recipe_id, "follow_up_id": f["id"]})
         job.update(stage="done", progress=1, error=None, finished_at=time.time(), recipe_id=recipe_id,
                    result_model=result.get("model"), result_prompt_version=result.get("prompt_version"))
         self.outbox.append({"queue": "scheduled", "payload": {"kind": "recipe_published", "jobId": job["id"], "recipeId": recipe_id},
@@ -609,7 +606,7 @@ def a_job_runs_end_to_end(box: Box):
         assert "://" not in recipe[key]  # keys, never URLs
     assert recipe["steps"][0]["text"] and "moment" in recipe["steps"][0] and "instruction" not in recipe["steps"][0]
     assert recipe["memories"]  # hers: kept in the database, left out of the public recipe.json
-    assert ctx.question_count() == 2
+    assert ctx.question_count() == 0  # recipe.json's follow_up_questions never reach the cook (Caleb, Nov 8)
     out = ctx.outbox()
     assert len(out) == 1 and out[0]["payload"]["kind"] == "recipe_published" and out[0]["request_id"] == "req-1"
     assert set(out[0]["payload"]) == {"kind", "jobId", "recipeId"}  # ids only
@@ -636,7 +633,7 @@ def a_duplicate_message_does_nothing(box: Box):
     box.deliver(worker)
     box.deliver(worker)
     assert len(runner.specs) == 1 and ctx.job(job_id)["attempts"] == 1
-    assert len(ctx.recipes()) == 1 and ctx.question_count() == 2 and len(ctx.outbox()) == 1
+    assert len(ctx.recipes()) == 1 and ctx.question_count() == 0 and len(ctx.outbox()) == 1
     assert ctx.spent() == Decimal("0.75")
     assert box.queue.alive() == []
 
@@ -1227,7 +1224,7 @@ def test_recipe_row_matches_convexs_shape():
     assert kinds == [("story", "A story"), ("story", "No such step"), ("tip", "Secret"), ("tip", "low flame")]
     assert row["memories"][1]["moment"] == {"startS": 0, "endS": 0} and "step" not in row["memories"][1]
     assert row["memories"][2]["moment"] == {"startS": 10, "endS": 20} and row["memories"][2]["why"] == "Why"
-    assert [f["id"] for f in row["follow_ups"]] == ["b", "a"]  # ingredient questions first
+    assert set(row) == {"title", "library_id", "steps", "memories", "language"}  # follow_up_questions don't become questions
     for broken in ({"steps": [{"instruction": "x"}]}, {"title": "t", "steps": []}, {"title": "t", "steps": [{"title": "no text"}]}):
         try:
             queue_db.recipe_row(broken)
@@ -1968,13 +1965,12 @@ def test_postgres_the_final_save_is_all_or_nothing():
     job_id = ctx.new_job()
     claim = ctx.store.claim(job_id, qw.LEASE_S)
     row = queue_db.recipe_row(recipe_json())
-    row["follow_ups"][0]["question"] = "x" * 3000  # the table's CHECK refuses it, after the recipe was written
     keys = {"media_prefix": "z/", "recipe_json_key": "z/recipe.json", "cover_key": "z/poster.jpg"}
     try:
-        ctx.store.finish(claim, row, keys, {}, None)
-        raise AssertionError("the bad question was accepted")
+        ctx.store.finish(claim, row, keys, {}, "req\x00x")  # Postgres refuses a NUL in the outbox's text, after the recipe was written
+        raise AssertionError("the bad request id was accepted")
     except Exception as e:  # noqa: BLE001
-        assert type(e).__name__ == "CheckViolation", type(e).__name__
+        assert type(e).__name__ == "DataError", type(e).__name__
     assert not ctx.recipes() and ctx.question_count() == 0 and ctx.job(job_id)["stage"] == "preparing"
     assert ctx.job(job_id)["recipe_id"] is None and not ctx.outbox()
 
