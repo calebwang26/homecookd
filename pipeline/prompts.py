@@ -347,8 +347,8 @@ Produce one recipe matching the recipe schema:
 - Keep only the 2 to 3 strongest special moments.
 - Write the intro from the stories in 1 to 2 sentences.
 - Set wait_after on the last step before a gap between sessions (e.g. "overnight, ~10 hrs").
-- List 3 to 5 warm follow_up_questions about real gaps: an amount marked unknown,
-  a step with no clear end cue, an ingredient seen but never added.
+- List at most 3 warm follow_up_questions, only about real gaps: an amount marked unknown,
+  a step with no clear end cue, an ingredient seen but never added. Fewer is better; none is fine.
 Do not add steps, ingredients, stories or special moments that are not in the input.
 
 Format rules (the output is validated; breaking one rejects the whole recipe):
