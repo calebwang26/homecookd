@@ -19,11 +19,11 @@ App Store version. Expo build `a4d1f0f4-7ec2-4bb5-b36d-f910989288b1`; submission
 
 A build 16 from main `0c001cc5e` was started and cancelled on Nov 8 (EAS id `3a3b4943`, nothing reached App Store
 Connect): Caleb is adding more changes first. The next build (17, most likely) carries #382 (the bundled recipes name
-media.homecookd.app, not GCS), #388 (no date on parent Home), #391 (no homie follow-up questions on Home) and whatever
+media.homecookd.app, not GCS), #388 (no date on parent Home), #392 (no homie follow-up questions on Home) and whatever
 else lands, and 1.1 submits with it. Re-check on it: Home (no date, no homie questions), one heart, the steak's video.
 
 One thing Caleb saw on build 15: his steak recipe brought eight "homie asks about your swordfish steak" questions to
-Home. The api stops making them (AWS backend), and #391 hides any that already exist.
+Home. The api stops making them (AWS backend), and #392 hides any that already exist.
 
 ## Checked from the Mac before the morning
 
