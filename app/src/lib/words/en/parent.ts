@@ -26,13 +26,14 @@ export const PARENT = {
   'parent.questions.whoDishStep': '{name} · {dish} · step {step}',
   'parent.questions.asked': '{name} asked',
   'parent.questions.labelTranslated': '{who}: {question}. Translated from: {english}',
+  // homie on only; with homie off the row uses hintType
   'parent.questions.hint': 'Opens the question. homie reads it to you, and you answer out loud.',
   // homie switched off (lib/homie/switch): the row's Answer opens a box to type in (TypeAnswer).
   'parent.questions.hintType': 'Opens a box to type your answer.',
   'parent.questions.typePlaceholder': 'Type your answer',
   'parent.questions.notSent': 'That didn’t send. Try again.',
   'parent.questions.translated': 'Translated · “{text}”',
-  // homie's own follow-up question about her dish (questions.kind 'followUp'), not a kid's
+  // homie's own follow-up question about her dish (questions.kind 'followUp'), not a kid's; shown only while homie is on
   'parent.questions.homieDish': 'homie asks about your {dish}',
   'parent.questions.homieAsks': 'homie has a question',
 

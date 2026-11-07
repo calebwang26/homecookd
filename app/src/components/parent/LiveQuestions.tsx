@@ -8,7 +8,9 @@
 // first (lib/aiConsent): "Answer" opens nothing, and the pill records nothing, until she says yes.
 // A share ask (questions.kind 'share', from Community: "Shreya wants to put your Poha on the map…")
 // is a row like the others, with no step; her spoken yes or no answers it. homie's own follow-up question
-// (kind 'followUp': "Did you add cumin?") reads "homie asks about your Poha", not as a kid's.
+// (kind 'followUp': "Did you add cumin?") shows only while homie is on, as "homie asks about your Poha".
+// With homie off (Caleb, Nov 8: eight of them on one recipe was overwhelming, and homie is gone), questions
+// come only from her kids, each row headed by the kid and the dish ("Leo · Swordfish Steak · step 3").
 // homie switched off (lib/homie/switch): "Answer" opens a box to type the answer in (TypeAnswer) instead of the
 // walkie-talkie; the pill still records a voice note.
 // Nothing open: no card.
@@ -32,18 +34,21 @@ import { colors, radii, shadows, space } from '@/theme/tokens';
 import { dishName } from './kitchen';
 import { TypeAnswer } from './TypeAnswer';
 
+/** Kids' questions and share asks; homie's own follow-ups only while homie is on. */
+const shown = (q: Pick<CookQuestion, 'kind'>) => HOMIE_ON || q.kind !== 'followUp';
+
 function who(q: CookQuestion, t: T): string {
   const name = q.askedByName?.trim() || t('parent.questions.yourFamily');
   const e = getCachedEntry(q.recipeId);
   const dish = q.recipeTitle || (e ? dishName(e.title, e.cook_name, t) : null);
-  if (q.kind === 'followUp') return dish ? t('parent.questions.homieDish', { dish }) : t('parent.questions.homieAsks');
+  if (HOMIE_ON && q.kind === 'followUp') return dish ? t('parent.questions.homieDish', { dish }) : t('parent.questions.homieAsks');
   if (!dish) return t('parent.questions.asked', { name });
   return q.stepOrder && q.kind !== 'share' ? t('parent.questions.whoDishStep', { name, dish, step: q.stepOrder }) : `${name} · ${dish}`;
 }
 
 export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
   const { me } = useSession();
-  const questions = useCookQuestions(me?.role === 'cook');
+  const questions = useCookQuestions(me?.role === 'cook').filter(shown);
   if (!questions.length) return null;
   return (
     <Animated.View entering={listEnter(enterIndex)} exiting={fadeOutFast} layout={LinearTransition.duration(220)} style={styles.card}>
