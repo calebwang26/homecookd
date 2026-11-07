@@ -156,6 +156,14 @@ data "aws_cloudfront_origin_request_policy" "cors" {
   name = "Managed-CORS-S3Origin"
 }
 
+# Origin isn't in the cache key, so a file first fetched without one (the phone) was cached without S3's CORS header, and browsers then got that copy
+# (Nov 7: library.json from the app's web build). AWS's Managed-SimpleCORS adds Access-Control-Allow-Origin: * to every answer, cached or not: the
+# bucket's own rule. Its id is AWS's, the same in every account. By id, not a data source looked up by name, because that lookup needs
+# cloudfront:ListResponseHeadersPolicies, which the staging apply role doesn't have (role_reads.py), and adding it is an IAM apply of Caleb's.
+locals {
+  managed_simple_cors = "60669652-455b-4ae9-85a4-c4c02393f86c"
+}
+
 resource "aws_cloudfront_distribution" "media" {
   enabled         = true
   is_ipv6_enabled = true
@@ -169,13 +177,14 @@ resource "aws_cloudfront_distribution" "media" {
   }
 
   default_cache_behavior {
-    target_origin_id         = "media"
-    viewer_protocol_policy   = "redirect-to-https"
-    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = aws_cloudfront_cache_policy.media.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors.id
-    compress                 = true
+    target_origin_id           = "media"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = aws_cloudfront_cache_policy.media.id
+    origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.cors.id
+    response_headers_policy_id = local.managed_simple_cors
+    compress                   = true
   }
 
   restrictions {
