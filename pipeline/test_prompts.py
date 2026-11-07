@@ -143,6 +143,18 @@ def test_recipe_language_round_trip():
     assert process.build_recipe(draft, manifest)["language"] == "mr"
 
 
+def test_a_recipe_asks_at_most_three_questions_ingredient_checks_first():
+    """Caleb, Nov 7: 8 questions on his build-15 recipe was too many; at most 3, the ingredient check's first."""
+    assert "at most 3 warm follow_up_questions" in MERGE_PROMPT and "3 to 5" not in MERGE_PROMPT
+    synthetic = Recipe.model_validate(json.loads(next((ROOT / "data" / "synthetic").glob("*.json")).read_text()))
+    asked = [{"id": f"w{i}", "about_step": None, "question": f"Writer {i}?"} for i in range(1, 5)]
+    asked += [{"id": f"seen-{x}", "about_step": None, "question": f"{x}?", "ingredient": x} for x in ("salt", "ghee")]
+    recipe = Recipe.model_validate(synthetic.model_dump(mode="json") | {"follow_up_questions": asked})
+    assert [q.id for q in process.first_questions(recipe).follow_up_questions] == ["seen-salt", "seen-ghee", "w1"]
+    few = recipe.model_copy(update={"follow_up_questions": recipe.follow_up_questions[:2]})
+    assert [q.id for q in process.first_questions(few).follow_up_questions] == ["w1", "w2"]
+
+
 class FakeBlob:
     def __init__(self, name: str, size: int = 10, text: str | None = None):
         self.name, self.size, self.text = name, size, text
