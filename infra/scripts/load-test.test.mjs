@@ -10,9 +10,16 @@ const PROD = 'https://api.homecookd.app';
 const run = (args, env = {}) => settings(args, env);
 
 test('staging runs as before', () => {
-  assert.deepEqual(run(['http://localhost:8080/']), { base: 'http://localhost:8080', rps: 50, minutes: 15, burst: 300, cards: 4, production: false });
+  assert.deepEqual(run(['http://localhost:8080/']), { base: 'http://localhost:8080', rps: 50, ramp: 2, minutes: 15, burst: 300, cards: 4, production: false });
   const s = run(['https://d123.cloudfront.net', '--rps', '120', '--minutes', '12', '--burst', '1500', '--cards', '9']);
   assert.deepEqual([s.rps, s.minutes, s.burst, s.cards, s.production], [120, 12, 1500, 6, false]);
+});
+
+test('the ramp: 2 minutes unless said, 0 for none, never negative', () => {
+  assert.equal(run(['http://localhost:8080', '--ramp', '0']).ramp, 0);
+  assert.equal(run([PROD, '--production', '--cards', '2', '--ramp', '4'], YES).ramp, 4);
+  assert.ok(run(['http://localhost:8080', '--ramp', '-1']).error);
+  assert.ok(run([PROD, '--production', '--cards', '2', '--ramp', 'x'], YES).error);
 });
 
 test('staging refuses production, a bad address and bad numbers', () => {
@@ -27,7 +34,7 @@ test('production needs both keys', () => {
   assert.match(run([PROD, '--production', '--cards', '2']).error, /LOAD_TEST_PRODUCTION=yes/);
   assert.match(run([PROD, '--production', '--cards', '2'], { LOAD_TEST_PRODUCTION: 'true' }).error, /LOAD_TEST_PRODUCTION=yes/);
   const s = run([PROD, '--production', '--cards', '2', '--rps', '200'], YES);
-  assert.deepEqual(s, { base: PROD, rps: 200, minutes: 15, burst: 300, cards: 2, production: true });
+  assert.deepEqual(s, { base: PROD, rps: 200, ramp: 2, minutes: 15, burst: 300, cards: 2, production: true });
 });
 
 test('production is https://api.homecookd.app only', () => {
