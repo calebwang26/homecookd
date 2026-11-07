@@ -1,8 +1,8 @@
 [
   {
     "id": "weed-steak",
-    "title": "Swordfish Steak",
-    "cook_name": "Miles",
+    "title": "Uncle Ray's Swordfish Steak",
+    "cook_name": "Uncle Ray",
     "relation": "Uncle",
     "poster_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/poster.jpg?v=1793003407559213",
     "tags": [
@@ -13,7 +13,7 @@
       "pan seared",
       "improvisation"
     ],
-    "sample": false,
+    "sample": true,
     "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/recipe.json"
   },
   {

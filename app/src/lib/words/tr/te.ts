@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} గారిది',
   'parent.heart.removeFailed': 'ఆ హృదయాన్ని తీసివేయలేకపోయాం. మళ్ళీ ప్రయత్నించండి.',
   'parent.heart.saveFailed': 'ఆ హృదయాన్ని సేవ్ చేయలేకపోయాం. మళ్ళీ ప్రయత్నించండి.',
+  'parent.heart.removeFailedWhy': 'ఆ హార్ట్‌ని తీసివేయలేకపోయాం. {why}',
+  'parent.heart.saveFailedWhy': 'ఆ హార్ట్‌ని సేవ్ చేయలేకపోయాం. {why}',
   'parent.heart.on': '{title}, మీ ఇష్టమైనవాటిలో ఉంది. తీసివేయడానికి నొక్కండి.',
   'parent.heart.off': '{title} ని మీ ఇష్టమైనవాటిలో చేర్చండి',
   'parent.stopped.title': 'మీ రికార్డింగ్ ముందుగానే ఆగిపోయింది',

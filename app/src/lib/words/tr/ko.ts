@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} 님의 레시피',
   'parent.heart.removeFailed': '하트를 지우지 못했어요. 다시 해 주세요.',
   'parent.heart.saveFailed': '하트를 저장하지 못했어요. 다시 해 주세요.',
+  'parent.heart.removeFailedWhy': '하트를 지우지 못했어요. {why}',
+  'parent.heart.saveFailedWhy': '하트를 저장하지 못했어요. {why}',
   'parent.heart.on': '{title}, 즐겨찾기에 있어요. 누르면 지워져요.',
   'parent.heart.off': '{title}을(를) 즐겨찾기에 추가',
   'parent.stopped.title': '녹화가 일찍 멈췄어요',

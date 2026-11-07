@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': 'de {name}',
   'parent.heart.removeFailed': 'Não deu para tirar esse coração. Tente de novo.',
   'parent.heart.saveFailed': 'Não deu para salvar esse coração. Tente de novo.',
+  'parent.heart.removeFailedWhy': 'Não foi possível tirar esse coração. {why}',
+  'parent.heart.saveFailedWhy': 'Não foi possível salvar esse coração. {why}',
   'parent.heart.on': '{title}, nas suas favoritas. Toque para tirar.',
   'parent.heart.off': 'Adicionar {title} às suas favoritas',
   'parent.stopped.title': 'Sua gravação parou antes da hora',

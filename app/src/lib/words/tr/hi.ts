@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} की',
   'parent.heart.removeFailed': 'दिल हटाया नहीं जा सका। फिर से कोशिश करें।',
   'parent.heart.saveFailed': 'दिल सेव नहीं हो सका। फिर से कोशिश करें।',
+  'parent.heart.removeFailedWhy': 'वह दिल हटाया नहीं जा सका। {why}',
+  'parent.heart.saveFailedWhy': 'वह दिल सेव नहीं हो सका। {why}',
   'parent.heart.on': '{title}, आपके पसंदीदा में है। हटाने के लिए टैप करें।',
   'parent.heart.off': '{title} को अपने पसंदीदा में जोड़ें',
   'parent.stopped.title': 'आपकी रिकॉर्डिंग जल्दी रुक गई',

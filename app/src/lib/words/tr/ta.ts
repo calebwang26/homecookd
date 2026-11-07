@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} உடையது',
   'parent.heart.removeFailed': 'அந்த இதயத்தை நீக்க முடியவில்லை. மீண்டும் முயற்சி செய்யுங்கள்.',
   'parent.heart.saveFailed': 'அந்த இதயத்தைச் சேமிக்க முடியவில்லை. மீண்டும் முயற்சி செய்யுங்கள்.',
+  'parent.heart.removeFailedWhy': 'அந்த இதயத்தை நீக்க முடியவில்லை. {why}',
+  'parent.heart.saveFailedWhy': 'அந்த இதயத்தைச் சேமிக்க முடியவில்லை. {why}',
   'parent.heart.on': '{title}, உங்களுக்குப் பிடித்தவற்றில் உள்ளது. நீக்கத் தட்டுங்கள்.',
   'parent.heart.off': '{title} ஐ உங்களுக்குப் பிடித்தவற்றில் சேருங்கள்',
   'parent.stopped.title': 'உங்கள் பதிவு சீக்கிரமே நின்றுவிட்டது',

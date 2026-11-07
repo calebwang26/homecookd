@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} کی',
   'parent.heart.removeFailed': 'وہ دل ہٹایا نہیں جا سکا۔ دوبارہ کوشش کریں۔',
   'parent.heart.saveFailed': 'وہ دل محفوظ نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+  'parent.heart.removeFailedWhy': 'وہ دل ہٹایا نہیں جا سکا۔ {why}',
+  'parent.heart.saveFailedWhy': 'وہ دل محفوظ نہیں ہو سکا۔ {why}',
   'parent.heart.on': '{title}، آپ کے پسندیدہ میں ہے۔ ہٹانے کے لیے ٹیپ کریں۔',
   'parent.heart.off': '{title} کو اپنے پسندیدہ میں شامل کریں',
   'parent.stopped.title': 'آپ کی ریکارڈنگ جلدی رک گئی',

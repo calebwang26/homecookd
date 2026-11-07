@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name}做的',
   'parent.heart.removeFailed': '没能取消收藏，请再试一次。',
   'parent.heart.saveFailed': '没能收藏，请再试一次。',
+  'parent.heart.removeFailedWhy': '没能取消这颗爱心。{why}',
+  'parent.heart.saveFailedWhy': '没能保存这颗爱心。{why}',
   'parent.heart.on': '{title}，已收藏。点按取消。',
   'parent.heart.off': '收藏{title}',
   'parent.stopped.title': '您的录制提前停止了',

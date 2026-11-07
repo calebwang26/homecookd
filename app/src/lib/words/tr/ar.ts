@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': 'من {name}',
   'parent.heart.removeFailed': 'تعذّرت إزالة ذلك القلب. حاول مرة أخرى.',
   'parent.heart.saveFailed': 'تعذّر حفظ ذلك القلب. حاول مرة أخرى.',
+  'parent.heart.removeFailedWhy': 'تعذّرت إزالة هذا القلب. {why}',
+  'parent.heart.saveFailedWhy': 'تعذّر حفظ هذا القلب. {why}',
   'parent.heart.on': '{title}، في مفضلتك. اضغط للإزالة.',
   'parent.heart.off': 'أضف {title} إلى مفضلتك',
   'parent.stopped.title': 'توقّف تسجيلكم مبكرًا',
