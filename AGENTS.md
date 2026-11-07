@@ -68,6 +68,10 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **The repo is public (Caleb, Nov 8, 2026)** for unlimited Actions minutes: every tracked file and the whole history can be read by
+  anyone. Nothing private may be committed: no reviewer link or family code, no phone numbers or family members' personal details, no
+  keys or `.env` values. The gitignored `docs/build/.test-family-link`, `.env` and `app/.env` stay untracked. A PR from a fork runs the
+  workflows without secrets; never add `pull_request_target`. `docs/agents/memory/repo-public.md`.
 - **Purge dead branches (Caleb, Nov 2).** Delete a branch when its PR merges (`gh pr merge --delete-branch`, or delete
   the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`,
   or whose draft was superseded by a merged PR. Never delete `main`, a branch with an
