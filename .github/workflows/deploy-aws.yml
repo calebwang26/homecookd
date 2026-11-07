@@ -56,9 +56,10 @@ jobs:
       - name: Roll out
         run: |
           aws ecs describe-task-definition --task-definition "$NAME-$SERVICE" --query taskDefinition > current.json
+          # Keep the disk Terraform set (the worker's 40 GiB): register-task-definition takes only the fields listed, and a missing one falls back to Fargate's 20 GiB.
           jq --arg image "$IMAGE" --arg release "$GITHUB_SHA" '.containerDefinitions[0].image = $image
             | .containerDefinitions[0].environment = ([.containerDefinitions[0].environment[] | select(.name != "RELEASE")] + [{name: "RELEASE", value: $release}])
-            | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
+            | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory} + (if .ephemeralStorage then {ephemeralStorage} else {} end)' \
             current.json > next.json
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
           if [ "$SERVICE" = api ]; then
@@ -68,7 +69,7 @@ jobs:
               --query 'services[0].networkConfiguration' --output json)
             if aws ecs describe-task-definition --task-definition "$NAME-migrate" --query taskDefinition > migrate.json 2>/dev/null; then
               jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image
-                | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
+                | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory} + (if .ephemeralStorage then {ephemeralStorage} else {} end)' \
                 migrate.json > migrate-next.json
               MIGRATE=$(aws ecs register-task-definition --cli-input-json file://migrate-next.json --query taskDefinition.taskDefinitionArn --output text)
               TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$MIGRATE" \
