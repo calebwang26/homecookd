@@ -18,9 +18,9 @@
     "quick dinner"
   ],
   "media": {
-    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/play.mp4?v=1791746798127473",
-    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/voice.m4a?v=1791746798473506",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/poster.jpg?v=1791746852557420",
+    "video_url": "https://media.homecookd.app/gordon-stir-fry/play.mp4?v=1791746798127473",
+    "audio_url": "https://media.homecookd.app/gordon-stir-fry/voice.m4a?v=1791746798473506",
+    "poster_url": "https://media.homecookd.app/gordon-stir-fry/poster.jpg?v=1791746852557420",
     "duration_s": 305,
     "width": 1280,
     "height": 720
@@ -133,7 +133,7 @@
         "s1"
       ],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/01.jpg?v=1791749457233248",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/01.jpg?v=1791749457233248",
       "substeps": [
         {
           "text": "Put the rice noodles into a bowl.",
@@ -179,7 +179,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/02.jpg?v=1791749457475020",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/02.jpg?v=1791749457475020",
       "substeps": [
         {
           "text": "Place a wok or large frying pan on the stove.",
@@ -213,7 +213,7 @@
       "special_ids": [
         "x1"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/03.jpg?v=1791749457670844",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/03.jpg?v=1791749457670844",
       "substeps": [
         {
           "text": "Slice the fillet off the chicken breast.",
@@ -250,7 +250,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/04.jpg?v=1791749457883664",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/04.jpg?v=1791749457883664",
       "substeps": [
         {
           "text": "Thinly slice the garlic cloves.",
@@ -286,7 +286,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/05.jpg?v=1791749458133510",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/05.jpg?v=1791749458133510",
       "substeps": [
         {
           "text": "Add the olive oil to the hot pan.",
@@ -351,7 +351,7 @@
       "special_ids": [
         "x2"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/06.jpg?v=1791749458365609",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/06.jpg?v=1791749458365609",
       "substeps": [
         {
           "text": "Toss the raw sliced broccoli into the pan.",
@@ -397,7 +397,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/07.jpg?v=1791749458632434",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/07.jpg?v=1791749458632434",
       "substeps": [
         {
           "text": "Wipe out the pan.",
@@ -452,7 +452,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/08.jpg?v=1791749458877828",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/08.jpg?v=1791749458877828",
       "substeps": [
         {
           "text": "Return the drained noodles to the pan.",
@@ -501,7 +501,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/09.jpg?v=1791749459133493",
+      "image_url": "https://media.homecookd.app/gordon-stir-fry/steps/09.jpg?v=1791749459133493",
       "substeps": [
         {
           "text": "Plate the stir-fry.",

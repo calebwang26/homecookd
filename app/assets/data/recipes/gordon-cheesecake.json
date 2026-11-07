@@ -18,9 +18,9 @@
     "New York Style"
   ],
   "media": {
-    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/play.mp4?v=1791746792905761",
-    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/voice.m4a?v=1791746793267483",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/poster.jpg?v=1791746851544028",
+    "video_url": "https://media.homecookd.app/gordon-cheesecake/play.mp4?v=1791746792905761",
+    "audio_url": "https://media.homecookd.app/gordon-cheesecake/voice.m4a?v=1791746793267483",
+    "poster_url": "https://media.homecookd.app/gordon-cheesecake/poster.jpg?v=1791746851544028",
     "duration_s": 192,
     "width": 1280,
     "height": 720
@@ -108,7 +108,7 @@
       "special_ids": [
         "x1"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/01.jpg?v=1791749453100225",
+      "image_url": "https://media.homecookd.app/gordon-cheesecake/steps/01.jpg?v=1791749453100225",
       "substeps": [
         {
           "text": "Leave the cream cheese out for **5 or 10 minutes**.",
@@ -154,7 +154,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/02.jpg?v=1791749453357436",
+      "image_url": "https://media.homecookd.app/gordon-cheesecake/steps/02.jpg?v=1791749453357436",
       "substeps": [
         {
           "text": "Beat the eggs in a separate bowl.",
@@ -186,7 +186,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/03.jpg?v=1791749453635087",
+      "image_url": "https://media.homecookd.app/gordon-cheesecake/steps/03.jpg?v=1791749453635087",
       "substeps": [
         {
           "text": "Whisk a couple of tablespoons of flour into the batter.",
@@ -231,7 +231,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/04.jpg?v=1791749453949305",
+      "image_url": "https://media.homecookd.app/gordon-cheesecake/steps/04.jpg?v=1791749453949305",
       "substeps": [
         {
           "text": "Grease a cake tin with butter.",
@@ -273,7 +273,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/05.jpg?v=1791749454239611",
+      "image_url": "https://media.homecookd.app/gordon-cheesecake/steps/05.jpg?v=1791749454239611",
       "substeps": [
         {
           "text": "Bake at **180 degrees** for **35 to 40 minutes**.",
