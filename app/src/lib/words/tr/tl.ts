@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': 'ni {name}',
   'parent.heart.removeFailed': 'Hindi naalis ang puso. Pakisubukan ulit.',
   'parent.heart.saveFailed': 'Hindi na-save ang puso. Pakisubukan ulit.',
+  'parent.heart.removeFailedWhy': 'Hindi po maalis ang puso na iyon. {why}',
+  'parent.heart.saveFailedWhy': 'Hindi po ma-save ang puso na iyon. {why}',
   'parent.heart.on': '{title}, nasa mga paborito ninyo. I-tap para alisin.',
   'parent.heart.off': 'Idagdag ang {title} sa mga paborito ninyo',
   'parent.stopped.title': 'Maagang huminto po ang inyong pag-record',

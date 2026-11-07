@@ -129,10 +129,11 @@ async function migrateLegacy(owner: string, server: string[]) {
   else migrated.delete(owner);
 }
 
-/** Heart or un-heart `recipeId` for `owner`. Resolves false if the server didn't take it. */
-export function setFavorite(owner: string, recipeId: string, on: boolean): Promise<boolean> {
-  return send(owner, recipeId, on).then((err) => err === null);
+/** Heart or un-heart `recipeId` for `owner`. Resolves null once the server took it, else the error it (or the network) gave. */
+export function setFavorite(owner: string, recipeId: string, on: boolean): Promise<Error | null> {
+  return send(owner, recipeId, on);
 }
+
 
 /** setFavorite's work: resolves null on success, else the error the server (or network) gave. */
 function send(owner: string, recipeId: string, on: boolean): Promise<Error | null> {
@@ -190,8 +191,8 @@ export type Favorites = {
   /** Hearted dishes, newest first. */
   ids: string[];
   isFav: (recipeId: string) => boolean;
-  /** Flip the heart. Resolves to false if the server didn't take it (the heart is already rolled back). */
-  toggle: (recipeId: string) => Promise<boolean>;
+  /** Flip the heart. Resolves null once the server took it, else its error (the heart is already rolled back). */
+  toggle: (recipeId: string) => Promise<Error | null>;
   /** The list for this profile is known (from the server or the device cache). */
   ready: boolean;
   refresh: () => Promise<void>;
@@ -211,7 +212,7 @@ export function useFavorites(): Favorites {
   const set = useMemo(() => new Set(ids), [ids]);
   const isFav = useCallback((id: string) => set.has(id), [set]);
   const toggle = useCallback(
-    (id: string) => (owner ? setFavorite(owner, id, !visibleIds(ownerState(owner)).includes(id)) : Promise.resolve(false)),
+    (id: string) => (owner ? setFavorite(owner, id, !visibleIds(ownerState(owner)).includes(id)) : Promise.resolve(new Error('no one signed in'))),
     [owner],
   );
   const refresh = useCallback(() => refreshFavorites(owner), [owner]);

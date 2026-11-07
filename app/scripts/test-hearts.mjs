@@ -48,6 +48,9 @@ const N = await load('src/lib/heartsNote.ts');
 const D = await load('src/lib/dishStatsApi.ts');
 const A = await load('src/lib/api.ts');
 const K = await load('src/lib/kitchenCounts.ts');
+const R = await load('src/lib/heartReason.ts');
+const E = await load('src/lib/aws/errors.ts');
+const { wordsFor } = await load('src/lib/words/words.ts');
 const kv = globalThis.__kv;
 
 let passed = 0;
@@ -395,6 +398,22 @@ await test('cleanIds & batches', () => {
   assert.deepEqual(D.batches(['a', 'b', 'c'], 2), [['a', 'b'], ['c']]);
   assert.deepEqual(D.batches([]), []);
   assert.equal(D.DISH_STATS_BATCH, 50);
+});
+
+await test("a heart that didn't save says the api's reason, in her language, when there is one (Nov 7)", () => {
+  const aws = (status, code, kind) => new E.AwsError('x', { status, code, kind });
+  // Caleb's build-12 heart: POST /v1/favorites 404, the sample library not on production yet.
+  assert.equal(R.heartFailureReason(aws(404, 'not_found', 'refused')), 'That isn’t here anymore.');
+  assert.notEqual(R.heartFailureReason(aws(404, 'not_found', 'refused'), wordsFor('es')), 'That isn’t here anymore.', 'in her language');
+  // Worth another tap: "Try again" (null).
+  for (const e of [aws(503, 'unavailable', 'unavailable'), aws(0, 'network', 'network'), aws(500, 'server_error', 'server'), aws(429, 'rate_limited', 'refused')])
+    assert.equal(R.heartFailureReason(e), null, e.code);
+  // Before AWS: the server's message on a 4xx ApiError.
+  assert.equal(R.heartFailureReason(new A.ApiError('Not in your family.', 403, 'http')), 'Not in your family.');
+  assert.equal(R.heartFailureReason(new A.ApiError('Offline', 0, 'network')), null);
+  assert.equal(R.heartFailureReason(new A.ApiError('Boom', 502, 'http')), null);
+  assert.equal(R.heartFailureReason(null), null);
+  assert.equal(R.heartFailureReason(new Error('no one signed in')), null);
 });
 
 console.log(`\n${passed} passed`);

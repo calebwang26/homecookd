@@ -46,7 +46,8 @@
       "channel": "production-aws",
       "env": {
         "EXPO_PUBLIC_BACKEND": "aws",
-        "EXPO_PUBLIC_AWS_URL": "https://api.homecookd.app"
+        "EXPO_PUBLIC_AWS_URL": "https://api.homecookd.app",
+        "EXPO_PUBLIC_BUCKET_URL": "https://media.homecookd.app"
       }
     }
   },

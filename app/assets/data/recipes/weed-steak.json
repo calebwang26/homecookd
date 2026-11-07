@@ -1,14 +1,14 @@
 {
   "id": "weed-steak",
-  "title": "Swordfish Steak",
+  "title": "Uncle Ray's Swordfish Steak",
   "cook": {
-    "name": "Miles",
+    "name": "Uncle Ray",
     "relation": "Uncle"
   },
   "intro": "This spontaneous, intuition-driven swordfish recipe was inspired by a quick trip to Trader Joe's. It features a unique soju deglaze and an experimental miso-apple garnish, proving that culinary improvisation can yield surprisingly elegant results.",
   "servings": "1",
   "total_time": "30 minutes",
-  "sample": false,
+  "sample": true,
   "source": null,
   "tags": [
     "swordfish",

@@ -203,10 +203,14 @@ await test('clipPool: empty without family recordings (the bundled library is al
   const everyDish = lib.map((e) => e.id); // as if this family had published every dish
   assert.deepEqual(M.clipPool(bundled, profiles, 'me'), []);
   assert.deepEqual(M.missHomeEntries(lib, profiles, 'me', everyDish), []);
-  // A real recording by someone who is in the family does count, once this family published it.
-  assert.deepEqual(M.missHomeEntries(lib, [...profiles, { id: 'm', name: 'Miles' }], 'me', everyDish).map((e) => e.id), ['weed-steak']);
+  // A real recording by someone who is in the family does count, once this family published it. (Every bundled
+  // dish is a sample since Nov 7, Uncle Ray's Swordfish Steak included, so this one stands in for a family's own.)
+  const real = lib.map((e) => (e.id === 'weed-steak' ? { ...e, sample: false } : e));
+  assert.deepEqual(M.missHomeEntries(real, [...profiles, { id: 'm', name: 'Uncle Ray' }], 'me', everyDish).map((e) => e.id), ['weed-steak']);
   // ...but not when it's my own.
-  assert.deepEqual(M.missHomeEntries(lib, [{ id: 'm', name: 'Miles' }], 'm', everyDish), []);
+  assert.deepEqual(M.missHomeEntries(real, [{ id: 'm', name: 'Uncle Ray' }], 'm', everyDish), []);
+  // The bundle is all samples now: the same family sees none of it.
+  assert.deepEqual(M.missHomeEntries(lib, [...profiles, { id: 'm', name: 'Uncle Ray' }], 'me', everyDish), []);
 });
 
 await test('missHome: only THIS family\'s recordings play, never a same-named cook\'s from another family', () => {

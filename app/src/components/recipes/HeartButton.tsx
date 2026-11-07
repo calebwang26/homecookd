@@ -29,6 +29,7 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { HeartPop } from '@/components/cooking/HeartBurst';
 import { HeartIcon, PressableScale, useToast } from '@/components/ui';
 import { useFavorites } from '@/lib/favorites';
+import { heartFailureReason } from '@/lib/heartReason';
 import { useWords } from '@/lib/words/useWords';
 import { takeHeartsNoteFor } from '@/lib/heartsNote';
 import { getCachedEntry } from '@/lib/recipes';
@@ -65,12 +66,15 @@ export function HeartButton({ recipeId, title, tone = 'row', style }: Props) {
     const wasOn = on;
     if (!wasOn) setPop((n) => n + 1);
     const meId = me?.id ?? null;
-    void fav.toggle(recipeId).then(async (ok) => {
+    void fav.toggle(recipeId).then(async (err) => {
+      const ok = err === null;
       if (!ok) {
-        toast.show(words(wasOn ? 'parent.heart.removeFailed' : 'parent.heart.saveFailed'), {
-          tone: 'error',
-          icon: <HeartIcon size={14} filled color={colors.card} />,
-        });
+        // The api's reason when it gave one ("That isn’t here anymore."), else "Try again".
+        const why = heartFailureReason(err, words);
+        const line = why
+          ? words(wasOn ? 'parent.heart.removeFailedWhy' : 'parent.heart.saveFailedWhy', { why })
+          : words(wasOn ? 'parent.heart.removeFailed' : 'parent.heart.saveFailed');
+        toast.show(line, { tone: 'error', icon: <HeartIcon size={14} filled color={colors.card} /> });
         return;
       }
       const note = await takeHeartsNoteFor({ meId, entry: getCachedEntry(recipeId), profiles, wasOn, ok });

@@ -541,6 +541,8 @@ const words: Translation = {
   'parent.list.by': '{name} ની',
   'parent.heart.removeFailed': 'એ દિલ કાઢી ન શકાયું. ફરી પ્રયાસ કરો.',
   'parent.heart.saveFailed': 'એ દિલ સાચવી ન શકાયું. ફરી પ્રયાસ કરો.',
+  'parent.heart.removeFailedWhy': 'એ દિલ કાઢી ન શકાયું. {why}',
+  'parent.heart.saveFailedWhy': 'એ દિલ સાચવી ન શકાયું. {why}',
   'parent.heart.on': '{title}, તમારા મનપસંદમાં છે. કાઢવા માટે ટૅપ કરો.',
   'parent.heart.off': '{title} ને તમારા મનપસંદમાં ઉમેરો',
   'parent.stopped.title': 'તમારું રેકોર્ડિંગ વહેલું બંધ થઈ ગયું',

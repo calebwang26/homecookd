@@ -253,6 +253,9 @@ export const PARENT = {
   'parent.list.by': 'by {name}',
   'parent.heart.removeFailed': 'Couldn’t remove that heart. Try again.',
   'parent.heart.saveFailed': 'Couldn’t save that heart. Try again.',
+  // When the api says why (a dish that isn't there, a family it isn't in): its reason, in her language, after this.
+  'parent.heart.removeFailedWhy': 'Couldn’t remove that heart. {why}',
+  'parent.heart.saveFailedWhy': 'Couldn’t save that heart. {why}',
   'parent.heart.on': '{title}, in your favorites. Tap to remove.',
   'parent.heart.off': 'Add {title} to your favorites',
   // components/record/StoppedEarlyCard (Home): the app closed while she was still filming. {time}: "12 min"
