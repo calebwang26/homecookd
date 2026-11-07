@@ -542,7 +542,7 @@ class Box:
     def storage(self) -> S3Storage:
         return S3Storage("uploads", "media", "private", "https://cdn.test", client=self.s3)
 
-    def worker(self, runner, job_cap="12", daily_cap="30", store=None) -> qw.Worker:
+    def worker(self, runner, job_cap="12", daily_cap="30", store=None, protection=None) -> qw.Worker:
         def sleep(seconds):
             self.now += seconds
 
@@ -550,7 +550,7 @@ class Box:
             self.reports.append((error if isinstance(error, str) else type(error).__name__, job_id))
 
         return qw.Worker(self.queue, store or self.ctx.store, self.storage(), runner, Decimal(job_cap), Decimal(daily_cap),
-                         log=qw.Log(service="test"), clock=lambda: self.now, sleep=sleep, reporter=reporter)
+                         log=qw.Log(service="test"), clock=lambda: self.now, sleep=sleep, reporter=reporter, protection=protection)
 
     def job_with_upload(self, upload_key="up-1/", **kw) -> str:
         job_id = self.ctx.new_job(upload_key=upload_key, **kw)
@@ -1099,6 +1099,60 @@ def sigterm_stops_taking_work_and_hands_the_job_back(box: Box):
     assert next_runner.specs[0]["attempt_prefix"].endswith("-a2/")
 
 
+class FakeAgent:
+    """The ECS agent's task-protection endpoint."""
+
+    def __init__(self, answer=None):
+        self.puts: list[tuple[str, dict]] = []
+        self.answer = answer if answer is not None else {"protection": {"ProtectionEnabled": True}}
+
+    def put(self, url: str, body: dict) -> dict:
+        self.puts.append((url, body))
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+    def protected(self) -> bool:
+        return bool(self.puts) and self.puts[-1][1]["ProtectionEnabled"]
+
+
+@scenario
+def a_running_job_holds_task_protection(box: Box):
+    """A release waits for the job instead of stopping it partway (Nov 7), and lets go when it ends, however it ends."""
+    agent = FakeAgent()
+    seen = []
+    protection = qw.TaskProtection("http://agent", qw.Log(service="test"), put=agent.put)
+    done = box.job_with_upload()
+    box.queue.send(done)
+    box.deliver(box.worker(FakeRunner({"ticks": [*GOOD_TICKS, lambda _s: seen.append(agent.protected())]}), protection=protection))
+    assert box.ctx.job(done)["stage"] == "done" and seen == [True]
+    assert agent.puts == [("http://agent/task-protection/v1/state", {"ProtectionEnabled": True, "ExpiresInMinutes": qw.PROTECT_MIN}),
+                          ("http://agent/task-protection/v1/state", {"ProtectionEnabled": False})]
+    assert qw.MAX_JOB_S / 60 < qw.PROTECT_MIN <= 2880  # past the longest job, inside ECS's 48-hour limit
+
+    # A cancel mid-run lets go too.
+    agent.puts.clear()
+    cancelled = box.job_with_upload()
+    box.queue.send(cancelled)
+    box.deliver(box.worker(FakeRunner({"ticks": [GOOD_TICKS[0], lambda _s: box.ctx.cancel(cancelled)], "forever": True}),
+                           protection=protection))
+    assert box.ctx.job(cancelled)["stage"] == "failed" and not agent.protected() and len(agent.puts) == 2
+
+    # So does a child that never started.
+    class Broken(FakeRunner):
+        def start(self, spec):
+            raise OSError("no child")
+
+    agent.puts.clear()
+    broken = box.job_with_upload()
+    box.queue.send(broken)
+    try:
+        box.deliver(box.worker(Broken(), protection=protection))
+    except OSError:
+        pass  # run() logs it and SQS delivers the message again
+    assert not agent.protected() and len(agent.puts) == 2
+
+
 @scenario
 def sigterm_during_a_long_poll_hands_the_message_back(box: Box):
     job_id = box.job_with_upload()
@@ -1205,6 +1259,21 @@ def model_calls_hold_no_family_content(box: Box):
 
 
 # ---------- no store needed ----------
+
+def test_task_protection_never_stops_a_job():
+    """Off ECS it does nothing. An unreachable agent or a refusal (the role missing the permission) only logs, by type."""
+    log = qw.Log(service="test")
+    off_ecs = FakeAgent()
+    qw.TaskProtection(None, log, put=off_ecs.put).set(True)
+    assert off_ecs.puts == []
+    for answer, why in ((OSError("down"), "OSError"), ({"failure": {"Reason": "AccessDenied"}}, "TaskProtectionRefused"),
+                        ({"error": {"Code": "AccessDeniedException"}}, "TaskProtectionRefused")):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            qw.TaskProtection("http://agent", log, put=FakeAgent(answer).put).set(True)
+        line = json.loads(out.getvalue())
+        assert line["msg"] == "task protection not changed" and line["error_type"] == why and line["protected"] is True
+
 
 def test_recipe_row_matches_convexs_shape():
     raw = {"id": "recipe-x", "title": "  Poha ", "language": "MR",
