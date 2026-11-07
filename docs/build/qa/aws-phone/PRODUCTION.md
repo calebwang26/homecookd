@@ -24,7 +24,8 @@ App Store version. Expo build `a4d1f0f4-7ec2-4bb5-b36d-f910989288b1`; submission
 - Until production's list arrives, the app also fetches the bundled entries' GCS addresses (`app/assets/data/library.json`
   still names storage.googleapis.com). If GCS goes off, those fail and each recipe falls back to production's address.
 - CloudFront served `library.json` from cache without `access-control-allow-origin` (recipe.json, posters and videos have
-  it). The iPhone app doesn't need it; a browser does. Passed to AWS backend.
+  it). The iPhone app doesn't need it; a browser does. Fixed in #384 (CloudFront always adds the CORS headers), live after
+  Caleb's morning apply.
 
 ## The full step-8 check
 
