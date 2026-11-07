@@ -1,9 +1,33 @@
 # Phone check: the 1.1 build on production (CUTOVER step 8)
 
 This is for Caleb, with an iPhone. It takes about 30 minutes. The build is the `production-aws` profile: version 1.0.0
-with a new build number, from main after `aws-migration` merges in, talking only to `https://api.homecookd.app`. It's the
+with a new build number (15 since Nov 7), from main, talking only to `https://api.homecookd.app`. It's the
 build CUTOVER step 9 submits, so nothing is rebuilt between this check and the submission. Unlike the staging run
 ([CHECKLIST.md](CHECKLIST.md)), this one uses real models, real pushes and the real alerts email.
+
+## Build 15: the morning check (Nov 7)
+
+About 15 minutes, in this order. Build 15 is from main `df4337659` (13 and 14 were numbers spent on uploads that never finished): filming waits for your tap (#375), and recipes,
+hearts and videos come from `media.homecookd.app` (#376). Write the time of each step. Reply in the App screens & recording
+tab with the step number, ✅ or ❌, the time, and a screenshot for anything that looked wrong; the chat fills in
+[PRODUCTION.md](PRODUCTION.md).
+
+1. **Install build 15.** TestFlight → homecookd → 15, over build 12. Open it; you're still signed in.
+2. **"Tap to start".** Home → Record a new recipe → Start recording. The camera shows the shot and **isn't filming**:
+   the line under the red button says "Tap to start". Wait 10 seconds: still not filming. 📸 Then tap ×, back to Home.
+3. **Two hearts.** Recipes → **Uncle Ray's Swordfish Steak** → the heart. Then **Chicken Biryani** → the heart. Both
+   stay filled, with no "Couldn't save that heart". Leave the app and come back: both still filled.
+4. **A video from production.** Open Uncle Ray's Swordfish Steak → Full video. It plays. (That dish's new name exists only on
+   `media.homecookd.app`, so this proves build 15 reads production's media.) 📸 the video playing.
+5. **A recording to a recipe.** Record → Start recording → tap the red button → film a real dish for a minute or two,
+   talking as you go → I'm done → send it. 📸 the "processing" card. It becomes a recipe in a few minutes (real
+   models). 📸 the recipe, and play one step's video. If it's still processing after 15 minutes, say so: the worker
+   runs on its own once #377 is applied; until then AWS backend starts it when your job lands.
+6. **A push.** If the app asks "Want a note when … writes back?" after the send, tap Yes, then Allow (if you allowed
+   notifications on build 12, it won't ask). Lock the phone. The finished recipe from step 5 sends a notification. 📸 the lock screen.
+
+The full step-8 check below (a family link, someone with no phone, sign out and in, messages, the reviewer's path,
+delete account) comes after this, on build 15.
 
 ## Before you start (App screens & recording does this)
 
