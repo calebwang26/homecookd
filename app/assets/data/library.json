@@ -4,7 +4,7 @@
     "title": "Uncle Ray's Swordfish Steak",
     "cook_name": "Uncle Ray",
     "relation": "Uncle",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/poster.jpg?v=1793003407559213",
+    "poster_url": "https://media.homecookd.app/weed-steak/poster.jpg?v=1793003407559213",
     "tags": [
       "swordfish",
       "seafood",
@@ -14,14 +14,14 @@
       "improvisation"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/recipe.json"
+    "recipe_url": "https://media.homecookd.app/weed-steak/recipe.json"
   },
   {
     "id": "chicken-biryani",
     "title": "Chicken Biryani",
     "cook_name": "Auntie Bumbi",
     "relation": "YouTube",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/poster.jpg?v=1791746850971040",
+    "poster_url": "https://media.homecookd.app/chicken-biryani/poster.jpg?v=1791746850971040",
     "tags": [
       "Indian",
       "Main Course",
@@ -30,56 +30,56 @@
       "Biryani"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/recipe.json"
+    "recipe_url": "https://media.homecookd.app/chicken-biryani/recipe.json"
   },
   {
     "id": "auntie-lin-scallion-pancakes",
     "title": "Auntie Lin's Scallion Pancakes",
     "cook_name": "Auntie Lin",
     "relation": "Aunt",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/auntie-lin-scallion-pancakes/poster.jpg?v=1791750646762647",
+    "poster_url": "https://media.homecookd.app/auntie-lin-scallion-pancakes/poster.jpg?v=1791750646762647",
     "tags": [
       "snack",
       "vegetarian",
       "street food"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/auntie-lin-scallion-pancakes/recipe.json"
+    "recipe_url": "https://media.homecookd.app/auntie-lin-scallion-pancakes/recipe.json"
   },
   {
     "id": "dad-ginger-scallion-fish",
     "title": "Dad's Grilled Fish with Ginger-Scallion Sauce",
     "cook_name": "Dad",
     "relation": "Dad",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/dad-ginger-scallion-fish/poster.jpg?v=1791750647094774",
+    "poster_url": "https://media.homecookd.app/dad-ginger-scallion-fish/poster.jpg?v=1791750647094774",
     "tags": [
       "fish",
       "grill",
       "summer"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/dad-ginger-scallion-fish/recipe.json"
+    "recipe_url": "https://media.homecookd.app/dad-ginger-scallion-fish/recipe.json"
   },
   {
     "id": "dad-sunday-chili",
     "title": "Dad's Sunday Chili",
     "cook_name": "Dad",
     "relation": "Dad",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/dad-sunday-chili/poster.jpg?v=1791752791922957",
+    "poster_url": "https://media.homecookd.app/dad-sunday-chili/poster.jpg?v=1791752791922957",
     "tags": [
       "sunday",
       "beef",
       "one-pot"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/dad-sunday-chili/recipe.json"
+    "recipe_url": "https://media.homecookd.app/dad-sunday-chili/recipe.json"
   },
   {
     "id": "gordon-stir-fry",
     "title": "Chicken Stir-Fry with Rice Noodles",
     "cook_name": "Gordon",
     "relation": "YouTube",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/poster.jpg?v=1791746852557420",
+    "poster_url": "https://media.homecookd.app/gordon-stir-fry/poster.jpg?v=1791746852557420",
     "tags": [
       "stir-fry",
       "chicken",
@@ -88,14 +88,14 @@
       "quick dinner"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/recipe.json"
+    "recipe_url": "https://media.homecookd.app/gordon-stir-fry/recipe.json"
   },
   {
     "id": "gordon-gnocchi",
     "title": "Potato Gnocchi with Peas",
     "cook_name": "Gordon",
     "relation": "YouTube",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/poster.jpg?v=1791746852045121",
+    "poster_url": "https://media.homecookd.app/gordon-gnocchi/poster.jpg?v=1791746852045121",
     "tags": [
       "Gnocchi",
       "Italian",
@@ -104,14 +104,14 @@
       "Main Course"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/recipe.json"
+    "recipe_url": "https://media.homecookd.app/gordon-gnocchi/recipe.json"
   },
   {
     "id": "gordon-cheesecake",
     "title": "Raspberry Lemon Cheesecake",
     "cook_name": "Gordon",
     "relation": "YouTube",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/poster.jpg?v=1791746851544028",
+    "poster_url": "https://media.homecookd.app/gordon-cheesecake/poster.jpg?v=1791746851544028",
     "tags": [
       "Dessert",
       "Cheesecake",
@@ -120,34 +120,34 @@
       "New York Style"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/recipe.json"
+    "recipe_url": "https://media.homecookd.app/gordon-cheesecake/recipe.json"
   },
   {
     "id": "grandma-hand-pulled-noodle-soup",
     "title": "Grandma's Hand-Pulled Noodle Soup",
     "cook_name": "Grandma",
     "relation": "Grandma",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-hand-pulled-noodle-soup/poster.jpg?v=1791750647495752",
+    "poster_url": "https://media.homecookd.app/grandma-hand-pulled-noodle-soup/poster.jpg?v=1791750647495752",
     "tags": [
       "soup",
       "noodles",
       "comfort"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-hand-pulled-noodle-soup/recipe.json"
+    "recipe_url": "https://media.homecookd.app/grandma-hand-pulled-noodle-soup/recipe.json"
   },
   {
     "id": "grandma-red-braised-pork",
     "title": "Grandma's Red-Braised Pork Belly",
     "cook_name": "Grandma",
     "relation": "Grandma",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-red-braised-pork/poster.jpg?v=1791752792527788",
+    "poster_url": "https://media.homecookd.app/grandma-red-braised-pork/poster.jpg?v=1791752792527788",
     "tags": [
       "pork",
       "braise",
       "special occasion"
     ],
     "sample": true,
-    "recipe_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-red-braised-pork/recipe.json"
+    "recipe_url": "https://media.homecookd.app/grandma-red-braised-pork/recipe.json"
   }
 ]
