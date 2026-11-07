@@ -12,7 +12,7 @@ Caleb's call, Nov 8: release 1.0 (build 6, the old backend) now, and send the AW
 update, rather than cancel 1.0's pending release. Apple reviewed 1.0 as a new app, which took a week; an update is
 usually quicker. Section 1 says what this means for the people who join on 1.0. Sections 3 and 4 hold the text to paste.
 
-**A. Release 1.0 (two minutes)**
+**A. Release 1.0 (two minutes).** Done Nov 8, 14:35 PT: Ready for Distribution in 174 countries.
 
 1. [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Apps** → **homecookd** → in the sidebar under iOS
    App, **1.0 Pending Developer Release**.
@@ -70,15 +70,15 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
 
 ## 2. What has to exist before Submit
 
-| Needed | Who | State on Nov 7 |
+| Needed | Who | State on Nov 8 |
 |---|---|---|
-| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`), built by the Master Agent once the version PR merges: build 17 (main `f49ef7ba7`, Caleb's re-check) plus the version number. 13, 14 and 16 never made a build |
+| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0), uploaded to App Store Connect Nov 8 and processing: build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 once processed |
 | The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
 | The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family". To turn it off: `node dist/reviewerLink.js revoke <family id>` (infra/README.md 8.3) |
 | A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
 | The APNs key on Expo, so pushes are real | Salik (LAUNCH-LINKS.md 6c) | Done Nov 6: key `S3J2G3P3H3` on Expo |
-| App Privacy: Diagnostics added (section 4) | Caleb or Salik | Not done: the morning section, step 8 |
-| The listing and seven screenshots (`LISTING-1.1.md`) | Caleb or Salik; App screens shoots | Text written (#355). Screenshots shot Nov 6 (#374), framed and captioned Nov 7 in `screenshots/1.1/`; 06 may be reshot (its README) |
+| App Privacy: Diagnostics added (section 4) | Caleb or Salik; the Master Agent with Caleb's OK | Not done yet: part C, step 7 |
+| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** created Nov 8 after 1.0 was released (14:35 PT). Promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release: filled and saved. Screenshots going in through Media Manager's 6.9" slot |
 
 ## 3. Reviewer notes for 1.1
 
@@ -101,7 +101,6 @@ WHAT TO TRY
 - As a cook: Home shows "Leo wants your Sunday eggs", a request from his kid. Open it to see Leo's guess, then "Film it next time you make it" (with a reminder) or "Tell Leo how you make it now" (a 2-minute voice version).
 - Record a dish with the camera, or answer a family question with a voice note.
 - Open a recipe. Each step plays the moment from the cook's video, and the cook's words stay in the recipe.
-- The family's side starts on the web: homecookd.app/miss (no account) names a dish and sends Mom a link she answers by voice.
 - The first time you film, upload a video, record a voice answer or send a request, a short sheet "homecookd uses AI for this" names the AI services: Anthropic Claude watches your videos and photos, writes the recipe, and translates your family's questions into your language; Cartesia writes down what you say in your videos and voice notes. Tap "OK, continue" to allow it, or "Not now" to cancel that action without sending anything.
 
 PRIVACY AND SAFETY
@@ -118,6 +117,9 @@ Contact: team@homecookd.app
 reviewer uses their own Apple ID. Default: **uncheck "Sign-in required"** and give the link in the notes above.
 `TODO(caleb)`: or keep it checked and put the join link in the user name field. Apple doesn't say which it prefers for
 Sign in with Apple only.
+
+**Left out of the notes on purpose (Nov 8):** the web flow (homecookd.app/miss). Until CUTOVER step 10 the live /miss and /a
+run on the old backend, so a card the reviewer made there and brought into 1.1 would show "not found".
 
 **Not in 1.1's notes any more:** the family code, "Have a family code?", the "Who's in the kitchen?" faces to pick,
 "Reviewer" to delete, hands-free cooking ("Tap Cook…", "say next"), and Moss and Gemini.
