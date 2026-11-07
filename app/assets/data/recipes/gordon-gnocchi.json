@@ -18,9 +18,9 @@
     "Main Course"
   ],
   "media": {
-    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/play.mp4?v=1791746795363729",
-    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/voice.m4a?v=1791746795749616",
-    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/poster.jpg?v=1791746852045121",
+    "video_url": "https://media.homecookd.app/gordon-gnocchi/play.mp4?v=1791746795363729",
+    "audio_url": "https://media.homecookd.app/gordon-gnocchi/voice.m4a?v=1791746795749616",
+    "poster_url": "https://media.homecookd.app/gordon-gnocchi/poster.jpg?v=1791746852045121",
     "duration_s": 291,
     "width": 1280,
     "height": 720
@@ -166,7 +166,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/01.jpg?v=1791749455119567",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/01.jpg?v=1791749455119567",
       "substeps": [
         {
           "text": "Cut the potatoes in half.",
@@ -208,7 +208,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/02.jpg?v=1791749455339230",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/02.jpg?v=1791749455339230",
       "substeps": [
         {
           "text": "Add ricotta, salt, and pepper to the potatoes.",
@@ -275,7 +275,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/03.jpg?v=1791749455544007",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/03.jpg?v=1791749455544007",
       "substeps": [
         {
           "text": "Generously flour your hands.",
@@ -317,7 +317,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/04.jpg?v=1791749455765711",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/04.jpg?v=1791749455765711",
       "substeps": [
         {
           "text": "Lightly flour a knife.",
@@ -359,7 +359,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/05.jpg?v=1791749455953777",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/05.jpg?v=1791749455953777",
       "substeps": [
         {
           "text": "Bring a large pot of water to a **rolling boil**.",
@@ -411,7 +411,7 @@
       "special_ids": [
         "x1"
       ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/06.jpg?v=1791749456168456",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/06.jpg?v=1791749456168456",
       "substeps": [
         {
           "text": "Preheat a frying pan with olive oil until **hot**.",
@@ -462,7 +462,7 @@
       "wait_after": null,
       "story_ids": [],
       "special_ids": [],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/07.jpg?v=1791749456392324",
+      "image_url": "https://media.homecookd.app/gordon-gnocchi/steps/07.jpg?v=1791749456392324",
       "substeps": [
         {
           "text": "Add fresh garden peas, butter, and fresh thyme.",
