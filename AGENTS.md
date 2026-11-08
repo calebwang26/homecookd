@@ -220,10 +220,11 @@ cd app && npx expo start --dev-client                               # the EAS de
 cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
 cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
 cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-testers build on the staging channel (while 1.0 is in App Review)
-scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
+scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); never --channel production (that reaches public 1.0, build 6, on the old backend)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
-scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
-cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # CUTOVER step 8: 1.1 on production AWS (api.homecookd.app), the build step 9 submits; only on the Master Agent's word that production is ready; no EAS Updates to its channel yet
+scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging and production-aws only, refuses production
+scripts/safe-eas-update.sh production-aws "<what changed>" --check-only|--caleb-ok  # a JS fix to every 1.1 phone (build 18, runtime 1.1.0): exactly the build profile's values, no app/.env; publishing needs Caleb's yes
+cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1 on production AWS (api.homecookd.app): the App Store build (18, released Nov 8); its JS fixes go out with safe-eas-update.sh production-aws
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
