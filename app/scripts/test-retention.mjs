@@ -1020,6 +1020,16 @@ await test('push: an ask waits for any open sheet, and a share-sheet send asks t
   assert.match(read('src/lib/messaging.ts'), /export function askAfterSend\(sentTo: string\[\] \| 'everyone'\)/);
 });
 
+await test('sheets: a sheet created already open waits while another sheet is up', async () => {
+  // "New message" → "Add family" closes one keyed sheet and creates the invite sheet in the same tap. A
+  // fresh sheet that mounted at once presented over the dismissing Modal on iOS: nothing showed and an
+  // invisible Modal took every tap (1.1, Nov 8). It starts held, and the closing wait mounts it.
+  const sheet = readFileSync(join(root, 'src/components/ui/BottomSheet.tsx'), 'utf8');
+  assert.match(sheet, /const \[held, setHeld\] = useState\(\(\) => visible && up\.size > 0\);/);
+  assert.match(sheet, /const \[mounted, setMounted\] = useState\(\(\) => visible && !held\);/);
+  assert.match(readFileSync(join(root, 'src/components/messages/MembersSheet.tsx'), 'utf8'), /props\.onClose\(\);\n\s+setInvite/);
+});
+
 await test('push: a recording that sends itself from the done screen asks like Send does', async () => {
   // v2's phone recording never opens the Send screen (DoneView sends it), so the cook was never asked
   // (build 11 phone run, Nov 3; build 6 too).
