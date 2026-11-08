@@ -74,7 +74,7 @@ Ask your kids what they're craving. They name a dish from home, and you get a nu
 homecookd has moved to a new home. If you joined on the first version, sign in again and invite your family with a new link. Recipes from the first version don't carry over.
 ```
 
-The last paragraph was added Nov 8, when 1.1 became an update to the released 1.0: 1.1 starts fresh on AWS, so a 1.0
+The last paragraph was added Nov 7, when 1.1 became an update to the released 1.0: 1.1 starts fresh on AWS, so a 1.0
 family that updates is signed out with an empty family. This is the text in App Store Connect.
 
 ## Screenshots
