@@ -189,7 +189,7 @@ Not part of the launch. Each needs Caleb's OK, and nothing here has a quick way 
 | Convex | Nobody opens an old build, and any copy from step 7 is checked | Export, keep that copy no longer than `/privacy` allows, then shut the deployment down |
 | Supabase | The same | Lift the freeze (Caleb's call). Export, pause the project, wait, then delete |
 | GCS and the signer | The same | `MEDIA-MIGRATION.md`, step 12 |
-| Cloud Run voice | Homie is back on AWS, or stays off. **Not confirmed** whether anything still calls it | Check first |
+| Cloud Run voice | Homie is back on AWS, or stays off. Public 1.0 (build 6) still calls it: homie is on there | Check first. When it goes, drop /privacy's "If your app is still version 1.0" paragraph (added Nov 8) |
 | The website's hosting | Not decided: with step 10, or after it (open question 5). It doesn't block 1.1: the site on Vercel calls the api | `WEB-MIGRATION.md`, "The switch and the way back". `/privacy` drops "This website runs on Vercel" then |
 | Vercel | The site has moved and been calm for weeks | Remove the project. PR previews end, so decide that first |
 | `/privacy` | Each store above, once it holds nobody's data | Drop it from "Where it's kept", under the App Review guard |

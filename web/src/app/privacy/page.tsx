@@ -12,7 +12,12 @@
 //                                              the consent sheet's words (#357). homie's voice
 //                                              is off (app/src/lib/homie/switch.ts): no live mic stream, no
 //                                              hands-free cooking, no cloned voice. Turning homie on means
-//                                              changing this page first (docs/agents/memory/homie-off.md)
+//                                              changing this page first (docs/agents/memory/homie-off.md).
+//   1.0 (build 6, released Nov 8)              predates the homie switch (c668053a0): live mic to Cartesia, camera
+//                                              frames + words to Claude (homie's decide), Moss search, Gemini for
+//                                              languages Ink can't hear and the backup voice (voice/src at 5ab9f6f69).
+//                                              Remove the "If your app is still version 1.0" paragraph when the voice
+//                                              service is turned off (CUTOVER.md, "After 1.1 is out")
 //   Community                                  place rounded to ~1 km, never shown (convex/lib/geo.ts)
 //   Delete account                             the app's profile sheet (convex/account.ts); media in GCS
 //                                              and Supabase rows are purged from accountDeletions
@@ -43,7 +48,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const UPDATED = 'November 5, 2026';
+const UPDATED = 'November 8, 2026';
 
 const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
@@ -132,6 +137,15 @@ export default function PrivacyPage() {
           Before our move to AWS, <strong>Moss</strong> searched what a cook said to find a moment in the video, and{' '}
           <strong>Google Gemini</strong> watched videos filmed with homecookd glasses. The app sends them nothing now.
           They still hold some of that data until we turn them off.
+        </p>
+        <p>
+          <strong>If your app is still version 1.0</strong> (added November 8, 2026): homie listens while you cook and
+          film. What you say goes live to <strong>Cartesia</strong>, which understands it and
+          speaks homie&rsquo;s answers. While you film, homie also sends still frames from the camera, with your words, to{' '}
+          <strong>Anthropic Claude</strong> to decide what to say. To find a moment in a recipe&rsquo;s video, it searches{' '}
+          <strong>Moss</strong>. For the few languages Cartesia can&rsquo;t hear, and as a backup voice, it uses{' '}
+          <strong>Google Gemini</strong>. Version 1.1 removes all of this: update to stop it. This paragraph
+          comes down when version 1.0 stops working.
         </p>
         <p>They get only what each task needs, and we use them only to run homecookd.</p>
       </section>
