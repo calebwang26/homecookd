@@ -1,18 +1,18 @@
-# Releasing 1.0, then submitting 1.1 (the AWS build) as an update: CUTOVER.md step 9
+# Releasing 1.0, then submitting 1.1 (the AWS build) as an update: CUTOVER.md step 9 (done; 1.1.0 is live)
 
 Written Nov 5, 2026 (App Store, web & builds), after Apple approved 1.0 and it was held as Pending Developer Release.
-Rewritten Nov 8 for Caleb's path: release 1.0, then submit 1.1 as an update. Nothing here has been done in App Store
+Rewritten Nov 7 for Caleb's path: release 1.0, then submit 1.1 as an update. Nothing here has been done in App Store
 Connect. Caleb or Salik does each step there; App Store, web & builds keeps
 this file and the handoff doc ("homecookd App Store submission for Salik") in step. The listing text and screenshot plan
 are in `LISTING-1.1.md`.
 
 ## Caleb's day: release 1.0, then submit 1.1 as an update (CUTOVER.md step 9)
 
-Caleb's call, Nov 8: release 1.0 (build 6, the old backend) now, and send the AWS build to Apple as **version 1.1**, an
+Caleb's call, Nov 7: release 1.0 (build 6, the old backend) now, and send the AWS build to Apple as **version 1.1**, an
 update, rather than cancel 1.0's pending release. Apple reviewed 1.0 as a new app, which took a week; an update is
 usually quicker. Section 1 says what this means for the people who join on 1.0. Sections 3 and 4 hold the text to paste.
 
-**A. Release 1.0 (two minutes).** Done Nov 8, 14:35 PT: Ready for Distribution in 174 countries.
+**A. Release 1.0 (two minutes).** Done Nov 7, 14:35 PT: Ready for Distribution in 174 countries.
 
 1. [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Apps** → **homecookd** → in the sidebar under iOS
    App, **1.0 Pending Developer Release**.
@@ -22,7 +22,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    `docs/app-store/screenshots/` (01 to 07, the pre-egg UI, hands-free cooking on 03 and 04). That's accurate for build 6,
    which has homie's voice. Leave the listing as it is until 1.1 replaces it.
 
-**B. Before 1.1 goes in.** Done Nov 8.
+**B. Before 1.1 goes in.** Done Nov 7.
 
 1. The Master Agent builds **1.1.0 (18)** (`production-aws`) from main once the version PR merges, and tells you when
    it's on TestFlight. On your phone: TestFlight → homecookd → install **1.1.0 (18)**. It's build 17 with the new
@@ -33,7 +33,7 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    Close it without joining: joining would move your account into the reviewer's family. Don't use Safari's address
    bar for this: typed there, the link opens the website, whose /i still asks the old backend until CUTOVER step 10.
 
-**C. Submit 1.1 (about ten minutes).** Done Nov 8: submitted at 15:55 PT on Caleb's word ("and deploy for the app store"). App Store Connect shows **1.1.0 Waiting for Review**, "up to 48 hours". Next is CUTOVER.md step 10: when Apple approves, Caleb presses Release, and the website's values move to the api in the same hour.
+**C. Submit 1.1 (about ten minutes).** Done Nov 7: submitted at 15:55 PT on Caleb's word ("and deploy for the app store"). App Store Connect shows **1.1.0 Waiting for Review**, "up to 48 hours". Apple approved it, and Caleb released it on **Nov 8 at 15:09 PT**. The website's values moved to the api in the same hour (CUTOVER.md step 10, done).
 
 1. Wait until 1.0 shows **Ready for Distribution**. Then, in the sidebar next to **iOS App**, click **+** (or **+
    Version**) and type **1.1.0**, the same as the build's version, then **Create**.
@@ -71,17 +71,17 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
 
 ## 2. What has to exist before Submit
 
-| Needed | Who | State on Nov 8 (all done; 1.1.0 submitted 15:55 PT) |
+| Needed | Who | State on Nov 8 (all done; 1.1.0 submitted Nov 7 15:55 PT, released Nov 8 15:09 PT) |
 |---|---|---|
-| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0): build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 Nov 8 |
+| The step-8 production build, proven on a phone (CUTOVER.md step 8) | App screens & recording | Build 18, version **1.1.0** (`production-aws`, main `8d4430d0a`, EAS 81d34ba0): build 17 (Caleb's re-check) plus the version number. Attached to 1.1.0 Nov 7 |
 | The TEST family on production: Mom, Dad, Grandma, Leo, Maya, Reviewer, and Chicken Biryani (step 7) | AWS backend | Made Nov 7: "Test family", with all six people (Mom, Dad and Grandma cook; Leo, Maya and Reviewer learn). The Chicken Biryani is a real production job, ready at 09:32Z with 13 steps, its video and poster served from media.homecookd.app |
 | The reviewer's join link that never expires, on production | AWS backend | Made Nov 7, in the gitignored `docs/build/.test-family-link` (main checkout), never in a tracked file or a chat. Checked Nov 7 on `api.homecookd.app/invites/peek`: pending, no expiry, family "Test family", so the card reads "Join Test family". To turn it off: `node dist/reviewerLink.js revoke <family id>` (infra/README.md 8.3) |
 | A request already waiting in the TEST family ("Leo wants your Sunday eggs"), so the reviewer sees it without a second phone | AWS backend, with the family | Sent Nov 7: Leo asked Mom "Will you teach me your Sunday eggs?" through the app's own request |
 | The APNs key on Expo, so pushes are real | Salik (LAUNCH-LINKS.md 6c) | Done Nov 6: key `S3J2G3P3H3` on Expo |
-| App Privacy: Diagnostics added (section 4) | The Master Agent, with Caleb's OK | Published Nov 8: Diagnostics → Other Diagnostic Data, App Functionality, not linked, not tracking |
-| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** complete and submitted Nov 8: promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release, and the seven screenshots in both sizes (below). Caleb presses Add for Review |
+| App Privacy: Diagnostics added (section 4) | The Master Agent, with Caleb's OK | Published Nov 7: Diagnostics → Other Diagnostic Data, App Functionality, not linked, not tracking |
+| The listing and seven screenshots (`LISTING-1.1.md`) | The Master Agent, with Caleb's OK | Version **1.1.0** complete and submitted Nov 7: promo text, description, What's New, reviewer notes with the link, Sign-in required off, manual release, and the seven screenshots in both sizes (below). Caleb presses Add for Review |
 
-**Screenshot sizes (learned Nov 8).** App Store Connect's default iPhone tab takes only the medium display size,
+**Screenshot sizes (learned Nov 7).** App Store Connect's default iPhone tab takes only the medium display size,
 1206 × 2622 or 1179 × 2556. The 6.9" shots (1320 × 2868) go in through **Media Manager**'s large-display slot. 1.1.0
 has both: `docs/app-store/screenshots/1.1/medium/` in the default slot and `screenshots/1.1/` in the 6.9" one.
 `scripts/frame-app-store-shots.mjs` writes both sizes each run.
@@ -124,7 +124,7 @@ reviewer uses their own Apple ID. Default: **uncheck "Sign-in required"** and gi
 `TODO(caleb)`: or keep it checked and put the join link in the user name field. Apple doesn't say which it prefers for
 Sign in with Apple only.
 
-**Left out of the notes on purpose (Nov 8):** the web flow (homecookd.app/miss). Until CUTOVER step 10 the live /miss and /a
+**Left out of the notes on purpose (Nov 7):** the web flow (homecookd.app/miss). Until CUTOVER step 10 (done Nov 8) the live /miss and /a
 run on the old backend, so a card the reviewer made there and brought into 1.1 would show "not found".
 
 **Not in 1.1's notes any more:** the family code, "Have a family code?", the "Who's in the kitchen?" faces to pick,
