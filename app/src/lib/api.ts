@@ -696,6 +696,13 @@ const supabaseApi = {
    * phone (which is signed out) or as someone with no phone; anyone else is 403 "Only Dad can remove
    * themselves.".
    */
+  /**
+   * POST /profiles/:id/role: move someone between the cooks and the ones who miss it. The api allows this
+   * phone's own person, or someone with no phone of their own (as removeProfile); messages and recipes stay.
+   */
+  setRole: (profileId: string, role: Role, o: AuthOverride = {}) =>
+    call<unknown>(`/profiles/${enc(profileId)}/role`, { method: 'POST', body: { role }, me: true, retry: 'safe', ...o }),
+
   removeProfile: (profileId: string, o: AuthOverride = {}) =>
     call<{ ok: true }>(`/profiles/${enc(profileId)}/remove`, { method: 'POST', body: {}, me: true, retry: 'safe', ...o }),
 
