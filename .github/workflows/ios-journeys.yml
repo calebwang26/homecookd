@@ -168,9 +168,12 @@ jobs:
           tail -1 "$RUNNER_TEMP/bootstatus.log"
           xcrun simctl install "$UDID" "$RUNNER_TEMP/built/homecookd.app"
           echo "T_BOOT=$(date +%s)" >> "$GITHUB_ENV"
+      # With the job's token: on Nov 9 GitHub answered anonymous release downloads with 504 for hours (#447).
       - name: Install Maestro (pinned, checked)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/Maestro/releases/download/${MAESTRO_VERSION}/maestro.zip"
+          gh release download "$MAESTRO_VERSION" --repo mobile-dev-inc/Maestro --pattern maestro.zip --output "$RUNNER_TEMP/maestro.zip"
           echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
