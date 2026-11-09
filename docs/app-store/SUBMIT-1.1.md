@@ -47,7 +47,8 @@ usually quicker. Section 1 says what this means for the people who join on 1.0. 
    as they are.
 5. **App Review Information:** uncheck **Sign-in required**. Replace **Notes** with section 3's text. Copy the link again
    (the same `pbcopy` command) and paste it where it says `<TEST JOIN LINK>`. The contact fields stay.
-6. **App Store Version Release:** pick **Manually release this version**. Then **Save** (top right).
+6. **App Store Version Release:** pick **Manually release this version**. Leave **Reset summary rating** unticked, on every
+   version: the app keeps its stars and count (Caleb, Nov 8; 1.1.0 went out with it unticked). Then **Save** (top right).
 7. Sidebar → **App Privacy** → **Edit** under Data Types. Check **Diagnostics → Other Diagnostic Data**, then answer:
    App Functionality, **not** linked to the user, **not** used for tracking. **Save**, then **Publish** (section 4).
 8. Back to **1.1.0**. Click **Add for Review**, then **Submit to App Review**. The status should read **Waiting for
