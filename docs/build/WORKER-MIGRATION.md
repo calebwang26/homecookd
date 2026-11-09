@@ -48,10 +48,23 @@ job's end and an outbox row (`recipe_published`, ids only). recipe.json's `follo
 **Timing.** Heartbeat every 30 s, which is also how late a cancel can be noticed. Visibility is extended to 15 minutes every 2 minutes.
 Lease 10 minutes. A job over 10 hours fails visibly, because SQS can't hold a message past 12 hours from a receive.
 
+**The row is the machine, a message only wakes it (Nov 9, docs/agents/STATE-MACHINES.md #2).** No wait holds a message. A wait (the
+daily cap, files not in S3 yet, a deploy stop, a retry's backoff) hands the run back, owes a new wake-up through the outbox
+(`jobs` row with `send_after`, `store.wake_later`) and deletes the message, so waiting spends none of SQS's 3 receives and has no
+12-hour limit. A repeat message for a job another worker runs, or for a job still uploading, is dropped: whoever runs it holds its own
+message, and the api sends an uploading job's one when its upload completes. The 3 receives now only catch a message whose handling
+keeps crashing before anything is written.
+
 **Failures.** Final, with words for the cook and the message deleted: bad model output, no steps, too long, an empty upload, the job
-spend cap. Worth another try: anything else, 5 then 10 minutes later. On the third try the job fails visibly and the message goes on
-to the dead letters, which alarm. Every failure goes to `observability.report_failure`, and logs carry only ids, stages and error
-types.
+spend cap, files still missing a day after the job was made. Worth another try: anything else, 5 then 10 minutes later. The budget is
+`jobs.failures` (081): a failed or dead child, or a run whose lease lapsed with its worker gone. A wait or a deploy stop counts
+nothing. The third failure fails the job visibly. Every failure goes to `observability.report_failure`, and logs carry only ids,
+stages and error types.
+
+**The sweep (every 5 minutes).** A running job whose lease lapsed counts a failure and is woken again at once, or fails on the third
+(`JobAbandoned`). A queued job with no wake-up owed for 3 hours (its message reached the dead letters, or it waits behind a long
+backlog) is woken again, counts nothing, and is reported (`JobStranded`, naming the job). A duplicate wake-up is harmless: the claim
+decides.
 
 **Spend caps, and they aren't complete: they count Claude, not Cartesia.**
 
@@ -72,7 +85,8 @@ Every attempt starts clean from the raw upload, which this assumes is still ther
 | During `publish` | Files in that attempt's folder, nothing pointing at them | New attempt, new folder. Old files stay until the account purge takes the prefix |
 | After the child finished, before the final transaction | Same | Same, and it pays again. A database blip gets 4 tries first |
 | After the commit, before deleting the message | Job `done`, recipe live | The repeat sees `done`, deletes the message, runs nothing |
-| On the last try | Job running, no tries left | The sweep fails it visibly within 5 minutes of the lease ending; the message goes to the dead letters |
+| On the last try | Job running, no tries left | The sweep fails it visibly within 5 minutes of the lease ending, or a returning message's claim does |
+| Between a wait's commit and the message's delete | Job queued, a wake-up owed | The old message comes back too: two wake-ups, one run (the claim decides) |
 | Only the child, say out of memory | The parent is alive | Counts as a failed try |
 | Database down mid-job | The parent stops the child before the lease could lapse, and writes nothing | Message returns; re-runs once the database is back |
 
@@ -83,11 +97,9 @@ workflow's wait for a steady service gives up after 10 minutes, so during a long
 finishes later: check the service, not the run. Without the task role's `ecs:UpdateTaskProtection` (or off ECS) the worker logs
 `task protection not changed` and works as before.
 
-**Every worker deploy without protection uses one of a job's 3 receives,** so three deploys during one long job send it to the dead letters, which alarm. Don't deploy the worker repeatedly during a long job.
-
-**SIGTERM:** stops taking messages, kills the child, sets the job back to `queued`, hands the message back at once. A job that had
-already finished its work saves first. This uses up one of the 3 receives, so a stop on the last one reaches the dead letters with
-the job still `queued`. The alarm says so, and a person re-drives it.
+**SIGTERM:** stops taking messages, kills the child, sets the job back to `queued` with a wake-up owed at once, and deletes the
+message. A job that had already finished its work saves first. A stop isn't the job's fault: it counts no failure and spends no
+receive, so repeated deploys during one job can't strand it.
 
 **Cancel:** seen within 30 seconds. The child is killed, the raw video and this job's published files are deleted (as Convex mode
 does, with S3 versioning as a 28-day undo), and the message goes. If S3 fails, the message stays and retries, then alarms.

@@ -25,7 +25,7 @@ globalThis.__bundled = bundled;
 
 const stub = (code) => 'data:text/javascript,' + encodeURIComponent(code);
 const stubs = {
-  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [v, () => {}]; export const useSyncExternalStore = (_s, get) => get();'),
+  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [v, () => {}]; export const useSyncExternalStore = (_s, get) => get(); export const useReducer = (r, a, init) => [init ? init(a) : a, () => {}];'),
   './bundled': stub('export const bundledLibrary = []; export const bundledRecipes = globalThis.__bundled;'),
   './deletes': stub('export const loadHiddenIds = () => [];'),
   './live/convex': stub('export const useLive = (_n, initial) => initial; export const invalidateConvexRecipes = () => {};'),

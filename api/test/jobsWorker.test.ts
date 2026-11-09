@@ -211,13 +211,13 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     assert.deepEqual(out.uploads, []);
   });
 
-  await t.test("the message for a job still uploading waits, and doesn't start it", async () => {
+  await t.test("the message for a job still uploading is dropped and doesn't start it: queueJob sends the one that counts", async () => {
     const { uploadId, keys } = await askLinks(app, cook);
     const { data } = await newJob(app, cook, uploadId);
     const body = JSON.stringify({ outboxId: "1", requestId: null, payload: { jobId: data.jobId } });
     const out = worker({ op: "deliver", body, objects: keys.slice(0, 1) }).results[0];
     assert.equal(out.started, 0);
-    assert.equal(out.messagesLeft, 1, "held, not dropped");
+    assert.equal(out.messagesLeft, 0, "dropped: no wait spends its receives");
     assert.equal((await job(data.jobId)).stage, "uploading");
   });
 

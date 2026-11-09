@@ -27,7 +27,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const stub = (src) => 'data:text/javascript,' + encodeURIComponent(src);
 const kv = (globalThis.__homieKv = new Map());
 const STUBS = {
-  react: stub('export function useSyncExternalStore() {}'),
+  react: stub('export function useSyncExternalStore() {} export const useReducer = (r, a, init) => [init ? init(a) : a, () => {}];'),
   '@/lib/storage': stub(
     'const m = globalThis.__homieKv; export async function kvGet(k) { return m.get(k) ?? null; } export async function kvSet(k, v) { if (v == null) m.delete(k); else m.set(k, v); }',
   ),
