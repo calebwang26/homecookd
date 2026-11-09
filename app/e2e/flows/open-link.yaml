@@ -5,19 +5,41 @@ name: Open a link from outside the app
 # handing the link over: spike runs 5 and 7 (Nov 9) tapped the same point, and only run 5's link reached the app. So the
 # whole step runs again until the screen the link leads to shows (EXPECT).
 #
+# A later attempt that finds "We can't reach homecookd." taps the card's own Try again instead of opening the link again:
+# the same link doesn't ask the api again, Try again does. The card came from the simulator's certificate check (trustd)
+# freezing for a minute or more right after boot (runs 42592011253 and 42614847250, docs/build/IOS-JOURNEYS.md). The tap
+# needs the card and a link this subflow opened, never a blind tap. Each one saves a try-again-N screenshot, and the job
+# summary names a journey that passed only after one. If the card is still up after the last attempt, the flow fails.
+#
 # A link that carries a key (the sign-in journeys) is echoed in Maestro's own logs: those journeys never upload them.
+- evalScript: ${output.openedLink = false}
 - retry:
     maxRetries: 2
     commands:
-      - openLink: ${LINK}
-      - extendedWaitUntil:
-          visible: "Open in .*homecookd.*"
-          timeout: 10000
-          optional: true
-      - takeScreenshot: open-dialog
-      - tapOn:
-          text: "Open"
-          optional: true
+      - evalScript: ${output.tappedTryAgain = false}
+      - runFlow:
+          when:
+            true: ${output.openedLink === true}
+            visible: ".*We can.t reach homecookd.*"
+          commands:
+            - evalScript: ${output.tappedTryAgain = true}
+            - evalScript: ${output.tryAgainTaps = (output.tryAgainTaps || 0) + 1}
+            - takeScreenshot: try-again-${output.tryAgainTaps}
+            - tapOn: "Try again"
+      - runFlow:
+          when:
+            true: ${output.tappedTryAgain !== true}
+          commands:
+            - openLink: ${LINK}
+            - evalScript: ${output.openedLink = true}
+            - extendedWaitUntil:
+                visible: "Open in .*homecookd.*"
+                timeout: 10000
+                optional: true
+            - takeScreenshot: open-dialog
+            - tapOn:
+                text: "Open"
+                optional: true
       - extendedWaitUntil:
           visible: ${EXPECT}
           timeout: 20000
