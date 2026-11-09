@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { brandFiles, readBrand } from './sync-brand.mjs';
@@ -142,6 +143,18 @@ test('no peach, lavender, butter, sun, old greens or pot left in src/', () => {
     if (OLD_HEX.test(s) || OLD_TOKEN.test(s) || OLD_RGBA.test(s) || /\bPotMark\b|\bPotIcon\b/.test(s)) bad.push(p.slice(root.length + 1));
   }
   assert.deepEqual(bad, []);
+});
+
+test('the iOS launch screen has a new name, so 1.0\'s cached pot snapshot never shows (Nov 8)', () => {
+  const require = createRequire(import.meta.url);
+  const plugin = require(join(root, 'plugins/withFreshLaunchScreen.js'));
+  assert.notEqual(plugin.NAME, 'SplashScreen');
+  const plist = '<dict>\n  <key>UILaunchStoryboardName</key>\n  <string>SplashScreen</string>\n</dict>';
+  assert.match(plugin.renamePlist(plist), new RegExp(`<string>${plugin.NAME}</string>`));
+  assert.equal(plugin.renamePlist(plist.replace('SplashScreen', 'Other')), null, 'never renames a storyboard it did not expect');
+  assert.match(readFileSync(join(root, 'app.config.ts'), 'utf8'), /plugins\.push\('\.\/plugins\/withFreshLaunchScreen'\);/);
+  // The launch image itself is the kit's egg.
+  assert.deepEqual(readFileSync(join(root, 'assets/images/splash-icon.png')), readFileSync(join(root, '../docs/brand/png/app/splash-icon.png')));
 });
 
 console.log(`\n${passed} passed`);
