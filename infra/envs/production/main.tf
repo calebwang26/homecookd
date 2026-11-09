@@ -68,6 +68,7 @@ locals {
     "messages.daily"        = { expression = "rate(1 day)", task = "messages.daily" }
     "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
     "accounts.sweep"        = { expression = "rate(1 hour)", task = "accounts.sweep" }
+    "platform.invariants"   = { expression = "rate(5 minutes)", task = "platform.invariants" }
   }
 
   # Names only. Where each value comes from, and why the four link secrets are production's own: infra/README.md, "Production before launch". A secret
@@ -105,8 +106,10 @@ module "env" {
   db_backup_days    = 14
   db_protected      = true
   # Every alarm emails this, once the link in AWS's confirmation email is clicked.
-  alert_email  = "caleb.wang26@gmail.com"
-  secret_names = toset(concat(local.api_secrets, local.api_secrets_later, local.worker_secrets, local.moss_names))
+  alert_email = "caleb.wang26@gmail.com"
+  # The invariant sweep's alarms (invariants.tf): about $0.90 a month for 9 alarms, plus up to $2.70 for 9 custom metrics past the account's free 10.
+  invariant_alarms = true
+  secret_names     = toset(concat(local.api_secrets, local.api_secrets_later, local.worker_secrets, local.moss_names))
   # The api and worker never get the master login here: migrations run as their own task (infra/README.md, "Database logins").
   db_iam_login = true
 
