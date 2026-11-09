@@ -21,7 +21,23 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
    - A shared recipe's video plays.
    - Kid Home.
 
-   `safe-eas-update.sh production-aws --caleb-ok` then needs a green run on the checkout's HEAD, or `--no-sim "<reason>"`.
+   `safe-eas-update.sh production-aws --caleb-ok` (1.1.1) then needs a passing run on a commit with the same `app/` tree as
+   HEAD, or `--no-sim "<reason>"` (#444).
+
+**Time.** The spike's first three runs took 40–42 min: the Release build about 25 min, the new simulator's boot about 9
+(7m21s of it iOS's one-time "Data Migration"), the journeys 2–4. So:
+
+- The simulator starts booting right after Xcode is picked, and boots while the app builds.
+- The build is arm64 only (a Release build for the generic simulator also builds x86_64).
+- The built app is kept in the Actions cache, keyed by the native fingerprint (`@expo/fingerprint`: native packages,
+  plugins, the app config, the icon and splash; never `app/src`). A PR that changes only JS reuses it and bundles its own
+  JS in, exactly as Xcode's bundle phase does (`expo export:embed`, then the same `hermesc`). That's what an EAS Update
+  does to a phone. A native change builds again.
+- The CI build turns expo-updates off (`EXUpdatesEnabled` NO), so the journeys always run the commit's own JS, never a
+  published update. (A build made without EAS sends no channel, and EAS answers that with a 400; the app code doesn't
+  call expo-updates.)
+
+The workflow reports on app/ PRs. It becomes a required check (the Master Agent's call) once three green runs come in under 25 minutes.
 
 Rules for the public repo: never `pull_request_target`, so a fork's PR gets no secrets and skips what needs them. The logs
 never print a family link, a test id or a key (`::add-mask::`). A seeded family (`app/scripts/aws-phone-run.mjs setup`) is
