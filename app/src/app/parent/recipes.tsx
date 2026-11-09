@@ -53,7 +53,9 @@ export default function ParentRecipes() {
   const [refreshing, setRefreshing] = useState(false);
 
   const sendable = useSendable();
-  const mine = useMemo(() => recipesByCook(entries, me?.name), [entries, me?.name]);
+  const meId = me?.id;
+  const meName = me?.name;
+  const mine = useMemo(() => (meId ? recipesByCook(entries, { id: meId, name: meName ?? '' }) : []), [entries, meId, meName]);
   const ids = useMemo(() => mine.map((e) => e.id), [mine]);
   // Hearts & cooks on my dishes from the family (PR 4): the mirror line and each card's line.
   const { stats: dishStats, refresh: refreshDishStats } = useDishStats(ids);

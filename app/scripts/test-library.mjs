@@ -160,6 +160,47 @@ await test('familyEntries: blank title, cook or cover fall back; no profile mean
   assert.deepEqual(F.familyEntries([], PEOPLE), []);
 });
 
+// The family's profiles on 1.1 (AWS): a recipe's cookId is a profile id. Grandma renamed herself "Aaji".
+const FAMILY = [
+  { id: 'person-grandma', name: 'Aaji', relation: 'Grandma (Aaji)' },
+  { id: 'person-leo', name: 'Leo', relation: null },
+];
+
+await test('familyEntries: the cook by id (1.1) is kept as cook_id; Convex ids and a cook not in the family go by name', () => {
+  const [e] = F.familyEntries([row('by-id')], FAMILY);
+  assert.equal(e.cook_id, 'person-grandma');
+  assert.equal(e.cook_name, 'Grandma', "the row's name stays");
+  assert.equal(e.relation, 'Grandma (Aaji)', 'her relation, though her name changed');
+  // Convex: its people ids aren't the profiles' (Supabase) ids, so nothing matches by id.
+  const [c] = F.familyEntries([row('convex')], [{ id: 'sb-profile-1', name: 'grandma ', relation: 'Grandma (Aaji)' }]);
+  assert.equal('cook_id' in c, false);
+  assert.equal(c.relation, 'Grandma (Aaji)', 'by name, as before');
+  // A cook who isn't among the profiles (left, or deleted): no cook_id, so her name is all there is.
+  const [gone] = F.familyEntries([row('gone', { cookId: 'person-gone' })], FAMILY);
+  assert.equal('cook_id' in gone, false);
+  // No profiles yet: by name until they come.
+  assert.equal('cook_id' in F.familyEntries([row('early')], [])[0], false);
+});
+
+await test('recipesByCook (cookedBy): by cook id where the dish has one, else by name', () => {
+  const grandmas = entry('grandmas', { cook_id: 'person-grandma', cook_name: 'Grandma' });
+  const leos = entry('leos', { cook_id: 'person-leo', cook_name: 'Grandma' }); // the id wins over the name
+  const old = entry('old', { cook_name: ' grandma ' }); // library.json's: no cook_id
+  const list = [grandmas, leos, old];
+  const by = (cook) => R.recipesByCook(list, cook).map((e) => e.id);
+  assert.deepEqual(by({ id: 'person-grandma', name: 'Aaji' }), ['grandmas'], 'renamed: hers by id, the old name no longer');
+  assert.deepEqual(by({ id: 'person-grandma', name: 'Grandma' }), ['grandmas', 'old']);
+  assert.deepEqual(by({ id: 'person-leo', name: 'Leo' }), ['leos']);
+  assert.deepEqual(by({ id: 'sb-profile-1', name: 'GRANDMA' }), ['old'], 'an id that names no dish: library.json by name');
+  assert.deepEqual(by({ id: 'person-x', name: '  ' }), [], 'a blank name matches nothing');
+  assert.deepEqual(by(null), []);
+  assert.deepEqual(by(undefined), []);
+  assert.equal(F.cookedBy(grandmas, null), false);
+  // Convex: no entry has a cook_id, so everything goes by name, as before.
+  const convex = [entry('a', { cook_name: 'Grandma' }), entry('b', { cook_name: 'Leo' })];
+  assert.deepEqual(R.recipesByCook(convex, { id: 'sb-profile-1', name: 'grandma' }).map((e) => e.id), ['a']);
+});
+
 // ---------------------------------------------------------------------------------------------
 // 2. mergeLibrary
 
@@ -812,6 +853,18 @@ await test('library load: "No recipes yet" only once the family rows answered, o
   R.showFamilyRecipes(null, null);
   assert.equal(R.libraryChecked(null), true);
   assert.equal(pending.length, 0);
+});
+
+await test('store: the family dishes carry cook_id once the profiles are there, and recipesByCook finds hers by it', () => {
+  const rows = [row('hers-1'), row('leos-1', { cookId: 'person-leo', cookName: 'Leo' })];
+  R.showFamilyRecipes('fam:ids', rows, []); // the rows before the profiles
+  const aaji = { id: 'person-grandma', name: 'Aaji' };
+  assert.deepEqual(ids(R.recipesByCook(lib(), aaji)), [], 'no cook_id yet, and "Aaji" isn\'t "Grandma"');
+  R.showFamilyRecipes('fam:ids', rows, FAMILY);
+  assert.deepEqual(ids(R.recipesByCook(lib(), aaji)), ['hers-1']);
+  assert.deepEqual(ids(R.recipesByCook(lib(), { id: 'person-leo', name: 'Leo' })), ['leos-1']);
+  R.showFamilyRecipes(null, null);
+  assert.deepEqual(ids(R.recipesByCook(lib(), aaji)), [], 'signed out: none');
 });
 
 await test('a retired sample finds nothing (an old link or heart), unless the family has a dish of that id', async () => {

@@ -137,7 +137,7 @@ animated height), `DateTile`, `Waveform`, `SegmentedChoice` (Kid-Recipe "Just me
   isLearner, refresh}` plus the ways in (`acceptInvite`, `signInWithApple/Google`, `joinFamily`);
   keeps this phone's device key in SecureStore, never logged; handles `?as=`.
 - `recipes.ts`: library + recipe loading (move/extend `data.ts`: remote with bundled fallback),
-  helpers: `recipesByCook(name)`, `stepIngredients(recipe, step)`, `stepClip(step)`,
+  helpers: `recipesByCook(entries, person)`, `stepIngredients(recipe, step)`, `stepClip(step)`,
   `firstQuote(recipe)`, `cookProfile(recipe, profiles)`.
 - `format.ts`: `mmss(sec)`, `goodGreeting(date)` ("Good morning"), relative dates
   ("Thursday", "Last night", "Sunday, 7:05 pm"), `minutesLabel`.

@@ -84,7 +84,7 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
   const usable = (id: string | null | undefined) => (id ? (profiles.find((p) => p.id === id && !p.invited && !p.locked) ?? null) : null);
   const own = usable(deviceProfileId);
   if (!person) return null;
-  const dishes = recipesByCook(entries, person.name).slice(0, MAX_DISHES);
+  const dishes = recipesByCook(entries, person).slice(0, MAX_DISHES);
   const invited = !!person.invited && !person.locked;
   // Dishes & Message stay as whoever is in (a kid on a lent or shared phone stays the kid, kid QA
   // Oct 21), as the Home's table faces do; an old-style invite goes from this phone's own person first.
