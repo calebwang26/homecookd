@@ -1013,21 +1013,10 @@ await test('push: an ask waits for any open sheet, and a share-sheet send asks t
   const host = read('src/components/push/PushAskSheet.tsx');
   assert.match(host, /const sheetsUp = useSheetsUp\(\);/);
   assert.match(host, /if \(ask && ask !== shown && sheetsUp === 0\) setShown\(ask\);/);
-  const sheet = read('src/components/ui/BottomSheet.tsx');
-  assert.match(sheet, /useEffect\(\(\) => setUp\(sheetId, mounted\), \[sheetId, mounted\]\);/);
-  assert.match(sheet, /export function useSheetsUp\(\): number/);
+  // Which sheets are up is the coordinator's (lib/sheets/coordinator.ts; scripts/test-sheets.mjs runs it).
+  assert.match(read('src/components/ui/BottomSheet.tsx'), /export \{ useSheetsUp \} from '@\/lib\/sheets\/coordinator';/);
   assert.match(read('src/components/share/sendRecipe.ts'), /askAfterSend\(to\);/);
   assert.match(read('src/lib/messaging.ts'), /export function askAfterSend\(sentTo: string\[\] \| 'everyone'\)/);
-});
-
-await test('sheets: a sheet created already open waits while another sheet is up', async () => {
-  // "New message" → "Add family" closes one keyed sheet and creates the invite sheet in the same tap. A
-  // fresh sheet that mounted at once presented over the dismissing Modal on iOS: nothing showed and an
-  // invisible Modal took every tap (1.1, Nov 8). It starts held, and the closing wait mounts it.
-  const sheet = readFileSync(join(root, 'src/components/ui/BottomSheet.tsx'), 'utf8');
-  assert.match(sheet, /const \[held, setHeld\] = useState\(\(\) => visible && up\.size > 0\);/);
-  assert.match(sheet, /const \[mounted, setMounted\] = useState\(\(\) => visible && !held\);/);
-  assert.match(readFileSync(join(root, 'src/components/messages/MembersSheet.tsx'), 'utf8'), /props\.onClose\(\);\n\s+setInvite/);
 });
 
 await test('sheets: no entering/exiting/layout animation inside a sheet (iOS freeze, Copy link, Nov 8)', async () => {
@@ -1052,7 +1041,7 @@ await test('sheets: no entering/exiting/layout animation inside a sheet (iOS fre
   const sheet = updates.slice(updates.indexOf('<BottomSheet'), updates.indexOf('</BottomSheet>'));
   assert.ok(sheet.length > 0);
   assert.doesNotMatch(sheet, layoutAnim, 'UpdatesCard: the all-updates sheet');
-  assert.match(read('src/components/ui/BottomSheet.tsx'), /<ToastViewport position="top" inSheet \/>/);
+  assert.match(read('src/components/ui/BottomSheet.tsx'), /<ToastViewport position="top" inSheet sheetId=\{sheetId\} \/>/);
   assert.match(read('src/components/ui/Toast.tsx'), /\{inSheet \? \(\n\s+<Appear key=\{t\.id\}/);
 });
 
