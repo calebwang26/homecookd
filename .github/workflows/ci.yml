@@ -37,6 +37,8 @@ jobs:
           for AREA in infra convex voice pipeline api web tools; do
             echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
           done
+      # A state machine's table changed without its test (docs/agents/STATE-MACHINES.md): every section's PRs.
+      - run: node scripts/check-machine-tests.mjs "origin/$GITHUB_BASE_REF"
 
   secrets:
     runs-on: ubuntu-latest

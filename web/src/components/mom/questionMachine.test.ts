@@ -1,4 +1,5 @@
 // Every phase × event of Mom's answer screen, against the table written out below. A change in
+// The machine names this file (state-machine-test), so CI fails a change to its table without a change here.
 // behaviour fails a named cell. Run: cd web && npm test
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

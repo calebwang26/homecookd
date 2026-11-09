@@ -56,7 +56,8 @@ export async function saveTestRecipe(c: Queryable, r: TestRecipe, cardId: string
 /** A null `moss_indexed_at` says the search index is behind, so whatever re-syncs it finds this row (recipes_moss_missing). */
 export async function saveMemoriesOptIn(c: Queryable, recipeId: string, optIn: boolean): Promise<void> {
   if ((await recipeWrites(c)) !== "open") throw notMoved();
-  await c.query(`update recipes set memories_opt_in = $2, moss_indexed_at = null where id = $1`, [recipeId, optIn]);
+  // memories_opt_in_at marks it as her own answer on the recipe, which a later publish never overwrites (082).
+  await c.query(`update recipes set memories_opt_in = $2, memories_opt_in_at = now(), moss_indexed_at = null where id = $1`, [recipeId, optIn]);
 }
 
 /** A stopped job's card. With writes off there's nothing to do: a job only gets a card while they're open. */
