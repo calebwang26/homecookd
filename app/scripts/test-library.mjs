@@ -23,7 +23,7 @@
 //    kid gets them only after the cook's yes, the cook gets hers, a recipe loaded before the list
 //    arrived gets them once it does, and changed memories load the dish again.
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -754,6 +754,14 @@ await test('store: her yes shows up in the ingredient list for everyone, stories
   R.showFamilyRecipes('family-F:leo', [row('jeera-dal', { addedIngredients: [{ ...CUMIN }] })], PEOPLE);
   assert.equal(R.getCachedRecipe('jeera-dal'), cached);
   R.showFamilyRecipes(null, null);
+});
+
+await test('the app ships no recipes: bundled.ts is empty and requires nothing (Caleb, Nov 8)', () => {
+  // Every family starts with none and nothing crosses between families, offline too. assets/data is test fixtures only.
+  const src = readFileSync(join(root, 'src/lib/bundled.ts'), 'utf8');
+  assert.doesNotMatch(src, /require\(/, 'nothing from assets/data in the app');
+  assert.match(src, /export const bundledLibrary: LibraryEntry\[\] = \[\];/);
+  assert.match(src, /export const bundledRecipes: Record<string, Recipe> = \{\};/);
 });
 
 console.log(`\n${passed} passed`);
