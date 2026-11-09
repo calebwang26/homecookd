@@ -8,7 +8,7 @@ import { questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, ThreadRow } from "./data.js";
 import { dishInfo } from "./library.js";
-import { deliver, KEEP_LOG_DAYS, queuePush, receipts } from "./push.js";
+import { deliver, KEEP_LOG_DAYS, queuePush, receipts, sweep } from "./push.js";
 import { pruneLog } from "./pushData.js";
 import { pushAnswered, pushFilmed, pushRequested } from "./pushEvents.js";
 import { dishName, messagePush, postcardKey, postcardPush, reactionPush } from "./pushRules.js";
@@ -108,6 +108,7 @@ export const messageTasks: Record<string, (payload: Payload, trace: Trace) => Pr
   "messages.daily": () => daily(),
   "push.deliver": (payload) => deliver(text(payload, "logId")),
   "push.receipts": (payload) => receipts(text(payload, "logId")),
+  "push.sweep": (_payload, trace) => sweep(trace),
   "push.dish_answered": (payload) => pushAnswered(text(payload, "askId")),
   "push.dish_requested": (payload) => pushRequested(text(payload, "askId")),
   "push.dish_filmed": (payload) => pushFilmed(text(payload, "askId"), text(payload, "recipeId")),

@@ -36,9 +36,11 @@ export const INVARIANTS: Invariant[] = [
     args: [RUNNING],
   },
   {
+    // push.sweep wakes a push 20 minutes past due, and takes over a send quiet for 10 (messages/pushData.ts); an hour means the wake-ups don't take.
     name: "push_queued_stale",
     owner: "AWS backend",
-    sql: `select id::text as id from push_log where status = 'queued' and send_at < now() - interval '1 hour'`,
+    sql: `select id::text as id from push_log
+           where (status = 'queued' and send_at < now() - interval '1 hour') or (status = 'sending' and delivering_at < now() - interval '1 hour')`,
     args: [],
   },
   {

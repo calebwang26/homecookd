@@ -1,5 +1,7 @@
 // The one way a push goes out. queuePush decides inside the caller's transaction and writes the log row and an outbox row together; push.deliver then
 // calls Expo with no connection held, and a receipts check 15 minutes later deletes the tokens Expo says are gone. Every step tolerates a repeat.
+// The log row is the push's machine (pushData.ts has the table): a push Expo couldn't take is tried again, and push.sweep wakes one whose wake-up was lost.
+// state-machine-test: api/test/pushMachine.test.ts
 //
 // Supabase's kinds (chat, postcards, nudges, recaps) and Convex's (answered, craving, joined, filmed) keep their own rules (SCHEMA.md). They differ on purpose:
 //   - Supabase's: a person-caused push is never capped; one homecookd sends on its own is capped and skipped in quiet hours; no phone means no log row.
@@ -7,10 +9,11 @@
 import type { Queryable } from "../../db.js";
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
+import type { Trace } from "../dish/budget.js";
 import { cardForPush } from "../dish/service.js";
 import { memberById, signedOutDevices } from "../people/family.js";
 import { personIsLive } from "../people/service.js";
-import { type ExpoMessage, pushSender } from "./expo.js";
+import { type ExpoMessage, type ExpoTicket, pushSender, UNAVAILABLE } from "./expo.js";
 import * as data from "./pushData.js";
 import { capCheck, quietDelayMs, type CapReason } from "./pushRules.js";
 import { DEFAULT_TZ, zoneOf } from "./time.js";
@@ -122,18 +125,21 @@ async function cravingStands(log: data.LogRow): Promise<boolean> {
   return !card.person_id || (await personIsLive(db(), card.person_id));
 }
 
+/** Expo didn't take it and may later. */
+const later = (t: ExpoTicket) => t.status === "error" && (t.details?.error === UNAVAILABLE || t.details?.error === "MessageRateExceeded");
+
 /** push.deliver: what's still due goes to Expo, with no database connection held while it waits. */
 export async function deliver(logId: string): Promise<void> {
   const log = await data.claimDelivery(db(), logId);
   if (!log) return;
   const person = await memberById(db(), log.person_id);
   if (!person || person.deleted_at || person.removed_at || person.memorial || !(await cravingStands(log))) {
-    await data.finishDelivery(db(), logId, "none", [], null);
+    await data.finishDelivery(db(), logId, log.attempts, "none", [], null);
     return;
   }
   const tokens = await liveTokens(db(), log.person_id);
   if (tokens.length === 0) {
-    await data.finishDelivery(db(), logId, "none", [], null);
+    await data.finishDelivery(db(), logId, log.attempts, "none", [], null);
     return;
   }
   const messages: ExpoMessage[] = tokens.slice(0, data.MAX_TOKENS).map((t) => ({
@@ -149,11 +155,32 @@ export async function deliver(logId: string): Promise<void> {
   const { tickets, dead } = await pushSender().send(messages);
   const ok = tickets.flatMap((t, i) => (t.status === "ok" ? [{ id: t.id, token: messages[i].to }] : []));
   const failed = tickets.find((t) => t.status === "error");
+  const error = failed && failed.status === "error" ? failed.message.slice(0, 200) : null;
+  // No phone got it, and Expo may take it later: the next try, until the attempts run out.
+  const retry = ok.length === 0 && tickets.some(later) && log.attempts < data.MAX_ATTEMPTS;
   await tx(async (c) => {
-    await data.finishDelivery(c, logId, ok.length ? "sent" : "failed", ok, failed && failed.status === "error" ? failed.message.slice(0, 200) : null);
+    if (retry) {
+      const at = await data.retryDelivery(c, logId, log.attempts, error, data.RETRY_AFTER_S[log.attempts - 1]);
+      if (at) await enqueue(c, { queue: "scheduled", payload: { task: "push.deliver", logId }, sendAfter: at });
+    } else {
+      const held = await data.finishDelivery(c, logId, log.attempts, ok.length ? "sent" : "failed", ok, error);
+      if (held && ok.length) await enqueue(c, { queue: "scheduled", payload: { task: "push.receipts", logId }, sendAfter: new Date(Date.now() + RECEIPTS_AFTER_MS) });
+    }
     await data.dropTokens(c, dead.slice(0, 200));
-    if (ok.length) await enqueue(c, { queue: "scheduled", payload: { task: "push.receipts", logId }, sendAfter: new Date(Date.now() + RECEIPTS_AFTER_MS) });
   });
+}
+
+/** Pushes the sweep looks at in one run. */
+export const SWEEP_BATCH = 200;
+
+/** push.sweep, every 5 minutes: a push whose wake-up was lost (a holder that died, a push.deliver in the dead-letter queue) is woken again. */
+export async function sweep(trace: Trace): Promise<void> {
+  const { wake, gaveUp } = await tx(async (c) => {
+    const found = await data.sweepDeliveries(c, SWEEP_BATCH);
+    for (const logId of found.wake) await enqueue(c, { queue: "scheduled", payload: { task: "push.deliver", logId }, requestId: trace.requestId });
+    return found;
+  });
+  if (wake.length || gaveUp) trace.log.warn({ woken: wake.length, gaveUp }, "push sweep");
 }
 
 /** push.receipts: Expo reports most dead tokens here, not in tickets. A repeat finds no tickets left. */

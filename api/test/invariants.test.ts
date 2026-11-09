@@ -87,9 +87,13 @@ test("each invariant counts and names its violating rows, never the healthy row 
   bad.job_running_stale = [await w.job("writing", "heartbeat_at=now() - interval '20 minutes'")];
   await w.job("writing", "heartbeat_at=now() - interval '5 minutes'");
 
-  bad.push_queued_stale = [await one(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '2 hours') returning id`, [w.kid])];
+  bad.push_queued_stale = [
+    await one(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '2 hours') returning id`, [w.kid]),
+    await one(`insert into push_log (person_id, kind, status, attempts, delivering_at) values ($1, 'message', 'sending', 1, now() - interval '2 hours') returning id`, [w.kid]),
+  ];
   await db().query(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '10 minutes')`, [w.kid]);
   await db().query(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'sent', now() - interval '2 hours')`, [w.kid]);
+  await db().query(`insert into push_log (person_id, kind, status, attempts, delivering_at, send_at) values ($1, 'message', 'sending', 1, now() - interval '5 minutes', now() - interval '2 hours')`, [w.kid]);
 
   bad.dish_merge_stuck = [await w.ask("now() - interval '20 minutes'", "null")];
   await w.ask("now() - interval '20 minutes'", "now() - interval '15 minutes'");

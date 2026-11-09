@@ -1,6 +1,7 @@
 // The Expo push API, behind an interface so tests never call it. Convex's lib/push.ts and Supabase's sendExpoPush, which are the same code. Every call has a
 // timeout. A response saying Expo didn't take the batch is tried once more; a timeout isn't, because Expo may have taken it. Nothing here throws, and nothing
-// logs a token, a title or a body.
+// logs a token, a title or a body. A batch Expo surely didn't take (it said so, or the call never connected) comes back as UNAVAILABLE tickets, which the
+// push machine tries again later (pushData.ts); a timeout comes back as a plain error, never tried again, so a push is never sent twice.
 
 export const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 export const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
@@ -35,6 +36,14 @@ const headers = (accessToken?: string | null) => ({
 });
 
 const NOT_TAKEN = new Set([429, 500, 502, 503, 504]);
+/** A ticket's details.error when Expo didn't take the batch and may later. Expo's own MessageRateExceeded means the same. */
+export const UNAVAILABLE = "Unavailable";
+/** fetch failed before anything reached Expo. */
+const NEVER_CONNECTED = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT"]);
+const neverConnected = (error: unknown) => {
+  const code = (error as { cause?: { code?: unknown } })?.cause?.code;
+  return typeof code === "string" && NEVER_CONNECTED.has(code);
+};
 
 export async function sendExpoPush(messages: ExpoMessage[], o: Options = {}): Promise<{ tickets: ExpoTicket[]; dead: string[] }> {
   const doFetch = o.fetch ?? fetch;
@@ -42,7 +51,8 @@ export async function sendExpoPush(messages: ExpoMessage[], o: Options = {}): Pr
   const dead = new Set<string>();
   for (let i = 0; i < messages.length; i += EXPO_BATCH) {
     const batch = messages.slice(i, i + EXPO_BATCH);
-    const failAll = (message: string) => batch.forEach(() => tickets.push({ status: "error", message }));
+    const failAll = (message: string, later: boolean) =>
+      batch.forEach(() => tickets.push(later ? { status: "error", message, details: { error: UNAVAILABLE } } : { status: "error", message }));
     try {
       const post = () =>
         doFetch(EXPO_PUSH_URL, {
@@ -60,7 +70,7 @@ export async function sendExpoPush(messages: ExpoMessage[], o: Options = {}): Pr
       const out = (await res.json().catch(() => null)) as { data?: unknown } | null;
       if (!res.ok || !Array.isArray(out?.data)) {
         o.log?.error({ status: res.status }, "expo refused a batch");
-        failAll(`HTTP ${res.status}`);
+        failAll(`HTTP ${res.status}`, NOT_TAKEN.has(res.status));
         continue;
       }
       const data = out.data as ExpoTicket[];
@@ -75,7 +85,7 @@ export async function sendExpoPush(messages: ExpoMessage[], o: Options = {}): Pr
       });
     } catch (error) {
       o.log?.error({ err: { type: (error as Error).name } }, "expo call failed");
-      failAll((error as Error).name);
+      failAll((error as Error).name, neverConnected(error));
     }
   }
   return { tickets, dead: [...dead] };

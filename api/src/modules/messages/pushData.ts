@@ -1,4 +1,19 @@
-// SQL for push tokens and the push log.
+// SQL for push tokens and the push log. A push_log row is the push's machine (Caleb, Nov 8: decision 6; docs/agents/STATE-MACHINES.md row 10):
+// state-machine-test: api/test/pushMachine.test.ts
+//
+//   status    queued -> sending -> sent | failed | none          decided at once instead: none | capped | skipped (never sent)
+//                        sending -> queued (Expo couldn't take it: tried again after RETRY_AFTER_S)
+//   events    claim (push.deliver)        queued, nobody holding it; or sending whose holder went quiet (LEASE). attempts + 1
+//             finish                      sending -> sent | failed | none, fenced by the claim's attempts
+//             retry                       sending -> queued, send_at = the next try, a new push.deliver then. Only below MAX_ATTEMPTS
+//             drop (dropQueuedCraving)    queued -> none
+//             sweep (push.sweep)          sending quiet for 10 min -> queued + a wake-up, or failed at MAX_ATTEMPTS;
+//                                         queued 20 min past due with no wake-up owed (its push.deliver went to the dead-letter queue)
+//                                         -> a new wake-up, attempts + 1, or failed at MAX_ATTEMPTS
+//   guards    every update names the state it leaves; sent, failed, none, capped and skipped are final; a claim never passes MAX_ATTEMPTS
+//   invariant a push is never queued an hour past its time, or sending for an hour (platform/invariants.ts push_queued_stale)
+//
+// The words (title, body) stay while it may still go and come off when it's final.
 //
 //   A person's phones                  push_tokens_person
 //   A token                            push_tokens primary key
@@ -171,25 +186,99 @@ export async function peopleWithKey(q: Queryable, ids: string[], key: string): P
   return new Set(rows.map((row) => row.person_id));
 }
 
-/** One holder sends: the claim is a conditional update. A holder that died stops counting after 4 minutes (050_messages.sql). */
-export async function claimDelivery(q: Queryable, id: string): Promise<LogRow | null> {
+/** Wake-ups a push may use: claims, and wake-ups sent again by the sweep. */
+export const MAX_ATTEMPTS = 5;
+/** The wait before try 2, 3, 4 and 5: Expo down for an hour and a half still lets the push go. */
+export const RETRY_AFTER_S = [60, 300, 900, 3600];
+/** A holder that went quiet is taken over after this, under SQS's visibility timeout (300 s). One send takes at most ~11 s. */
+const LEASE = "4 minutes";
+
+export type Claimed = LogRow & { attempts: number };
+
+/**
+ * queued (nobody holding it) or sending (its holder quiet past the lease) -> sending. One holder sends. A queued row with delivering_at set is an older
+ * api's claim (before 083_push_retries.sql) and is held the same way. send_at isn't checked: the outbox holds each wake-up until its time, and the
+ * database's clock never strands a push the api's clock queued.
+ */
+export async function claimDelivery(q: Queryable, id: string): Promise<Claimed | null> {
   const { rows } = await q.query(
-    `update push_log set delivering_at = now()
-      where id = $1 and status = 'queued' and (delivering_at is null or delivering_at < now() - interval '4 minutes')
-      returning ${LOG}`,
-    [id],
+    `update push_log set status = 'sending', delivering_at = now(), attempts = attempts + 1
+      where id = $1 and attempts < $2
+        and (delivering_at is null or delivering_at < now() - interval '${LEASE}')
+        and status in ('queued', 'sending')
+      returning ${LOG}, attempts`,
+    [id, MAX_ATTEMPTS],
   );
   return rows[0] ?? null;
 }
 
 /**
- * What came of a send. The words come off: a recipient's log can quote someone who later deletes their account, and the purge can't find that row by them.
+ * sending -> sent | failed | none, only for the claim that's still holding it (its attempts). The words come off: a recipient's log can quote someone
+ * who later deletes their account, and the purge can't find that row by them.
  */
-export async function finishDelivery(q: Queryable, id: string, status: string, tickets: { id: string; token: string }[], error: string | null): Promise<void> {
-  await q.query(
-    `update push_log set status = $2, tickets = coalesce($3::jsonb, tickets), error = $4, title = null, body = null, delivering_at = null where id = $1`,
-    [id, status, tickets.length ? JSON.stringify(tickets) : null, error],
+export async function finishDelivery(
+  q: Queryable,
+  id: string,
+  attempts: number,
+  status: "sent" | "failed" | "none",
+  tickets: { id: string; token: string }[],
+  error: string | null,
+): Promise<boolean> {
+  const { rowCount } = await q.query(
+    `update push_log set status = $3, tickets = coalesce($4::jsonb, tickets), error = $5, title = null, body = null, delivering_at = null
+      where id = $1 and status = 'sending' and attempts = $2`,
+    [id, attempts, status, tickets.length ? JSON.stringify(tickets) : null, error],
   );
+  return rowCount === 1;
+}
+
+/** sending -> queued, due again in `afterS`. Returns when, for its push.deliver; null when this claim no longer holds it. */
+export async function retryDelivery(q: Queryable, id: string, attempts: number, error: string | null, afterS: number): Promise<Date | null> {
+  const { rows } = await q.query(
+    `update push_log set status = 'queued', delivering_at = null, error = $3, send_at = now() + make_interval(secs => $4)
+      where id = $1 and status = 'sending' and attempts = $2
+      returning send_at`,
+    [id, attempts, error, afterS],
+  );
+  return rows[0]?.send_at ?? null;
+}
+
+const GIVE_UP = (cond: string, row: string) => `
+    status = case when ${cond} then 'failed' else 'queued' end,
+    error = case when ${cond} then 'gave up' else ${row}.error end,
+    title = case when ${cond} then null else ${row}.title end,
+    body = case when ${cond} then null else ${row}.body end,
+    delivering_at = null`;
+
+/**
+ * push.sweep, a batch at a time. A send whose holder went quiet for 10 minutes goes back to queued; a queued push 20 minutes past due with no
+ * wake-up owed (none unsent in the outbox, none sent in the last 20 minutes, which covers SQS's 3 tries) spends a wake-up. Either is failed at
+ * MAX_ATTEMPTS. Returns the ids to wake now, and how many it gave up on.
+ */
+export async function sweepDeliveries(q: Queryable, limit: number): Promise<{ wake: string[]; gaveUp: number }> {
+  const lapsed = await q.query(
+    `update push_log p set ${GIVE_UP("p.attempts >= $1", "p")}, send_at = case when p.attempts >= $1 then p.send_at else now() end
+      where p.id in (select id from push_log where status = 'sending' and delivering_at < now() - interval '10 minutes'
+                      order by delivering_at limit $2 for update skip locked)
+        and p.status = 'sending'
+      returning p.id, p.status`,
+    [MAX_ATTEMPTS, limit],
+  );
+  const stranded = await q.query(
+    `update push_log p set ${GIVE_UP("p.attempts + 1 >= $1", "p")}, attempts = p.attempts + 1
+      where p.id in (select l.id from push_log l
+                      where l.status = 'queued' and l.send_at < now() - interval '20 minutes'
+                        and (l.delivering_at is null or l.delivering_at < now() - interval '${LEASE}')
+                        and not exists (select 1 from outbox o
+                                         where o.queue = 'scheduled' and o.payload->>'task' = 'push.deliver' and o.payload->>'logId' = l.id
+                                           and (o.sent_at is null or o.sent_at > now() - interval '20 minutes'))
+                      order by l.send_at limit $2 for update skip locked)
+        and p.status = 'queued'
+      returning p.id, p.status`,
+    [MAX_ATTEMPTS, limit],
+  );
+  const rows = [...lapsed.rows, ...stranded.rows] as { id: string; status: string }[];
+  return { wake: rows.filter((r) => r.status === "queued").map((r) => r.id), gaveUp: rows.filter((r) => r.status === "failed").length };
 }
 
 export async function ticketsOf(q: Queryable, id: string): Promise<{ id: string; token: string }[]> {
