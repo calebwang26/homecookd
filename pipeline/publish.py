@@ -4,12 +4,11 @@
     python pipeline/publish.py --all                # every processed recipe + data/synthetic/*.json
 
 Uses Application Default Credentials (`gcloud auth login --update-adc`).
-Rebuilding the app's bundled copies keeps cook mode's short steps (substeps, uses, tip from shorten.py,
-and the step titles tidied with them) that a bundled copy has and its bucket copy lacks, when every step
-is the same step (_keep_short_steps).
+It never touches the app: since Nov 8 the app ships no sample recipes (Caleb: every family starts with none), so
+app/src/lib/bundled.ts stays empty and app/assets/data/ is only the tests' fixtures.
 A family's own recipe (worker.py, Convex mode) is published without the cook's stories and tips
-(without_memories): the bucket is public, and Convex shows them only after her yes. library.json and the
-bundle leave it out (Recipe.family).
+(without_memories): the bucket is public, and Convex shows them only after her yes. library.json leaves it out
+(Recipe.family).
 Storage is GCS instead of the Supabase bucket in docs/HACKATHON-SPEC.md: Supabase's free plan caps files
 at 50 MB, and GCS's free tier holds full-length videos.
 """
@@ -34,8 +33,6 @@ from schema import LibraryEntry, Recipe  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "out"
 SYNTHETIC = ROOT / "data" / "synthetic"
-APP_DATA = ROOT / "app" / "assets" / "data"
-BUNDLED_TS = ROOT / "app" / "src" / "lib" / "bundled.ts"
 
 MEDIA_FILES = {  # local name -> (content type, Media field)
     "play.mp4": ("video/mp4", "video_url"),
@@ -212,7 +209,7 @@ def is_family(recipe: Recipe) -> bool:
 
 def rebuild_library(bucket: storage.Bucket | None = None) -> list[LibraryEntry]:
     """library.json = every */recipe.json in the bucket but a family's own (Convex lists those, and only to
-    that family). Also refreshes the app's bundled fallback."""
+    that family)."""
     bucket = bucket or _bucket()
     recipes: list[Recipe] = []
     family = 0
@@ -228,7 +225,7 @@ def rebuild_library(bucket: storage.Bucket | None = None) -> list[LibraryEntry]:
         else:
             recipes.append(recipe)
     if family:
-        print(f"left {family} family recipe(s) out of library.json and the app's bundle")
+        print(f"left {family} family recipe(s) out of library.json")
     # Real recipes first, then grouped by cook, then title.
     recipes.sort(key=lambda r: (r.sample, r.cook.name.lower(), r.title.lower()))
     entries = [
@@ -240,59 +237,7 @@ def rebuild_library(bucket: storage.Bucket | None = None) -> list[LibraryEntry]:
     library_json = json.dumps([e.model_dump() for e in entries], indent=2)
     _upload_json(bucket, "library.json", library_json)
     print(f"library.json: {len(entries)} recipes -> {public_url(bucket, 'library.json')}")
-    _write_bundle(library_json, recipes)
     return entries
-
-
-SHORT_FIELDS = ("title", "substeps", "uses", "tip")
-
-
-def _step_key(s: dict) -> tuple:
-    """The same step: the same instruction (spacing and case aside) over the same stretch of video (the
-    app's withBundledShortSteps rule, app/src/lib/recipes.ts)."""
-    return " ".join((s.get("instruction") or "").split()).lower(), round(s["start_s"]), round(s["end_s"])
-
-
-def _keep_short_steps(recipe: Recipe, old: dict | None) -> Recipe:
-    """shorten.py writes short steps into the bundled copies; a bucket copy published before that has none.
-    Rewriting the bundle from the bucket would wipe them (and any hand fixes), so a bucket recipe with no
-    substeps keeps its old bundled copy's, when every step is the same step."""
-    if old is None or any(s.substeps for s in recipe.steps):
-        return recipe
-    theirs = sorted(old.get("steps") or [], key=lambda s: s.get("order", 0))
-    data = recipe.model_dump()
-    mine = sorted(data["steps"], key=lambda s: s["order"])
-    if not any(s.get("substeps") for s in theirs) or [_step_key(s) for s in mine] != [_step_key(s) for s in theirs]:
-        return recipe
-    for s, o in zip(mine, theirs):
-        for k in SHORT_FIELDS:
-            s[k] = o.get(k) if k != "title" else o.get("title") or s["title"]
-    print(f"{recipe.id}: kept the bundled copy's short steps (the bucket copy has none yet)")
-    return Recipe.model_validate(data)
-
-
-def _write_bundle(library_json: str, recipes: list[Recipe]) -> None:
-    (APP_DATA / "recipes").mkdir(parents=True, exist_ok=True)
-    old_copies: dict[str, dict] = {}
-    for old in (APP_DATA / "recipes").glob("*.json"):
-        try:
-            old_copies[old.stem] = json.loads(old.read_text())
-        except ValueError:
-            pass  # a broken copy is simply replaced
-        old.unlink()
-    (APP_DATA / "library.json").write_text(library_json + "\n")
-    lines = []
-    for r in recipes:
-        r = _keep_short_steps(r, old_copies.get(r.id))
-        (APP_DATA / "recipes" / f"{r.id}.json").write_text(r.model_dump_json(indent=2) + "\n")
-        lines.append(f"  '{r.id}': require('../../assets/data/recipes/{r.id}.json'),")
-    BUNDLED_TS.write_text(
-        "// AUTO-GENERATED by pipeline/publish.py — do not edit by hand.\n"
-        "import type { LibraryEntry, Recipe } from './types';\n"
-        "export const bundledLibrary: LibraryEntry[] = require('../../assets/data/library.json');\n"
-        "export const bundledRecipes: Record<string, Recipe> = {\n" + "\n".join(lines) + "\n};\n"
-    )
-    print(f"bundled {len(recipes)} recipes into app/assets/data (offline fallback)")
 
 
 def main() -> None:
