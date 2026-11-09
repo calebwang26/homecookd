@@ -182,7 +182,9 @@ Caleb picks one.
     phone through `safe-eas-update.sh production-aws ... --caleb-ok`, on Caleb's yes. It was published from `690bf30c3`,
     a 1.1.0 commit, with no TestFlight check first, because build 20 couldn't be processed. Branch `production-aws`,
     runtime 1.1.0, update group `0d8055ef-adde-4877-adb7-fd0998801f6e`. Caleb confirmed it on his build-18 phone
-    ("works now"). Phones take it on a launch after they fetch it. Undo: `cd app && npx eas-cli
+    ("works now"). The production api showed no 5xx in the hour after. The second update, #410 (the Copy link freeze, group
+    `d8ea50c8-4969-4c25-9d84-74f32a4430a1`, 17:18 PT), went out after Caleb passed it on TestFlight build 1.1.1 (21).
+    Phones take it on a launch after they fetch it. Undo: `cd app && npx eas-cli
     update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios --message "…"
     --non-interactive`.
 
