@@ -163,7 +163,10 @@ class Usage:
 
     def add(self, kind: str, model: str, file: str | None, attempt: int, seconds: float,
             resp: types.GenerateContentResponse | None, error: str | None = None) -> dict:
-        """kind is "extract", "extract-batch" (costed at Batch API prices), "order" or "merge"."""
+        """kind is "extract", "extract-batch" (costed at Batch API prices), "order" or "merge". A reply that carries
+        billed_before (a refusal on batch, sent again: claude.py) records those calls first."""
+        for before in getattr(resp, "billed_before", None) or ():
+            self.add(kind, model, file, attempt, 0.0, before, before.error)
         meta = resp.usage_metadata if resp is not None else None
         prompt = (meta.prompt_token_count or 0) if meta else 0
         cand = (meta.candidates_token_count or 0) if meta else 0
@@ -187,6 +190,17 @@ class Usage:
 
     def this_run(self) -> list[dict]:
         return self.calls[self.run_start:]
+
+
+def reap_batches(work: Path, usage: Usage, wait_s: float = claude.SETTLE_S) -> int:
+    """What Claude batches left open by a stopped or failed run billed (claude.reap), into usage.json, so the spend
+    cap counts it. process.run calls it when it starts and ends; pipeline/batch_reap.py after a killed run."""
+    try:
+        return claude.reap(work / claude.BATCHES,
+                           lambda reply: usage.add("batch-reaped", reply.model, None, 1, 0.0, reply), wait_s=wait_s)
+    except Exception as e:  # noqa: BLE001 - never fails a recipe; the batches stay listed for the next reap
+        log(f"[batch_reap] WARNING: {type(e).__name__}: {str(e)[:300]}")
+        return 0
 
 
 def describe_call(call: dict) -> str:
@@ -928,6 +942,11 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     log(f"[process {recipe_id}] {n} AI file(s); extract with {extract_with}, write with {w.name} {w.model}")
     report("understanding", 0.2)
     usage = Usage(work / "usage.json")
+    batches = claude.BatchRegistry(work / claude.BATCHES)  # every batch this run opens, until it can't bill
+    for gen in (claude_extract, w, fallback, order_gen, cover_by[0], align_by[0]):
+        if isinstance(gen, claude.ClaudeText):
+            gen.batches = batches
+    reap_batches(work, usage)  # left by a run of this recipe that was killed
     t0 = time.monotonic()
     if claude_extract:
         from pipeline import extract_claude, transcribe  # here: both import this module
@@ -1018,6 +1037,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
             except Exception as e:  # noqa: BLE001
                 log(f"[process {recipe_id}] WARNING: no substep times ({type(e).__name__}: {e}); recipe.json is "
                     f"fine without them. Retry: python pipeline/align.py --id {recipe_id} --force")
+    reap_batches(work, usage)  # one still ending when its call went ahead the normal way
     summarize(recipe, not_processed, usage, cover)
     return recipe_path
 
