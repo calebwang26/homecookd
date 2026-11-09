@@ -211,7 +211,12 @@ def test_a_slow_batch_is_cancelled_and_sent_the_normal_way_and_a_failed_one_rais
         except claude.ClaudeError as e:
             assert "errored" in str(e)
     with env(CLAUDE_BATCH=None):
-        assert claude.ClaudeText(client=FakeAnthropic()).batch is False  # the worker never batches
+        assert claude.ClaudeText(client=FakeAnthropic()).batch is False  # the small calls don't wait
+        assert claude.ClaudeText(client=FakeAnthropic(), batch=True).batch is True  # the extraction and the writer
+    with env(CLAUDE_BATCH="0"):
+        assert claude.ClaudeText(client=FakeAnthropic(), batch=True).batch is False  # the rollback
+    with env(CLAUDE_BATCH="1"):
+        assert claude.ClaudeText(client=FakeAnthropic()).batch is True  # the language eval
 
 
 def test_haiku_costs_more_above_100k_prompt_tokens():
@@ -266,7 +271,7 @@ def test_run_falls_back_from_muse_to_claude_and_shortens_with_claude():
     def broken(*_a, **_k):
         raise RuntimeError("no model here")
 
-    with env(GEMINI_API_KEY="fake-key-for-tests", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="",
+    with env(GEMINI_API_KEY="fake-key-for-tests", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", CLAUDE_BATCH="0",
              GEMINI_MEDIA_RESOLUTION="LOW", COVERAGE_GAP_S="", RECIPE_WRITER="muse", MUSE_API_KEY="fake",
              TEXT_PROVIDER="claude", ANTHROPIC_API_KEY="fake", CLAUDE_WRITER_MODEL=None, CLAUDE_TEXT_MODEL=None), \
             tempfile.TemporaryDirectory() as tmp, \
@@ -284,7 +289,7 @@ def test_run_falls_back_from_muse_to_claude_and_shortens_with_claude():
         assert [s["title"] for s in recipe["steps"]] == ["Chop the onions"], recipe
         [call] = fake.calls
         assert call["output_format"] is RecipeDraft and call["system"] == writer.CLAUDE_SYSTEM, call
-        assert shortened == [("claude", "medium")], shortened
+        assert shortened == [("claude", "low")], shortened  # shorten.effort(): low since Nov 8
         usage = json.loads((out / "work" / "usage.json").read_text())["calls"]
         assert [(c["kind"], c["model"], c["ok"]) for c in usage][-1] == ("merge", "claude-sonnet-5-5", True), usage
 

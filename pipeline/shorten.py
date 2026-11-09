@@ -33,6 +33,7 @@ import argparse
 import copy
 import json
 import math
+import os
 import re
 import sys
 import threading
@@ -71,6 +72,13 @@ MAX_WORKERS = 4
 # (Oct 25): the cook's own why or warning is the tip a beginner needs most.
 CLAUDE_SYSTEM = ("Where the cook herself says why something matters on a step, or warns about a mistake, keep that as "
                  "the step's tip, in her words, within the prompt's limit of one step in three.")
+
+
+def effort() -> str:
+    """Claude's effort for the short steps: low since Nov 8 (the Biryani spent 55-93k thinking tokens on medium). On the
+    steak, the Biryani and the gnocchi it wrote the same substeps, ingredient uses and tips for half the cost or less
+    (the Biryani's $0.022, was $0.031-0.053). CLAUDE_SHORTEN_EFFORT=medium rolls it back."""
+    return os.environ.get("CLAUDE_SHORTEN_EFFORT") or "low"
 
 
 class ShortenError(RuntimeError):
@@ -497,7 +505,7 @@ def all_ids() -> list[str]:
 
 def make_model() -> TextModel:
     cfg = load_config()  # loads .env, fails without GEMINI_API_KEY while a step is on Gemini
-    return text_model(cfg, gemini_client(), cfg["merge_model"], "medium", CLAUDE_SYSTEM)
+    return text_model(cfg, gemini_client(), cfg["merge_model"], effort(), CLAUDE_SYSTEM)
 
 
 def shorten_paths(paths: list[Path], gen: TextModel | None, usage: Usage, force: bool = False,

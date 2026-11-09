@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipeline import claude, process  # noqa: E402
+from pipeline import claude, process, writer  # noqa: E402
 from pipeline import extract_claude as E  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
 from pipeline.test_claude import FakeAnthropic, env  # noqa: E402
@@ -31,6 +31,18 @@ def video(path: Path, seconds: int, size: str = "202x360") -> None:
     """Like prep.py's AI copy: one frame per second."""
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=1:d={seconds}",
                     "-pix_fmt", "yuv420p", str(path)], check=True)
+
+
+def test_the_env_can_shrink_and_space_the_frames() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        clip = Path(tmp) / "ai.mp4"
+        video(clip, 25, "640x360")
+        seen, every = E.frames(clip)
+        assert every == 1 and len(seen) == 25 and E.image_tokens(seen[0][1]) == 299  # 640x360: 23 x 13 tiles
+        with env(CLAUDE_EXTRACT_FRAME_PX="448", CLAUDE_EXTRACT_EVERY_S="10"):
+            seen, every = E.frames(clip)
+        assert every == 10 and [label for label, _ in seen] == ["00:00", "00:10", "00:20"]
+        assert E.image_tokens(seen[0][1]) == 144  # 448x252
 
 
 def test_every_second_labelled_and_thinned_to_fit_one_call() -> None:
@@ -117,7 +129,7 @@ def test_process_run_extracts_on_claude_then_merges() -> None:
     def broken(*_a, **_k):
         raise RuntimeError("not in this test")
 
-    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW",
+    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW", CLAUDE_BATCH="0",
              COVERAGE_GAP_S="", RECIPE_WRITER="claude", TEXT_PROVIDER=None, EXTRACTOR="claude",
              ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_WRITER_MODEL=None), \
             tempfile.TemporaryDirectory() as tmp, patched(process, "OUT_ROOT", Path(tmp)), \
@@ -156,7 +168,7 @@ def test_a_recording_tagged_english_but_found_marathi_is_extracted_as_marathi() 
     def broken(*_a, **_k):
         raise RuntimeError("not in this test")
 
-    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW",
+    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW", CLAUDE_BATCH="0",
              COVERAGE_GAP_S="", RECIPE_WRITER="claude", TEXT_PROVIDER=None, EXTRACTOR="claude",
              TRANSCRIPT_PROOFREAD=None, ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_WRITER_MODEL=None), \
             tempfile.TemporaryDirectory() as tmp, patched(process, "OUT_ROOT", Path(tmp)), \
@@ -225,7 +237,7 @@ def test_stopped_while_being_heard_means_no_extraction_at_all() -> None:
     manifest = json.loads(json.dumps(MANIFEST))
     manifest["sessions"][0]["ai_files"] = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 30.0}]
     fake = FakeAnthropic()
-    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW",
+    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW", CLAUDE_BATCH="0",
              COVERAGE_GAP_S="", RECIPE_WRITER="claude", TEXT_PROVIDER=None, EXTRACTOR="claude",
              ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_WRITER_MODEL=None), \
             tempfile.TemporaryDirectory() as tmp, patched(process, "OUT_ROOT", Path(tmp)), \
@@ -247,8 +259,11 @@ def test_stopped_while_being_heard_means_no_extraction_at_all() -> None:
 
 def test_extractor_flag_picks_claude_and_sonnet() -> None:
     assert process.extract_model({"extractor": "gemini"}) is None
-    with env(ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None):
-        assert process.extract_model({"extractor": "claude"}).model == "claude-sonnet-5-5"
+    with env(ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_BATCH=None):
+        gen = process.extract_model({"extractor": "claude"})
+        assert gen.model == "claude-sonnet-5-5" and gen.batch is True  # half price on the Batch API
+    with env(ANTHROPIC_API_KEY="fake", RECIPE_WRITER="claude", CLAUDE_BATCH=None):
+        assert writer.choose(None, "gemini-x").batch is True
     with env(EXTRACTOR="claude"):
         assert claude.provider("EXTRACTOR") == "claude"
 

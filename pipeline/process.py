@@ -711,14 +711,16 @@ def text_model(cfg: dict, client: genai.Client | None, gemini_model: str, effort
     return writer.GeminiWriter(client, gemini_model)
 
 
-# On Poha, Haiku and Opus picked a frame with a thumb over the bowl; Sonnet picked Gemini's own frame (614.5 s) and
-# still (585 s), and the same Swordfish frame as Haiku (Oct 26). About $0.03-0.10 a cover.
-COVER_MODEL = "claude-sonnet-5-5"
+# Haiku since Nov 8 (the cost cut): Sonnet's cover was $0.047 of the steak's $0.25, Haiku's is ~$0.003. On Poha
+# (Oct 26) Haiku picked a frame with a thumb over the bowl where Sonnet didn't; on Nov 8's steak, Biryani, gnocchi,
+# stir-fry, cheesecake and eggs it picked Sonnet's frame or one 3-7 s away, as good, or saw no dish when Sonnet saw
+# none. CLAUDE_COVER_MODEL=claude-sonnet-5-5 rolls it back.
+COVER_MODEL = "claude-haiku-5-5"
 
 
 def cover_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.ClaudeText, str]:
     """Who picks the cover (pipeline/cover.py): Claude from still frames with COVER_PROVIDER=claude
-    (CLAUDE_COVER_MODEL, default Sonnet), else Gemini watching the clip."""
+    (CLAUDE_COVER_MODEL, default Haiku), else Gemini watching the clip."""
     if cfg["cover_provider"] == "claude":
         try:
             gen = claude.ClaudeText(os.environ.get("CLAUDE_COVER_MODEL") or COVER_MODEL)
@@ -746,7 +748,7 @@ def extract_model(cfg: dict) -> claude.ClaudeText | None:
     if cfg["extractor"] != "claude":
         return None
     try:
-        return claude.ClaudeText(os.environ.get("CLAUDE_EXTRACT_MODEL") or EXTRACT_MODEL)
+        return claude.ClaudeText(os.environ.get("CLAUDE_EXTRACT_MODEL") or EXTRACT_MODEL, batch=True)
     except claude.ClaudeError as e:
         raise ProcessError(str(e))
 
@@ -1002,9 +1004,9 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         # tapping one jumps there). A failure only warns: the app splits the instruction itself and shows
         # untimed substeps, and `shorten.py --id` / `align.py --id` can add them later.
         from pipeline.align import align_file  # here: both import this module
-        from pipeline.shorten import CLAUDE_SYSTEM, shorten_file
+        from pipeline.shorten import CLAUDE_SYSTEM, effort, shorten_file
         try:
-            shorten_file(recipe_path, text_model(cfg, client, cfg["merge_model"], "medium", CLAUDE_SYSTEM), usage)
+            shorten_file(recipe_path, text_model(cfg, client, cfg["merge_model"], effort(), CLAUDE_SYSTEM), usage)
         except Exception as e:  # noqa: BLE001
             log(f"[process {recipe_id}] WARNING: no short substeps ({type(e).__name__}: {e}); "
                 f"recipe.json is fine without them. Retry: python pipeline/shorten.py --id {recipe_id} --force")

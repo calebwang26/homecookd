@@ -136,7 +136,8 @@ Writer = GeminiWriter | MuseWriter | claude.ClaudeText
 
 def claude_writer() -> claude.ClaudeText:
     try:
-        return claude.ClaudeText(os.environ.get("CLAUDE_WRITER_MODEL") or CLAUDE_WRITER_MODEL, system=CLAUDE_SYSTEM)
+        return claude.ClaudeText(os.environ.get("CLAUDE_WRITER_MODEL") or CLAUDE_WRITER_MODEL, system=CLAUDE_SYSTEM,
+                                 batch=True)  # half price, ~2 min longer (claude.py)
     except claude.ClaudeError as e:
         raise WriterError(str(e))
 

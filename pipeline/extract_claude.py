@@ -14,6 +14,7 @@ apple roses as "yellow sheets" and missed Poha's salt and coconut), so the extra
 """
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -24,7 +25,13 @@ from pipeline.process import Extraction
 from pipeline.prompts import EXTRACT_FRAMES_NOTE, EXTRACT_HEARD
 from pipeline.schema import TimedChunkOutput
 
-FRAME_PX = 640  # bigger sources are scaled to fit in FRAME_PX x FRAME_PX (~300 tokens; a 202x360 AI frame is 104)
+# Bigger sources are scaled to fit in FRAME_PX x FRAME_PX (~300 tokens; a 202x360 AI frame is 104), at least EVERY_S
+# apart. Tried Nov 8 to cut the cost: one frame every 3, 5 or 10 s lost what is only shown, never said (the Biryani
+# raita's chaat masala, sugar and pepper; the gnocchi's flour, butter and thyme amounts). 448 px kept those and read
+# 30-48% fewer tokens on landscape video, but the Biryani's opening line stopped being kept as a story (0 of 9 runs,
+# 3 of 4 at 640), so both stay until a family recording with real stories says otherwise.
+# CLAUDE_EXTRACT_FRAME_PX / CLAUDE_EXTRACT_EVERY_S override them for that test.
+FRAME_PX, EVERY_S = 640, 1
 SEEN_IMAGES, SEEN_TOKENS = 550, 90_000  # per call: under the API's 600 images, and room for the prompt
 
 
@@ -45,14 +52,17 @@ def image_tokens(jpeg: bytes) -> int:
 
 
 def frames(path: Path) -> tuple[list[tuple[str, bytes]], int]:
-    """The clip's frames as ("MM:SS", JPEG), one every `every` seconds so they fit one call. Returns (frames, every)."""
+    """The clip's frames as ("MM:SS", JPEG), one every `every` seconds (at least EVERY_S, and so they fit one call).
+    Returns (frames, every)."""
+    px = int(os.environ.get("CLAUDE_EXTRACT_FRAME_PX") or FRAME_PX)
     with tempfile.TemporaryDirectory() as tmp:
         ffmpeg("-i", str(path), "-an", "-vf",
-               f"fps=1,scale='min({FRAME_PX},iw)':'min({FRAME_PX},ih)':force_original_aspect_ratio=decrease",
+               f"fps=1,scale='min({px},iw)':'min({px},ih)':force_original_aspect_ratio=decrease",
                "-q:v", "5", str(Path(tmp) / "%05d.jpg"))
         all_frames = [(mmss(i), f.read_bytes()) for i, f in enumerate(sorted(Path(tmp).glob("*.jpg")))]
     per = image_tokens(all_frames[0][1]) if all_frames else 0
-    every = max(1, -(-len(all_frames) // SEEN_IMAGES), -(-len(all_frames) * per // SEEN_TOKENS))
+    every = max(int(os.environ.get("CLAUDE_EXTRACT_EVERY_S") or EVERY_S), -(-len(all_frames) // SEEN_IMAGES),
+                -(-len(all_frames) * per // SEEN_TOKENS))
     return all_frames[::every], every
 
 
