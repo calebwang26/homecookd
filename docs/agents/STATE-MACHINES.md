@@ -8,13 +8,13 @@ test merged), **retired** (code goes with the old stack).
 
 | # | Machine | Owner | Where | Status | Tier |
 |---|---|---|---|---|---|
-| 1 | Sheet hand-offs (BottomSheet, share, toasts, root sheets) | App screens | `app/src/components/ui/BottomSheet.tsx` + ~20 callers | implicit | 1 |
+| 1 | Sheet hand-offs (BottomSheet, toasts, root sheets) | App screens | `app/src/lib/sheets/machine.ts` (the table, the root host's), `coordinator.ts` (afterClose, toasts), `components/ui/BottomSheet.tsx`; test `app/scripts/test-sheets.mjs` | explicit (#424); share.tsx's own open/present/crash flow is still implicit (1b) | 1 |
 | 2 | Job lifecycle, queue side (SQS receives vs attempts, pauses, sweep) | AWS backend | `pipeline/queue_worker.py`, `queue_db.py`, `api/src/modules/jobs/` | implicit | 1 |
 | 3 | Memories opt-in at publish | AWS backend | `pipeline/queue_db.py` finish, `api/src/modules/recipes/writes.ts` | implicit | 1 |
 | 4 | Recording screen | App screens | `app/src/app/recording.tsx`, `lib/live/quietRecording.ts`, `components/record/filming.ts`, `useInAppCamera.ts` | implicit | 2 |
 | 5 | Send → upload → job → resend | App screens | `app/src/app/send.tsx`, `components/record/sendDraft.ts`, `lib/uploads.ts`, `lib/unsentRecordings.ts`, `useResendUnsent.ts` | implicit | 2 |
-| 6 | Mom's answer page (mic, upload, finish, fill) | App Store, web & builds | `web/src/components/mom/QuestionScreen.tsx`, `MomApp.tsx`, `dish/useRecorder.ts` | implicit | 1 |
-| 7 | Claude batch calls (cancel, spend, fallback) | Pipeline & recipes | `pipeline/claude.py`, `process.py`, `extract_claude.py` | implicit | 1 |
+| 6 | Mom's answer page (mic, upload, finish, fill) | App Store, web & builds | `web/src/components/mom/questionMachine.ts` (the answer screen: mic phase, question, what each phase allows), `momMachine.ts` (the page's screens); wired in `QuestionScreen.tsx`, `MomApp.tsx`; tests `questionMachine.test.ts`, `momMachine.test.ts` (`cd web && npm test`), browser runs `web/scripts/qa/mom-failures-e2e.mjs` | explicit, today's behaviour (PR A); decision 3's fixes follow (PR B). `dish/useRecorder.ts`'s mic prompt is still implicit | 1 |
+| 7 | Claude batch calls (cancel, spend, fallback) | Pipeline & recipes | `pipeline/claude.py` (`BatchState`, `ALLOWED`, `BatchCall.advance`, `reap`), `process.py` (`reap_batches`), `batch_reap.py`, `queue_worker.py` (`ChildJob.reap`); tests `test_claude.py`, `test_queue_worker.py` | explicit | 1 |
 | 8 | Account deletion, outside purge | AWS backend | `api/src/modules/accounts/deletion.ts`, `pipeline/account_purge.py` | implicit | 2 |
 | 9 | Library loading (`loaded` vs family rows) | App screens | `app/src/lib/recipes.ts`, `app/kid/home.tsx`, `app/parent/recipes.tsx` | implicit | 1 |
 | 10 | Pushes (`push_log`) | AWS backend | `api/src/modules/messages/push.ts`, `pushData.ts` | implicit | 2 |
@@ -43,3 +43,4 @@ test merged), **retired** (code goes with the old stack).
 | 33 | Kid's dish box (voice note, dictation) | App Store, web & builds | `web/src/components/miss/AskScreen.tsx` | implicit | 3 |
 | 34 | Card page polling and edits | App Store, web & builds | `web/src/components/miss/CardScreen.tsx` | implicit | 3 |
 | 35 | Dinner invite, invite page, shared recipe, clip playback | App Store, web & builds | `web/src/components/dinner-invite/`, `invite/`, `recipe-web/`, `dish/parts.tsx` | implicit | 3 |
+| 36 | A sheet torn down with its screen while its Modal is up (iOS: RN Fabric's `prepareForRecycle` never dismisses the presented Modal, so an empty one can stay over the app) | App screens | `react-native` `RCTModalHostViewComponentView.mm`; seen from `components/ui/BottomSheet.tsx` | implicit | 1.1.2 native |

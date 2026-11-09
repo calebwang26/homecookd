@@ -8,12 +8,13 @@
 //  - `success={{ title, subtitle }}` runs the Luma confirmation: the content fades out, a
 //    SuccessBurst plays at the top-centre, holds 1.4 s, then `onSuccessDone` (default: onClose).
 // Renders in a transparent native Modal so it sits above tabs and navigators on iOS and web.
-// iOS: a sheet opening while another one is still animating out (or, created already open, while any
-// other sheet's Modal is up) waits for that one's Modal to go
+// Its lifecycle is the table in lib/sheets/machine.ts (hidden, held, open, closing), held in one place by
+// lib/sheets/coordinator.ts. iOS: a sheet opening while another one is still animating out (or, created
+// already open, while any other sheet's Modal is up) waits for that one's Modal to go
 // (presenting a Modal mid-dismissal is a UIKit hazard), up to CLOSING_WAIT_MS, then SETTLE_MS more
 // so UIKit's dismissal finishes before the next presentViewController.
 import { BlurView } from 'expo-blur';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -27,6 +28,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { useMachine } from '@/lib/machine';
+import { forgetSheet, othersClosing as othersClosingNow, reportSheet, upCount, useOthersClosing } from '@/lib/sheets/coordinator';
+import { heldWaitMs, initialSheetState, isUp, sheetMachine, showEvent } from '@/lib/sheets/machine';
 import { alpha, colors, motion, radii } from '@/theme/tokens';
 
 import { CloseIcon } from './icons';
@@ -64,40 +68,8 @@ export type BottomSheetProps = {
   onShown?: () => void;
 };
 
-// Sheets whose Modal is still up while they animate out.
-const closing = new Set<string>();
-const closingListeners = new Set<() => void>();
-const CLOSING_WAIT_MS = 600;
-// After the other sheet's Modal has gone, a few frames before this one presents.
-const SETTLE_MS = 60;
-function setClosing(id: string, on: boolean) {
-  const had = closing.has(id);
-  if (on === had) return;
-  if (on) closing.add(id);
-  else closing.delete(id);
-  closingListeners.forEach((l) => l());
-}
-function subscribeClosing(l: () => void) {
-  closingListeners.add(l);
-  return () => {
-    closingListeners.delete(l);
-  };
-}
-
-// Sheets whose Modal is up (open or closing). UIKit won't present a Modal from the root while
-// another is up, so a sheet that isn't nested in another (the push ask) waits for none (useSheetsUp).
-const up = new Set<string>();
-function setUp(id: string, on: boolean) {
-  if (on === up.has(id)) return;
-  if (on) up.add(id);
-  else up.delete(id);
-  closingListeners.forEach((l) => l());
-}
-
-/** How many sheets have their Modal up right now. */
-export function useSheetsUp(): number {
-  return useSyncExternalStore(subscribeClosing, () => up.size, () => 0);
-}
+/** How many sheets have their Modal up right now (root hosts like the push ask wait for 0). */
+export { useSheetsUp } from '@/lib/sheets/coordinator';
 
 export function BottomSheet({
   visible,
@@ -118,18 +90,12 @@ export function BottomSheet({
   onShown,
 }: BottomSheetProps) {
   const sheetId = useId();
-  const othersClosing = useSyncExternalStore(
-    subscribeClosing,
-    () => closing.size > (closing.has(sheetId) ? 1 : 0),
-    () => false,
-  );
-  // True once this open has had to wait on another sheet; it then mounts from the timer below.
-  // A sheet created already visible (the keyed sheets make a fresh one per opening: "New message" →
-  // "Add family") starts held when another sheet's Modal is up, since that one may be closing in this
-  // same tap and only says so in its effect. Mounting at once presented over a dismissing Modal on iOS:
-  // nothing showed, and an invisible Modal took every tap on the screen (1.1, Nov 8).
-  const [held, setHeld] = useState(() => visible && up.size > 0);
-  const [mounted, setMounted] = useState(() => visible && !held);
+  const othersClosing = useOthersClosing(sheetId);
+  // Created already visible, it waits while any other sheet's Modal is up: that one may be closing in
+  // this same tap ("New message" → "Add family") and only reports it from its effect. Presenting over a
+  // dismissing Modal on iOS showed nothing, and an invisible Modal took every tap (1.1, Nov 8).
+  const [state, send] = useMachine(sheetMachine, () => initialSheetState(visible, upCount(sheetId) > 0));
+  const mounted = isUp(state);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
@@ -140,28 +106,25 @@ export function BottomSheet({
   const [sheetH, setSheetH] = useState(0);
   const [burst, setBurst] = useState(false);
 
-  // Mount as soon as we become visible (derived during render), unless another sheet's Modal is
-  // still going away; unmount after the close animation.
-  const waiting = visible && !mounted && (held || othersClosing);
-  if (waiting && !held) setHeld(true);
-  if (!visible && held) setHeld(false);
-  if (visible && !mounted && !waiting) setMounted(true);
+  // `visible` becomes an event before paint (the frame the sheet used to set its flags in during render).
+  const lastVisible = useRef(visible);
+  useLayoutEffect(() => {
+    if (visible === lastVisible.current) return;
+    lastVisible.current = visible;
+    send(visible ? showEvent(othersClosingNow(sheetId)) : 'hide');
+  }, [visible, send, sheetId]);
 
-  // Waiting on another sheet: mount SETTLE_MS after its Modal is gone, never later than
-  // CLOSING_WAIT_MS while it is still closing.
+  // Held: present SETTLE_MS after the other sheet's Modal is gone, never later than CLOSING_WAIT_MS while
+  // it is still closing.
   useEffect(() => {
-    if (!waiting) return;
-    const t = setTimeout(() => setMounted(true), othersClosing ? CLOSING_WAIT_MS : SETTLE_MS);
+    if (state !== 'held') return;
+    const t = setTimeout(() => send('settled'), heldWaitMs(othersClosing));
     return () => clearTimeout(t);
-  }, [waiting, othersClosing]);
+  }, [state, othersClosing, send]);
 
-  // Registered as closing from the moment it is hidden until its Modal unmounts.
-  useEffect(() => {
-    setClosing(sheetId, mounted && !visible);
-  }, [sheetId, mounted, visible]);
-  useEffect(() => () => setClosing(sheetId, false), [sheetId]);
-  useEffect(() => setUp(sheetId, mounted), [sheetId, mounted]);
-  useEffect(() => () => setUp(sheetId, false), [sheetId]);
+  // The coordinator holds every sheet's state; this sheet is the only one that reports it.
+  useEffect(() => reportSheet(sheetId, state), [sheetId, state]);
+  useEffect(() => () => forgetSheet(sheetId), [sheetId]);
 
   // Latest callbacks behind stable handlers (react-native-web re-fires onShow when it changes).
   const traceRef = useRef(onTrace);
@@ -182,11 +145,12 @@ export function BottomSheet({
     return () => traceRef.current?.('modal unmounted');
   }, [mounted]);
   useEffect(() => {
-    if (waiting) traceRef.current?.(othersClosing ? 'waiting for another sheet to close' : 'other sheet gone, settling');
-  }, [waiting, othersClosing]);
+    if (state === 'held') traceRef.current?.(othersClosing ? 'waiting for another sheet to close' : 'other sheet gone, settling');
+  }, [state, othersClosing]);
 
+  const closing = state === 'closing';
   useEffect(() => {
-    if (visible || !mounted) return;
+    if (!closing) return;
     back.set(withTiming(0, { duration: motion.backdropMs }));
     y.set(
       reduce
@@ -194,17 +158,19 @@ export function BottomSheet({
         : withTiming(sheetH || winH, { duration: motion.sheetCloseMs, easing: Easing.in(Easing.cubic) }),
     );
     const t = setTimeout(() => {
-      setMounted(false);
+      send('closeDone');
+      // Gone: the next opening starts with its content and no burst.
       setBurst(false);
       content.set(1);
     }, reduce ? motion.reducedFadeMs : motion.sheetCloseMs);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [closing]);
 
   // Slide in once the sheet has a height.
+  const open = state === 'open';
   useEffect(() => {
-    if (!visible || !mounted || !sheetH) return;
+    if (!open || !sheetH) return;
     traceRef.current?.(`laid out ${Math.round(sheetH)}pt, sliding in`);
     back.set(withTiming(1, { duration: motion.backdropMs }));
     if (reduce) {
@@ -214,7 +180,7 @@ export function BottomSheet({
       y.set(withSpring(0, motion.sheet));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, mounted, sheetH > 0]);
+  }, [open, sheetH > 0]);
 
   // Success: fade the content out, then burst.
   useEffect(() => {
@@ -312,7 +278,7 @@ export function BottomSheet({
             ) : null}
           </Animated.View>
         </KeyboardAvoidingView>
-        <ToastViewport position="top" inSheet />
+        <ToastViewport position="top" inSheet sheetId={sheetId} />
       </GestureHandlerRootView>
     </Modal>
   );

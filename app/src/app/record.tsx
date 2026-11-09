@@ -38,13 +38,13 @@ import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useWords } from '@/lib/words/useWords';
 import type { T as Words, WordKey } from '@/lib/words/words';
+import { whenSheetsClosed } from '@/lib/sheets/coordinator';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 /** The sheet's native Modal has to be gone before the next screen, camera or picker presents (iOS). */
 const SHEET_GONE_MS = 600;
 /** Convex waits for a connection with no limit; offline, homie's start gives up after this. */
 const START_TIMEOUT_MS = 10_000;
-const after = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** `work`, or a throw after `ms` (into the caller's catch). */
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -113,7 +113,7 @@ export default function RecordScreen() {
     const picked: PickContext = { dish: typed || null, requestFrom: first };
     if (source === 'library' || (source === 'camera' && phoneOnly)) {
       setSheet(false);
-      await after(SHEET_GONE_MS);
+      await whenSheetsClosed(SHEET_GONE_MS);
       if (await (source === 'library' ? pick.library(picked) : pick.record(picked))) router.push('/send');
       return;
     }
@@ -128,7 +128,7 @@ export default function RecordScreen() {
       );
       if (source === 'camera') setDraftMeta({ recordingId });
       setSheet(false);
-      await after(SHEET_GONE_MS);
+      await whenSheetsClosed(SHEET_GONE_MS);
       router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: everyone ? '' : (label ?? ''), lang: language ?? '' } });
     } catch (e) {
       console.warn('[record] startRecording', String(e).slice(0, 160));
@@ -137,7 +137,7 @@ export default function RecordScreen() {
       } else {
         // No homie today: the phone's camera still works, straight to Send.
         setSheet(false);
-        await after(SHEET_GONE_MS);
+        await whenSheetsClosed(SHEET_GONE_MS);
         if (await pick.record(picked)) router.push('/send');
       }
     } finally {

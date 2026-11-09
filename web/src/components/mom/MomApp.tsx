@@ -18,8 +18,8 @@ import { FillScreen, GuessScreen, IntroScreen, SentScreen } from './MomScreens';
 import { QuestionScreen, type Pending, type SaveOutcome, type ShownQuestion } from './QuestionScreen';
 import ui from '@/components/dish/ui.module.css';
 import s from './mom.module.css';
+import { momTransition, type MomEvent, type Stage } from './momMachine';
 
-type Stage = 'loading' | 'error' | 'intro' | 'guess' | 'questions' | 'nothing' | 'fill' | 'sent' | 'recipe';
 type Failure = 'not-found' | 'offline';
 
 const POLL_MS = 2000;
@@ -43,6 +43,8 @@ function Mom() {
   const [token, setToken] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
+  /** Every change of screen goes through the table (momMachine.ts). */
+  const send = useCallback((e: MomEvent) => setStage((st) => momTransition(st, e) ?? st), []);
   const [failure, setFailure] = useState<Failure>('not-found');
   const [inLangs, setInLangs] = useState<Record<string, InLang | null>>({});
   const [retryLang, setRetryLang] = useState<string | null>(null); // the one language still translating after the first peek
@@ -50,7 +52,7 @@ function Mom() {
   const [list, setList] = useState<string[]>([]); // the question ids she's answering, fixed when she starts
   const [recordable, setRecordable] = useState(true);
   const askRef = useRef<Ask | null>(null);
-  const toSent = useCallback(() => setStage('sent'), []);
+  const toSent = useCallback(() => send({ type: 'FILL_DONE' }), [send]);
   const [filmShown, setFilmShown] = useState(false); // the film ask rises once by itself; back from her recipe it stays down
   const onFilmShown = useCallback(() => setFilmShown(true), []);
   const keep = (a: Ask) => {
@@ -62,21 +64,21 @@ function Mom() {
     const k = new URLSearchParams(window.location.search).get('t');
     if (!isPlausibleToken(k)) {
       setFailure('not-found');
-      return setStage('error');
+      return send({ type: 'BAD_LINK' });
     }
     setToken(k);
-    setStage('loading');
+    send({ type: 'LOAD_START' });
     peekAsk(k).then(
       (a) => {
         keep(a);
-        setStage(a.finished ? (a.merging ? 'fill' : 'sent') : 'intro');
+        send({ type: 'LOADED', finished: a.finished, merging: a.merging });
       },
       (e: unknown) => {
         setFailure(e instanceof DishError && e.kind === 'not-found' ? 'not-found' : 'offline');
-        setStage('error');
+        send({ type: 'LOAD_FAILED' });
       },
     );
-  }, []);
+  }, [send]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is only readable on the client (static export)
@@ -127,7 +129,7 @@ function Mom() {
       const a = askRef.current;
       if (a?.version || (a && !a.merging) || Date.now() - t0 > FILL_WAIT_MS) {
         window.clearInterval(timer);
-        if (!a?.version) setStage('sent');
+        send({ type: 'FILL_STOPPED', version: !!a?.version });
         return;
       }
       // With her language, so her version comes back translated in the same answer (no English flash).
@@ -137,7 +139,7 @@ function Mom() {
       }, () => {});
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [stage, token, lang]);
+  }, [stage, token, lang, send]);
 
   // A read link on the page has expired: her page again, for fresh ones.
   const refresh = useCallback(() => {
@@ -165,7 +167,7 @@ function Mom() {
     const a = askRef.current;
     if (!a) return;
     setList(a.questions.map((q) => q.id));
-    setStage(a.questions.length ? 'questions' : 'nothing');
+    send({ type: 'START', questions: a.questions.length });
   };
 
   const onSave = async ({ qid, clip }: Pending): Promise<SaveOutcome> => {
@@ -176,12 +178,12 @@ function Mom() {
     } catch (e) {
       const kind = e instanceof DishError ? e.kind : 'network';
       if (kind === 'closed') {
-        setStage('sent');
+        send({ type: 'SAVE_CLOSED' });
         return 'gone';
       }
       if (kind === 'not-found') {
         setFailure('not-found');
-        setStage('error');
+        send({ type: 'SAVE_NOT_FOUND' });
         return 'gone';
       }
       return kind === 'bad' ? 'redo' : 'retry';
@@ -191,13 +193,14 @@ function Mom() {
   const onFinish = async () => {
     const a = askRef.current;
     if (!token || !a) return;
-    if (!a.answered.length) return setStage('nothing');
+    if (!a.answered.length) return send({ type: 'FINISH', answered: 0, ok: true });
+    let ok = true;
     try {
       keep(await finishAsk(token));
     } catch {
-      /* her answers are saved; the fill screen polls and Send is retried by the kid's page (spec §4) */
+      ok = false; // her answers are saved; the fill screen polls and Send is retried by the kid's page (spec §4)
     }
-    setStage('fill');
+    send({ type: 'FINISH', answered: a.answered.length, ok });
   };
 
   if (stage === 'loading') {
@@ -231,14 +234,14 @@ function Mom() {
 
   switch (stage) {
     case 'intro':
-      return <IntroScreen ask={ask} kid={kid} message={inLang?.message ?? ask.message} toggle={toggle} onNext={() => setStage('guess')} onStale={refresh} />;
+      return <IntroScreen ask={ask} kid={kid} message={inLang?.message ?? ask.message} toggle={toggle} onNext={() => send({ type: 'INTRO_NEXT' })} onStale={refresh} />;
     case 'guess':
-      return <GuessScreen ask={ask} kid={kid} guess={guess} toggle={toggle} onBack={() => setStage('intro')} onNext={startQuestions} />;
+      return <GuessScreen ask={ask} kid={kid} guess={guess} toggle={toggle} onBack={() => send({ type: 'GUESS_BACK' })} onNext={startQuestions} />;
     case 'questions':
       return (
         <>
           <TopBar />
-          <QuestionScreen kid={kid} questions={shown} answered={ask.answered} canRecord={recordable} onSave={onSave} onFinish={onFinish} onBack={() => setStage('guess')} />
+          <QuestionScreen kid={kid} questions={shown} answered={ask.answered} canRecord={recordable} onSave={onSave} onFinish={onFinish} onBack={() => send({ type: 'QUESTIONS_BACK' })} />
         </>
       );
     case 'nothing':
@@ -262,7 +265,7 @@ function Mom() {
       // Her version, in her language once it is translated (the same pick as the fill screen).
       const version = inLang?.version ?? ask.version;
       if (stage === 'recipe' && version) {
-        return <MomRecipe ask={ask} kid={kid} token={token!} version={version} onClose={() => setStage('sent')} />;
+        return <MomRecipe ask={ask} kid={kid} token={token!} version={version} onClose={() => send({ type: 'CLOSE_RECIPE' })} />;
       }
       return (
         <SentScreen
@@ -272,7 +275,7 @@ function Mom() {
           canOpen={!!version}
           filmFirst={!filmShown}
           onFilmShown={onFilmShown}
-          onOpenRecipe={() => setStage('recipe')}
+          onOpenRecipe={() => send({ type: 'OPEN_RECIPE' })}
         />
       );
     }

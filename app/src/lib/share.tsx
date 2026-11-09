@@ -17,6 +17,7 @@ import type { DinnerInvite } from '@/components/share/DinnerInviteBody';
 import { ShareSheet } from '@/components/share/ShareSheet';
 import { useToast } from '@/components/ui';
 import { trail, trailStart } from '@/components/share/trail';
+import { machineHistory } from '@/lib/machine';
 import { useWords } from '@/lib/words/useWords';
 
 export type { DinnerInvite };
@@ -157,6 +158,8 @@ class SheetGuard extends Component<{ children: ReactNode; onCrash: () => void },
     return { failed: true };
   }
   componentDidCatch(error: unknown) {
+    // The machines' recent events: how the sheets got here (lib/machine.ts).
+    if (__DEV__) console.warn('[machines]', JSON.stringify(machineHistory()));
     trail('share sheet crashed (caught)', error);
     this.props.onCrash();
   }

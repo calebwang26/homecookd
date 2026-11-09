@@ -228,6 +228,7 @@ cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
+cd app && node scripts/test-sheets.mjs                             # the sheet machine and coordinator (lib/machine.ts, lib/sheets/): every state × event, afterClose on a fake clock
 cd app && node scripts/test-aws.mjs                               # the 1.1 AWS client (src/lib/aws): error shapes, sessions, retries (fake fetch)
 cd app && node scripts/aws-accounts-staging.mjs                    # the same client against AWS staging: read-only Accounts checks
 cd app && node scripts/aws-accounts-flows.mjs                      # Accounts flows on AWS staging with test people (TEST_SIGNIN_KEY; deletes them after)
@@ -246,10 +247,13 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 # web
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
+cd web && npm test                                                 # the site's state machines (Mom's page): every state × event (node --test, no dependency)
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
   # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
+node web/scripts/qa/mom-failures-e2e.mjs --base http://localhost:3105 --out /tmp/mom-failures [--expect today|fixed]   # Mom's page when the mic is denied or hangs, in an in-app browser, a refused answer, a failed Send (same site and fake as dish-e2e)
+  # dish-e2e, dish-api-e2e and mom-failures use a test-only synthetic mic (scripts/qa/synthetic-mic.mjs); --mic device for Chrome's fake device, which never answers on some Macs
 node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
 node scripts/frame-app-store-shots.mjs [file.png ...]                # caption and frame docs/app-store/screenshots/1.1/raw/ into 1.1/ (6.9") and 1.1/medium/ (1206 × 2622); needs web/node_modules, Chrome
 
@@ -327,6 +331,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
+.venv/bin/python pipeline/batch_reap.py data/out/<id>/work          # what a killed run's Claude batches billed, into its usage.json (queue_worker runs it after a kill)
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
 .venv/bin/python pipeline/test_queue_worker.py                     # the queue worker (TEST_DATABASE_URL adds real Postgres; needs requirements-queue.txt)

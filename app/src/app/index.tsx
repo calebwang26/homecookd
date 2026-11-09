@@ -67,6 +67,7 @@ import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, 
 import type { Profile, Role } from '@/lib/api';
 import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { moveApi } from '@/lib/moveRequests';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { useSession } from '@/lib/session';
 import { litIds } from '@/lib/sundayTable';
 import { useTable } from '@/lib/tableApi';
@@ -166,7 +167,11 @@ export default function Profiles() {
     leaving.current = true;
     setChosen(p.id);
     setMe(p);
-    setTimeout(() => router.replace(homeFor(p)), wait + (reduce ? 60 : 260));
+    // `wait`: a sheet is closing first (afterClose); then the screen's own fade.
+    const go = () => router.replace(homeFor(p));
+    const fade = reduce ? 60 : 260;
+    if (wait) afterClose(go, wait + fade);
+    else setTimeout(go, fade);
   };
   const choiceOf = (p: Profile): TileChoice => (!chosen ? 'idle' : chosen === p.id ? 'chosen' : 'other');
 
@@ -182,7 +187,7 @@ export default function Profiles() {
   const [account, setAccount] = useState(false);
   const fromAccount = (open: () => void) => {
     setAccount(false);
-    setTimeout(open, motion.sheetCloseMs + 40);
+    afterClose(open, motion.sheetCloseMs + 40);
   };
   const [deleting, setDeleting] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
   // A phone that just joined (no person yet) never takes over a face: it asks the family.
@@ -362,7 +367,7 @@ export default function Profiles() {
         // As with Sign out, the sheet goes first: then the first screen, or this one without them.
         onDeleted={(who, signedOut) => {
           setDeleting((d) => ({ ...d, open: false }));
-          setTimeout(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
+          afterClose(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
         }}
       />
       <BottomSheet visible={account} onClose={() => setAccount(false)} title={t('profiles.picker.account')} accessibilityLabel={t('profiles.picker.account')}>
@@ -410,7 +415,7 @@ export default function Profiles() {
               // The sheet goes first: signing out sends the app to /join, never under a closing Modal.
               onPress={() => {
                 setSigningOut(false);
-                setTimeout(() => void leaveFamily(), motion.sheetCloseMs + 40);
+                afterClose(() => void leaveFamily(), motion.sheetCloseMs + 40);
               }}
               accessibilityHint={t('profiles.picker.signOutHint')}
               style={styles.choice}

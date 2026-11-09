@@ -3,16 +3,18 @@
 // the question, what the kid guessed, and one big mic. Press and hold to talk, let go to send. A quick
 // tap switches to tap to start, tap to stop; Enter or Space does the same, for anyone who can't hold.
 // Each answer is sent the moment it stops (MomApp's onSave). Ported from the MVP's QuestionScreen.
+// Its phases and what each allows are one table, questionMachine.ts: this file turns presses, the
+// recorder and the server's answers into events, and runs the command each step names.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useLang } from '@/components/dish/lang';
 import { inAppBrowser, useRecorder, type Clip } from '@/components/dish/useRecorder';
 import { IconBack } from '@/components/recipe-web/icons';
 import { clock } from '@/lib/dish/text';
 import type { QuestionId } from '@/lib/dish/types';
-import type { WordKey } from '@/lib/dish/words';
 import ui from '@/components/dish/ui.module.css';
 import m from './mom.module.css';
 import s from './QuestionScreen.module.css';
+import { transition, view, type QEvent, type QState } from './questionMachine';
 
 export type Pending = { qid: QuestionId; clip: Clip };
 /** retry: keep the clip, offer Try again · redo: refused, record again · gone: MomApp shows another screen */
@@ -24,39 +26,7 @@ const MIN_S = 0.8;
 const SAVED_MS = 700;
 const NO_PROMPT_MS = 500;
 
-type Phase =
-  | { k: 'idle'; note: 'short' | 'quiet' | 'failed' | null }
-  | { k: 'arming' }
-  | { k: 'recording'; tap: boolean }
-  | { k: 'saving' }
-  | { k: 'saved' }
-  | { k: 'retry'; pending: Pending }
-  | { k: 'blocked' }
-  | { k: 'elsewhere' }
-  | { k: 'finishing' };
 type Press = { id: number; t0: number; up: boolean; cancelled: boolean; stops: boolean };
-
-function labelKey(p: Phase): WordKey {
-  switch (p.k) {
-    case 'idle':
-      return p.note === 'short' ? 'm3.short' : p.note === 'quiet' ? 'm3.quiet' : p.note === 'failed' ? 'm3.failed' : 'm3.hold';
-    case 'arming':
-      return 'm3.hold';
-    case 'recording':
-      return p.tap ? 'm3.tapStop' : 'm3.letGo';
-    case 'saving':
-    case 'finishing':
-      return 'm3.saving';
-    case 'saved':
-      return 'm3.saved';
-    case 'retry':
-      return 'm3.failed';
-    case 'blocked':
-      return 'm3.blocked';
-    case 'elsewhere':
-      return 'm3.elsewhere';
-  }
-}
 
 type Props = {
   kid: string;
@@ -70,9 +40,12 @@ type Props = {
 
 export function QuestionScreen({ kid, questions, answered, canRecord, onSave, onFinish, onBack }: Props) {
   const { t } = useLang();
-  const [index, setIndex] = useState(() => Math.max(0, questions.findIndex((q) => !answered.includes(q.id))));
-  const [phase, setPhase] = useState<Phase>({ k: 'idle', note: null });
-  const now = useRef({ phase, index });
+  const [state, setState] = useState<QState<Pending>>(() => ({
+    phase: { k: 'idle', note: null },
+    index: Math.max(0, questions.findIndex((q) => !answered.includes(q.id))),
+    n: questions.length,
+  }));
+  const now = useRef(state);
   const press = useRef<Press | null>(null);
   const handled = useRef(false);
   const lastUp = useRef(-Infinity);
@@ -81,61 +54,57 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
   const rec = useRecorder(() => void latest.current.stopAndSend());
   const labelId = useId();
 
-  const go = (p: Phase) => {
-    now.current.phase = p;
-    setPhase(p);
-  };
-  const moveTo = (i: number) => {
-    now.current.index = i;
-    setIndex(i);
-    go({ k: 'idle', note: null });
-    if (window.scrollY > 0) window.scrollTo(0, 0);
+  /** One event through the table: the new state, and its command run. False when the table ignores it. */
+  const dispatch = (e: QEvent<Pending>): boolean => {
+    const step = transition(now.current, e);
+    if (!step) return false;
+    const moved = step.state.index !== now.current.index;
+    now.current = step.state;
+    setState(step.state);
+    if (moved && window.scrollY > 0) window.scrollTo(0, 0);
+    if (step.cmd === 'scheduleNext') nextTimer.current = window.setTimeout(() => dispatch({ type: 'NEXT' }), SAVED_MS);
+    else if (step.cmd === 'finish') void onFinish();
+    else if (step.cmd === 'leave') onBack();
+    else if (step.cmd === 'reload') window.location.reload(); // Safari keeps a "Don't Allow" until the page loads again
+    return true;
   };
 
   const start = async (p: Press | null) => {
     const prompted = !rec.hasStream();
-    go({ k: 'arming' });
+    if (!dispatch({ type: 'PRESS' })) return;
     const ok = await rec.open();
-    if (now.current.phase.k !== 'arming') return;
-    if (!ok) return go({ k: inAppBrowser() ? 'elsewhere' : 'blocked' });
+    if (now.current.phase.k !== 'arming') return; // she moved on: never begin() behind her back
+    if (!ok) return void dispatch({ type: 'MIC_DENIED', inApp: inAppBrowser() });
     // She let go while the browser asked for the microphone: don't record behind her back.
-    if (p?.up && prompted && (p.cancelled || performance.now() - p.t0 > NO_PROMPT_MS)) return go({ k: 'idle', note: null });
-    if (!rec.begin()) return go({ k: 'blocked' });
-    go({ k: 'recording', tap: !p || p.up });
+    if (p?.up && prompted && (p.cancelled || performance.now() - p.t0 > NO_PROMPT_MS)) return void dispatch({ type: 'MIC_LATE' });
+    if (!rec.begin()) return void dispatch({ type: 'BEGIN_FAILED' });
+    dispatch({ type: 'MIC_OK', tap: !p || p.up });
   };
 
   const stopAndSend = async () => {
-    if (now.current.phase.k !== 'recording') return;
     const qid = questions[now.current.index].id;
-    go({ k: 'saving' });
+    if (!dispatch({ type: 'STOP' })) return;
     const clip = await rec.stop();
-    if (!clip || clip.durationS < MIN_S) return go({ k: 'idle', note: 'short' });
-    if (clip.silent) return go({ k: 'idle', note: 'quiet' }); // never sent: a model would invent an answer
-    await send({ qid, clip });
+    if (!clip || clip.durationS < MIN_S) return void dispatch({ type: 'CLIP_SHORT' });
+    if (clip.silent) return void dispatch({ type: 'CLIP_QUIET' }); // never sent: a model would invent an answer
+    dispatch({ type: 'CLIP_OK' });
+    await save({ qid, clip });
   };
 
-  const send = async (pending: Pending) => {
-    go({ k: 'saving' });
+  const save = async (pending: Pending) => {
     const out = await onSave(pending);
-    if (out === 'saved') {
-      go({ k: 'saved' });
-      nextTimer.current = window.setTimeout(next, SAVED_MS);
-    } else if (out === 'retry') go({ k: 'retry', pending });
-    else if (out === 'redo') go({ k: 'idle', note: 'failed' });
+    if (out === 'saved') dispatch({ type: 'SAVED' });
+    else if (out === 'retry') dispatch({ type: 'SAVE_RETRY', pending });
+    else if (out === 'redo') dispatch({ type: 'SAVE_REDO' });
+    else dispatch({ type: 'SAVE_GONE' });
   };
 
-  const next = () => {
-    const i = now.current.index;
-    if (i < questions.length - 1) moveTo(i + 1);
-    else {
-      go({ k: 'finishing' });
-      void onFinish();
-    }
+  const resend = (pending: Pending) => {
+    if (dispatch({ type: 'RETRY_TAP', pending })) void save(pending);
   };
 
   const retryMic = async () => {
-    if (await rec.open()) go({ k: 'idle', note: null });
-    else window.location.reload(); // Safari keeps a "Don't Allow" until the page loads again
+    dispatch({ type: 'MIC_RETRY', ok: await rec.open() });
   };
 
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
@@ -173,7 +142,7 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
     const ph = now.current.phase;
     if (p.stops || ph.k !== 'recording' || ph.tap) return;
     if (performance.now() - p.t0 >= HOLD_MS) void stopAndSend();
-    else go({ k: 'recording', tap: true });
+    else dispatch({ type: 'LET_GO_SHORT' });
   };
 
   const onClick = () => {
@@ -181,7 +150,7 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
     handled.current = false;
     if (press.current || repeat) return;
     const ph = now.current.phase;
-    if (ph.k === 'retry') void send(ph.pending);
+    if (ph.k === 'retry') resend(ph.pending);
     else if (ph.k === 'blocked') void retryMic();
     else if (ph.k === 'recording') void stopAndSend();
     else if (ph.k === 'idle') void start(null);
@@ -209,19 +178,16 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
     };
   }, []);
 
+  const { phase, index } = state;
+  const v = view(phase, canRecord);
   const q = questions[index];
   const isAnswered = answered.includes(q.id);
-  const saving = phase.k === 'saving' || phase.k === 'finishing';
-  const busy = saving || phase.k === 'arming' || phase.k === 'recording' || phase.k === 'saved';
-  const retrying = phase.k === 'retry' || phase.k === 'blocked';
-  const recordable = canRecord && phase.k !== 'elsewhere';
-  const micState = phase.k === 'recording' ? 'rec' : phase.k === 'saved' ? 'saved' : saving ? 'saving' : retrying ? 'retry' : 'idle';
   const last = index === questions.length - 1;
 
   return (
     <div className={`${m.body} ${s.screen}`}>
       <div className={s.progress}>
-        <button type="button" className={`${ui.press} ${ui.textLink} ${s.back}`} disabled={busy} onClick={() => (index > 0 ? moveTo(index - 1) : onBack())}>
+        <button type="button" className={`${ui.press} ${ui.textLink} ${s.back}`} disabled={!v.backEnabled} onClick={() => dispatch({ type: 'BACK' })}>
           <IconBack size={18} />
           {t('common.back')}
         </button>
@@ -243,14 +209,14 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
       </div>
       <div className={s.dock}>
         <div className={s.micWrap}>
-          {recordable ? (
+          {v.micShown ? (
             <button
               type="button"
               className={`${ui.press} ${s.mic}`}
-              data-state={micState}
-              aria-label={retrying ? undefined : t('m3.record')}
-              aria-pressed={retrying ? undefined : phase.k === 'recording'}
-              aria-disabled={saving || phase.k === 'saved' || undefined}
+              data-state={v.mic}
+              aria-label={v.retrying ? undefined : t('m3.record')}
+              aria-pressed={v.retrying ? undefined : phase.k === 'recording'}
+              aria-disabled={v.micDisabled || undefined}
               aria-describedby={labelId}
               onPointerDown={onPointerDown}
               onPointerUp={onPointerEnd}
@@ -268,7 +234,7 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
                 <svg className={s.check} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <path d="M5 12.5l4.5 4.5L19 7.5" pathLength={20} />
                 </svg>
-              ) : retrying ? (
+              ) : v.retrying ? (
                 t('common.tryAgain')
               ) : (
                 <MicGlyph />
@@ -279,17 +245,17 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
               <MicGlyph />
             </span>
           )}
-          {saving && (
+          {v.spinner && (
             <svg className={s.spinner} viewBox="0 0 140 140" aria-hidden="true" focusable="false">
               <circle cx="70" cy="70" r="66" />
             </svg>
           )}
         </div>
         <p id={labelId} className={s.label} role="status">
-          {canRecord ? t(labelKey(phase)) : t('m3.elsewhere')}
+          {t(v.label)}
         </p>
-        {recordable && (
-          <button type="button" className={`${ui.press} ${ui.textLink} ${s.skip}`} data-hidden={busy || undefined} disabled={busy} onClick={next}>
+        {v.skipShown && (
+          <button type="button" className={`${ui.press} ${ui.textLink} ${s.skip}`} data-hidden={!v.skipEnabled || undefined} disabled={!v.skipEnabled} onClick={() => dispatch({ type: 'NEXT' })}>
             {isAnswered ? (last ? t('m3.done') : t('m3.next')) : t('m3.skip')}
           </button>
         )}
