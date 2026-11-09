@@ -39,6 +39,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Start the clock
         run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Use Xcode 26 (Swift 6.2; Expo SDK 57's ExpoModulesJSI needs it, the image's default 16.4 has Swift 6.1)
+        run: |
+          ls -d /Applications/Xcode_*.app
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then echo "::error::No Xcode 26 on this runner image"; exit 1; fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          swift --version | head -1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
