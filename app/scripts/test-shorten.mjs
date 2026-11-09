@@ -108,7 +108,9 @@ await test('fetchRecipe: a bucket recipe without substeps comes back with the bu
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => bare(steak) });
   try {
-    const res = await R.fetchRecipe('weed-steak');
+    // Under an id that isn't a retired sample: those find nothing now (recipes.ts RETIRED_SAMPLES).
+    bundled['fixture-steak'] = steak;
+    const res = await R.fetchRecipe('fixture-steak');
     assert.equal(res.source, 'remote');
     assert.deepEqual(res.recipe.steps.map((s) => s.substeps), steak.steps.map((s) => s.substeps));
     assert.deepEqual(res.recipe.steps.map((s) => s.uses), steak.steps.map((s) => s.uses));
