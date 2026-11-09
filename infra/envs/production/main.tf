@@ -69,6 +69,7 @@ locals {
     "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
     "accounts.sweep"        = { expression = "rate(1 hour)", task = "accounts.sweep" }
     "platform.invariants"   = { expression = "rate(5 minutes)", task = "platform.invariants" }
+    "push.sweep"            = { expression = "rate(5 minutes)", task = "push.sweep" }
   }
 
   # Names only. Where each value comes from, and why the four link secrets are production's own: infra/README.md, "Production before launch". A secret
