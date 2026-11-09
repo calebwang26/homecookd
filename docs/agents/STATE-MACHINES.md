@@ -16,7 +16,7 @@ test merged), **retired** (code goes with the old stack).
 | 6 | Mom's answer page (mic, upload, finish, fill) | App Store, web & builds | `web/src/components/mom/QuestionScreen.tsx`, `MomApp.tsx`, `dish/useRecorder.ts` | implicit | 1 |
 | 7 | Claude batch calls (cancel, spend, fallback) | Pipeline & recipes | `pipeline/claude.py` (`BatchState`, `ALLOWED`, `BatchCall.advance`, `reap`), `process.py` (`reap_batches`), `batch_reap.py`, `queue_worker.py` (`ChildJob.reap`); tests `test_claude.py`, `test_queue_worker.py` | explicit | 1 |
 | 8 | Account deletion, outside purge | AWS backend | `api/src/modules/accounts/deletion.ts`, `pipeline/account_purge.py` | implicit | 2 |
-| 9 | Library loading (`loaded` vs family rows) | App screens | `app/src/lib/recipes.ts`, `app/kid/home.tsx`, `app/parent/recipes.tsx` | implicit | 1 |
+| 9 | Library loading (`loaded` vs family rows) | App screens | `app/src/lib/libraryLoad.ts` (the table), `lib/recipes.ts` (`familyChecked`), `app/kid/home.tsx`, `kid/recipes`, `parent/recipes.tsx`, `components/recipes/RecipeList.tsx`; test `app/scripts/test-library.mjs` | explicit (#PR; decision 4) | 1 |
 | 10 | Pushes (`push_log`) | AWS backend | `api/src/modules/messages/push.ts`, `pushData.ts` | implicit | 2 |
 | 11 | Dinners, join requests, swaps, reports | AWS backend | `api/src/modules/community/` | implicit | 2 |
 | 12 | Spend ledger, queue side | Pipeline & recipes | `pipeline/queue_db.py` record_calls, `process.py` usage.json | implicit | 2 |
@@ -44,3 +44,4 @@ test merged), **retired** (code goes with the old stack).
 | 34 | Card page polling and edits | App Store, web & builds | `web/src/components/miss/CardScreen.tsx` | implicit | 3 |
 | 35 | Dinner invite, invite page, shared recipe, clip playback | App Store, web & builds | `web/src/components/dinner-invite/`, `invite/`, `recipe-web/`, `dish/parts.tsx` | implicit | 3 |
 | 36 | A sheet torn down with its screen while its Modal is up (iOS: RN Fabric's `prepareForRecycle` never dismisses the presented Modal, so an empty one can stay over the app) | App screens | `react-native` `RCTModalHostViewComponentView.mm`; seen from `components/ui/BottomSheet.tsx` | implicit | 1.1.2 native |
+| 37 | Account & privacy: "Email the team a report" with `machineHistory()` and the device and app version (no Sentry in the app) | App screens | `app/src/app/index.tsx` Account sheet, `lib/machine.ts` | to build | 3 |

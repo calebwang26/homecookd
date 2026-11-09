@@ -26,7 +26,7 @@ export function kvSetJson(k, v) { return kvSet(k, v == null ? null : JSON.string
 
 const stub = (code) => 'data:text/javascript,' + encodeURIComponent(code);
 const STUBS = {
-  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useSyncExternalStore = (_s, get) => get();'),
+  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useSyncExternalStore = (_s, get) => get(); export const useReducer = (r, a, init) => [init ? init(a) : a, () => {}];'),
   'react-native': stub('export const AppState = { addEventListener: () => ({ remove() {} }) };'),
   'expo-router': stub('export const useIsFocused = () => true;'),
   './api': stub(`globalThis.__auth ??= { key: 'device-key', code: null, profileId: null };

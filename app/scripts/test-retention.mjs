@@ -49,7 +49,7 @@ const STUBS = {
     return p;
   }`),
   'expo-video': stub('export function useVideoPlayer() { return null; }'),
-  react: stub('const none = () => {}; export const useCallback = (f) => f; export const useEffect = none; export const useRef = (v) => ({ current: v }); export const useState = (v) => [v, none]; export const useSyncExternalStore = (_s, g) => g();'),
+  react: stub('const none = () => {}; export const useCallback = (f) => f; export const useEffect = none; export const useRef = (v) => ({ current: v }); export const useState = (v) => [v, none]; export const useSyncExternalStore = (_s, g) => g(); export const useReducer = (r, a, init) => [init ? init(a) : a, () => {}];'),
   'expo-constants': stub(`export default {
     get easConfig() { const id = globalThis.__env.projectId; return id ? { projectId: id } : null; },
     get expoConfig() { return { extra: {} }; },
