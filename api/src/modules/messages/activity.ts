@@ -18,10 +18,10 @@ import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
 import { uploadJob } from "../jobs/service.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
-import { recipeJsonUrl } from "../recipes/read.js";
+import { libraryIdsOfCook, recipeJsonUrl } from "../recipes/read.js";
 import { iso } from "./data.js";
 import { checkDish, dishesOf, library } from "./library.js";
-import { actorOf, type Write } from "./actor.js";
+import { type Actor, actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
 import { attachFile, markForDeletion } from "./uploads.js";
 import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
@@ -259,13 +259,22 @@ export function parseSince(raw: unknown, now: Date): Date {
   return new Date(Math.min(Math.max(t, floor), now.getTime()));
 }
 
+/**
+ * My dishes: the family's recipes I cooked, by their cook_id, and library.json's entries in my name for the dishes from before (dishesOf, the app's cookProfile rule).
+ * Since Nov 8 library.json lists nothing, so before this a cook's own recipes never had hearts or cooks to show.
+ */
+async function myDishes(actor: Actor): Promise<string[]> {
+  const [own, index] = await Promise.all([libraryIdsOfCook(db(), actor.familyId, actor.me.id), library().libraryIndex()]);
+  return [...new Set([...own, ...dishesOf(index, actor.me.name)])];
+}
+
 type DishStat = { hearts: { count: number; by: { personId: string; at: string }[] }; cooked: { count: number; by: { personId: string; count: number; lastAt: string }[] } };
 
 /** Per dish of mine: hearts and cooks from my family now, me excluded. Counts go only to the dish's cook, so ids that aren't mine are left out. Never a ranking. */
 export async function dishStats(signed: Signed, query: Record<string, unknown>) {
   const actor = await actorOf(signed);
   const wanted = parseDishIds(query.ids);
-  const mine = new Set(dishesOf(await library().libraryIndex(), actor.me.name));
+  const mine = new Set(await myDishes(actor));
   const ids = wanted.filter((id) => mine.has(id));
   const out: Record<string, DishStat> = {};
   for (const id of ids) out[id] = { hearts: { count: 0, by: [] }, cooked: { count: 0, by: [] } };
@@ -299,7 +308,7 @@ export async function dishStats(signed: Signed, query: Record<string, unknown>) 
 export async function heartsRecent(signed: Signed, query: Record<string, unknown>) {
   const actor = await actorOf(signed);
   const since = parseSince(query.since, new Date());
-  const mine = dishesOf(await library().libraryIndex(), actor.me.name);
+  const mine = await myDishes(actor);
   const others = actor.here.filter((p) => p.id !== actor.me.id).map((p) => p.id);
   if (mine.length === 0 || others.length === 0) return [];
   const { rows } = await db().query(

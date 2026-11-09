@@ -7,6 +7,12 @@ export type RecipeBrief = { id: string; family_id: string; cook_id: string; titl
 
 const COLUMNS = `id, family_id, cook_id, title, status, library_id`;
 
+/** The library ids of the family's recipes this person cooked: who a dish is "mine" to is its cook_id, never a name. Index: recipes_cook. */
+export async function libraryIdsOfCook(q: Queryable, familyId: string, personId: string): Promise<string[]> {
+  const { rows } = await q.query(`select library_id from recipes where cook_id = $1 and family_id = $2 and library_id is not null limit 1000`, [personId, familyId]);
+  return rows.map((r) => r.library_id as string);
+}
+
 /** Convex's familyRecipe: another family's recipe reads as no recipe. Index: the primary key. Says nothing of who may see it: a route asks recipeFor. */
 export async function familyRecipe(q: Queryable, familyId: string, id: string): Promise<RecipeBrief | null> {
   const { rows } = await q.query(`select ${COLUMNS} from recipes where id = $1 and family_id = $2`, [id, familyId]);
