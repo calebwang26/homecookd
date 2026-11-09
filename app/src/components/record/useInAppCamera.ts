@@ -39,7 +39,7 @@ import { imageManipulator, visionCamera } from '@/lib/live/camera';
 
 import type { DraftClip } from './draft';
 import { chunkName, FRAME_EVERY_MS, FRAME_WIDTH, resumesBySelf, stopsFilming, type CameraPhase, type Facing } from './cameraLogic';
-import { Filming } from './filming';
+import { Filming, type FilmingCamera, type Recorded } from './filming';
 
 export const VIDEO_BITRATE_MBPS = 6; // 1080p30 H.264: ~2 GB for 45 minutes (the pipeline makes a 720p copy anyway)
 const FPS = 30;
@@ -95,6 +95,34 @@ function remove(uri: string) {
   }
 }
 
+/**
+ * CI simulator journeys only (EXPO_PUBLIC_E2E=1): a stand-in camera. Each file "films" until it's stopped, then
+ * is a 5 s clip downloaded from staging media (EXPO_PUBLIC_E2E_CLIP_URL), so the recording goes on to upload
+ * and a job as a real one does. Nothing is bundled; a store build never references this.
+ */
+function e2eCamera(keepFile: (path: string, n: number) => string): FilmingCamera {
+  let open: { finished: (v: Recorded) => void; failed: (e: { code?: string; message?: string }) => void } | null = null;
+  return {
+    startRecording: (finished, failed) => {
+      open = { finished, failed };
+    },
+    stopRecording: async () => {
+      const file = open;
+      open = null;
+      if (!file) return;
+      try {
+        const url = process.env.EXPO_PUBLIC_E2E_CLIP_URL;
+        if (!url) throw new Error('EXPO_PUBLIC_E2E_CLIP_URL is not set');
+        const clip = await File.downloadFileAsync(url, new File(Paths.cache, `e2e-clip-${Date.now()}.mp4`));
+        file.finished({ path: clip.uri, duration: 5, width: 1280, height: 720 });
+      } catch (e) {
+        file.failed({ code: 'e2e-clip', message: String(e) });
+      }
+    },
+    keep: keepFile,
+  };
+}
+
 export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles, onSaved }: Options) {
   const ref = useRef<Camera | null>(null);
   /** The <Camera> element's ref (CameraCard passes it on). */
@@ -108,8 +136,11 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
   // The files: one Filming for the screen's life, talking to whichever <Camera> is mounted.
   const [filming] = useState(() => new Filming());
   useEffect(() => {
+    // CI simulator journeys (EXPO_PUBLIC_E2E=1) film with e2eCamera: a simulator has no camera. Written
+    // inline so a store build folds it to the real camera and drops e2eCamera.
+    const keepFile = (path: string, n: number) => keep(path, cbs.current.recordingId, n);
     filming.connect(
-      {
+      process.env.EXPO_PUBLIC_E2E === '1' ? e2eCamera(keepFile) : {
         startRecording: (finished, failed) => {
           const cam = ref.current;
           if (!cam) throw new Error('no camera on screen');
@@ -121,7 +152,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
           });
         },
         stopRecording: () => ref.current?.stopRecording() ?? Promise.resolve(),
-        keep: (path, n) => keep(path, cbs.current.recordingId, n),
+        keep: keepFile,
       },
       {
         onPause: () => cbs.current.onPause?.(),
@@ -131,6 +162,8 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
         onSaved: (clips) => cbs.current.onSaved?.(clips),
       },
     );
+    // No <Camera> to say it's ready in a CI simulator journey.
+    if (process.env.EXPO_PUBLIC_E2E === '1') filming.initialized();
     return () => filming.dispose(); // leaving the screen never leaves the camera recording
   }, [filming]);
   const view = useSyncExternalStore(filming.subscribe, filming.snapshot);
@@ -234,7 +267,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
 
   return {
     /** null while it asks for the camera and mic; false = film with the system camera instead. */
-    usable: permission === 'asking' ? null : permission === 'granted' && !!vc && !!device,
+    usable: process.env.EXPO_PUBLIC_E2E === '1' ? true : permission === 'asking' ? null : permission === 'granted' && !!vc && !!device,
     Camera: vc?.Camera ?? null,
     setCamera,
     device,
