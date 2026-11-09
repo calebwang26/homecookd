@@ -5,7 +5,7 @@ before it reaches a phone. Workflow: `.github/workflows/ios-journeys.yml`. Journ
 Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 
 1. **The spike (this file's first PR).** The workflow builds the app for the simulator from the PR's own commit
-   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no signing and no EAS)
+   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no signing and no EAS; no ccache until a build passes)
    against AWS staging. It boots an iPhone simulator, installs Maestro (a pinned release whose sha256 is checked) and runs
    one journey: a fresh install opens on the first screen, and a made-up family link opens the dead-link card from
    staging. Each phase's time goes into the run's summary. Three runs, cold then warm, report the real times. The gate is

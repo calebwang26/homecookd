@@ -51,16 +51,13 @@ jobs:
         working-directory: app
         run: |
           npx expo prebuild --platform ios --clean --no-install
-          # ccache for the native compile (the template Podfile reads this property).
-          brew install ccache
-          node -e "const f='ios/Podfile.properties.json';const p=require('./'+f);p['apple.ccacheEnabled']='true';require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+          # No ccache yet: as a compiler launcher it clashes with Xcode's explicit modules and broke Expo's
+          # ExpoModulesJSI xcframework script on the first run. A passing build first, then speed.
           echo "T_PREBUILD=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Restore Pods and ccache
+      - name: Restore Pods
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            app/ios/Pods
-            ~/Library/Caches/ccache
+          path: app/ios/Pods
           key: ios-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/app.config.ts', 'app/plugins/**') }}
           restore-keys: ios-${{ runner.os }}-
       - name: Pods
@@ -71,11 +68,21 @@ jobs:
       - name: "Build for the simulator (Release, so the JS is bundled in: no Metro)"
         working-directory: app/ios
         run: |
-          set -o pipefail
+          LOG="$RUNNER_TEMP/maestro-out/xcodebuild.log"
+          mkdir -p "$RUNNER_TEMP/maestro-out"
+          set +e
           xcodebuild -workspace homecookd.xcworkspace -scheme homecookd -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO build | tail -40
-          ccache -s | head -8 || true
+            COMPILER_INDEX_STORE_ENABLE=NO build > "$LOG" 2>&1
+          CODE=$?
+          set -e
+          tail -15 "$LOG"
+          if [ $CODE -ne 0 ]; then
+            echo "::group::Errors"; grep -n -E "error:|\*\* BUILD FAILED|The following build commands failed" "$LOG" | head -40; echo "::endgroup::"
+            # A failing script phase prints its own output just before its "Command PhaseScriptExecution failed" line.
+            echo "::group::Failing script phases"; grep -n -B60 "Command PhaseScriptExecution failed" "$LOG" | tail -120; echo "::endgroup::"
+            exit $CODE
+          fi
           echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
       - name: Boot a simulator and install the app
         run: |
@@ -106,7 +113,7 @@ jobs:
             echo "| Phase | Time |"; echo "|---|---|"
             echo "| npm ci + prebuild | $(m "$T0" "$T_PREBUILD") |"
             echo "| Pods (with cache) | $(m "$T_PREBUILD" "$T_PODS") |"
-            echo "| xcodebuild Release (ccache) | $(m "$T_PODS" "$T_BUILD") |"
+            echo "| xcodebuild Release | $(m "$T_PODS" "$T_BUILD") |"
             echo "| Simulator boot + install | $(m "$T_BUILD" "$T_BOOT") |"
             echo "| Maestro journeys | $(m "$T_BOOT" "$T_JOURNEYS") |"
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
