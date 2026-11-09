@@ -15,6 +15,11 @@ Fill this in as fixes land; the first `production-aws` build of 1.1.1 is checked
    sage; the 1.0 cooking pot never flashes. 📸 or a screen recording of one launch.
 2. **New message → Add family** (#402; also goes out by OTA to 1.1). Messages → New message → Add family: the invite
    sheet shows. Close it, then tap a chat: it opens.
+3. **Copy link, then the screen still updates** (#410; its OTA to 1.1.0 waits on this step, from draft #411). Messages
+   → New message → Add family → **Copy link**: the button shows "Copied" with a check. Close the sheet with the X → tap
+   a chat: it opens and you see it → back → tap **Home**: Home shows. Then Recipes → any dish → share → **Copy link**
+   → close → tap around: everything you tap shows. A frozen picture while taps still do things is the bug.
+   📸 or a screen recording if anything stops updating.
 
 ## Build 15: the morning check (Nov 7)
 
