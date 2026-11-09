@@ -10,6 +10,7 @@ import { useLang } from '@/components/dish/lang';
 import { inAppBrowser, useRecorder, type Clip } from '@/components/dish/useRecorder';
 import { IconBack } from '@/components/recipe-web/icons';
 import { clock } from '@/lib/dish/text';
+import { record } from '@/lib/machine';
 import type { QuestionId } from '@/lib/dish/types';
 import ui from '@/components/dish/ui.module.css';
 import m from './mom.module.css';
@@ -92,6 +93,7 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
   /** One event through the table: the new state, and its command run. False when the table ignores it. */
   const dispatch = (e: QEvent<Pending>): boolean => {
     const step = transition(now.current, e);
+    record('question', e, now.current.phase.k, step?.state.phase.k ?? null);
     if (!step) return false;
     const moved = step.state.index !== now.current.index;
     now.current = step.state;

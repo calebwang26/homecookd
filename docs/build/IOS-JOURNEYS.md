@@ -24,8 +24,9 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
    `safe-eas-update.sh production-aws --caleb-ok` (1.1.1) then needs a passing run on a commit with the same `app/` tree as
    HEAD, or `--no-sim "<reason>"` (#444).
 
-**Time.** The spike's first three runs took 40–42 min: the Release build about 25 min, the new simulator's boot about 9
-(7m21s of it iOS's one-time "Data Migration"), the journeys 2–4. So:
+**Time.** Baseline: the spike's timed runs on `55e9d973b` (run 42571326165) took **40m09s and 42m23s**. A third attempt
+was cancelled by a merge from main. The Release build took about 25 min, the new simulator's boot about 9 (7m21s of it
+iOS's one-time "Data Migration"), and the journeys 2–4. So:
 
 - The simulator starts booting right after Xcode is picked, and boots while the app builds.
 - The build is arm64 only (a Release build for the generic simulator also builds x86_64).

@@ -199,6 +199,16 @@ Caleb picks one.
       d8ea50c8-4969-4c25-9d84-74f32a4430a1 --destination-branch production-aws --platform ios --non-interactive`.
     - Undo for 1.1.1, back to build 21's own JS: `update:roll-back-to-embedded --channel production-aws
       --runtime-version 1.1.1 --platform ios`.
+  - **Canary order (Nov 9, #443):** every later update goes to 1.1.1 first. `safe-eas-update.sh` refuses 1.1.0 until the
+    newest 1.1.1 group is 2 hours old (`CANARY_HOURS`) and holds the same copy of every app/src file the 1.1.0 checkout
+    changed since build 18. `scripts/check-canary.mjs` prints the time it becomes allowed and any file that differs.
+    `--canary-ok "<reason>"` skips the wait, and the update's message carries the reason.
+  - **Simulator gate (Nov 9):** a 1.1.1 publish from main needs the iOS journeys (`.github/workflows/ios-journeys.yml`)
+    to have passed on a commit with the same `app/` tree as HEAD, from this repo and not a fork, with nothing uncommitted
+    in `app/`. `scripts/check-sim.mjs` names the run, or says how to get one. `--no-sim "<reason>"` publishes anyway, and
+    the update's message carries the reason. 1.1.0 has no gate of its own: the canary sends it only what 1.1.1 runs.
+    The 1.1.1 updates staged on Nov 8 (`ota-1-1-1`, `ota-1-1-1-roles`) publish with their own copy of the script, from
+    before the gate.
 
 ## What production has on at launch
 

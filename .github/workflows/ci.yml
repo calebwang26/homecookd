@@ -39,6 +39,8 @@ jobs:
           done
       # A state machine's table changed without its test (docs/agents/STATE-MACHINES.md): every section's PRs.
       - run: node scripts/check-machine-tests.mjs "origin/$GITHUB_BASE_REF"
+      # The repo scripts' own tests (the canary order, safe-eas-update.sh's arguments, the marker check): fast, no network.
+      - run: node --test scripts/*.test.mjs
 
   secrets:
     runs-on: ubuntu-latest
@@ -48,10 +50,13 @@ jobs:
         with:
           fetch-depth: 0
       # gitleaks 8.24.0. The sha256 is the linux_x64 line of gitleaks_8.24.0_checksums.txt on its GitHub release. A new version changes
-      # the URL and the sha256 together (infra/README.md, "Pinned actions and tools").
+      # the tag and file name and the sha256 together (infra/README.md, "Pinned actions and tools"). Downloaded with the job's token:
+      # on Nov 9 GitHub answered anonymous release downloads with 504 for hours ("surge in anonymous users") while these worked.
       - name: Scan this PR's commits
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.24.0/gitleaks_8.24.0_linux_x64.tar.gz
+          gh release download v8.24.0 --repo gitleaks/gitleaks --pattern gitleaks_8.24.0_linux_x64.tar.gz --output "$RUNNER_TEMP/gitleaks.tar.gz"
           echo "cb49b7de5ee986510fe8666ca0273a6cc15eb82571f2f14832c9e8920751f3a4  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
           tar xzf "$RUNNER_TEMP/gitleaks.tar.gz" gitleaks
           ./gitleaks git --no-banner --redact -v --log-opts="origin/$GITHUB_BASE_REF..HEAD" # -v says which rule and file; --redact keeps the value out of the log
