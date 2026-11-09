@@ -27,6 +27,9 @@ fi
 # Undo (eas-cli 27.5.0): the phones go back to build 18's own JS on a launch after they fetch it.
 #   cd app && npx eas-cli update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios \
 #     --message "Back to build 18's own JS" --non-interactive
+# Main says 1.1.1 since Nov 8 (Apple closed the 1.1.0 train once it was released, so new binaries are 1.1.1), so an
+# update for today's 1.1.0 phones is published from a 1.1.0 commit (690bf30c3 has #402), never from main. Once 1.1.1
+# is in the store, this becomes 1.1.1.
 PRODUCTION_AWS_RUNTIME=1.1.0
 if [ "$CHANNEL" = "production-aws" ]; then
   if [ "$CHECK_ONLY" != "--check-only" ] && [ "$CHECK_ONLY" != "--caleb-ok" ]; then
@@ -35,7 +38,7 @@ if [ "$CHANNEL" = "production-aws" ]; then
   fi
   RUNTIME=$(node -p "require('$ROOT/app/app.json').expo.version")
   if [ "$RUNTIME" != "$PRODUCTION_AWS_RUNTIME" ]; then
-    echo "REFUSED: app.json says $RUNTIME, but the production-aws build in the store runs $PRODUCTION_AWS_RUNTIME. An update for another runtime reaches nobody." >&2
+    echo "REFUSED: app.json says $RUNTIME, but the production-aws build in the store runs $PRODUCTION_AWS_RUNTIME. An update for another runtime reaches nobody. Publish from a $PRODUCTION_AWS_RUNTIME commit (a worktree at 690bf30c3), not from main." >&2
     exit 1
   fi
   if env | grep -q '^EXPO_PUBLIC_'; then
