@@ -30,11 +30,10 @@
 //   onShown   the native Modal finished presenting (the provider's watchdog)
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { nightTitle } from '@/components/community/labels';
-import { BottomSheet, CheckIcon, CloseIcon, EggMascot, Txt, haptic, useToast } from '@/components/ui';
+import { Appear, BottomSheet, CheckIcon, CloseIcon, EggMascot, haptic, Txt, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { totalTimeLabel } from '@/lib/format';
 import { useRecipe } from '@/lib/recipes';
@@ -290,14 +289,14 @@ function ShareBody({
             {/* Over the swatches, just above the faces: the send can't land out of sight. */}
             <View pointerEvents="none" style={styles.sentLayer}>
               {sentTo ? (
-                <Animated.View key={sentTo.n} entering={FadeIn.duration(180)} exiting={FadeOut.duration(180)} style={styles.sentToast}>
+                <Appear key={sentTo.n} style={styles.sentToast}>
                   <View style={styles.sentDisc}>
                     <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />
                   </View>
                   <Txt variant="label" size={15} weight={600} color={colors.card} numberOfLines={1} style={styles.sentText}>
                     {t('share.family.sentTo', { name: sentTo.name })}
                   </Txt>
-                </Animated.View>
+                </Appear>
               ) : null}
             </View>
           </View>

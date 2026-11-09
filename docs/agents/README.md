@@ -90,3 +90,4 @@ Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "
 | Built-in browser / preview tools | Playwright, or `npx expo start --web` and a screenshot script (`app/scripts/shot.mjs`) |
 | iOS Simulator tool | `xcrun simctl` (`openurl` for Expo Go deep links) |
 | `humanizer` skill | `cp -R ~/.claude/skills/humanizer ~/.codex/skills/` |
+- `repo-public.md`: Nov 8: the repo is public for unlimited Actions minutes; history scanned clean; nothing private may be committed, gitignored secrets stay untracked.

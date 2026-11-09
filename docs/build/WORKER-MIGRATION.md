@@ -42,7 +42,8 @@ the `:bootstrap` image, so run "Deploy to AWS" for `worker` before running a tas
 **Safe to repeat.** Only a conditional `UPDATE` starts a job (`queued`, or running with a heartbeat older than 10 minutes). It adds 1
 to `attempts`, and every later write names that attempt, so a worker that lost its claim changes nothing. Each attempt publishes to
 its own folder, `<recipe folder>/<job>-a<n>/`, so it can't overwrite another's files. One transaction then saves the recipe, the
-follow-up questions, the job's end and an outbox row (`recipe_published`, ids only).
+job's end and an outbox row (`recipe_published`, ids only). recipe.json's `follow_up_questions` don't become questions for the cook
+(Caleb, Nov 8: only a kid's question asks her).
 
 **Timing.** Heartbeat every 30 s, which is also how late a cancel can be noticed. Visibility is extended to 15 minutes every 2 minutes.
 Lease 10 minutes. A job over 10 hours fails visibly, because SQS can't hold a message past 12 hours from a receive.
@@ -75,7 +76,14 @@ Every attempt starts clean from the raw upload, which this assumes is still ther
 | Only the child, say out of memory | The parent is alive | Counts as a failed try |
 | Database down mid-job | The parent stops the child before the lease could lapse, and writes nothing | Message returns; re-runs once the database is back |
 
-**Every worker deploy uses one of a job's 3 receives,** so three deploys during one long job send it to the dead letters, which alarm. Don't deploy the worker repeatedly during a long job.
+**A deploy waits for a running job (Nov 7).** The worker holds ECS task protection while it runs a job and lets go when the job ends,
+however it ends, so a release starts the new task beside it and stops the old one only once the job is over. Protection ends by itself
+after the longest job plus 15 minutes (`PROTECT_MIN`), so a stuck worker can't hold a release back for longer than that. The deploy
+workflow's wait for a steady service gives up after 10 minutes, so during a long job the run can show failed while the rollout still
+finishes later: check the service, not the run. Without the task role's `ecs:UpdateTaskProtection` (or off ECS) the worker logs
+`task protection not changed` and works as before.
+
+**Every worker deploy without protection uses one of a job's 3 receives,** so three deploys during one long job send it to the dead letters, which alarm. Don't deploy the worker repeatedly during a long job.
 
 **SIGTERM:** stops taking messages, kills the child, sets the job back to `queued`, hands the message back at once. A job that had
 already finished its work saves first. This uses up one of the 3 receives, so a stop on the last one reaches the dead letters with

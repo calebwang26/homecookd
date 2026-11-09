@@ -9,9 +9,8 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Avatar, BackIcon, BottomSheet, ChatIcon, ChevronRightIcon, IconButton, ListCard, ListRow, Txt, useToast } from '@/components/ui';
+import { Appear, Avatar, BackIcon, BottomSheet, ChatIcon, ChevronRightIcon, IconButton, ListCard, ListRow, Txt, useToast } from '@/components/ui';
 import { errorMessage, type Profile } from '@/lib/api';
 import { openChatWith, openCircle } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
@@ -89,7 +88,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
       accessibilityLabel={pick ? t('messages.ask.whoTitle') : t('messages.ask.title')}>
       <ScrollView style={[styles.scroll, { maxHeight: Math.max(320, winH * 0.92 - 230) }]} contentContainerStyle={styles.scrollPad} showsVerticalScrollIndicator={false}>
         {!pick ? (
-          <Animated.View key="dishes" entering={FadeIn.duration(180)}>
+          <Appear key="dishes">
             <DishList dishes={dishes} onPick={(d) => setPick({ dish: d })} rowLabel={(d) => t('messages.ask.aboutDish', { dish: d.title })}>
               <OptionRow
                 icon={<ChatIcon size={24} color={colors.ink} />}
@@ -98,9 +97,9 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
                 onPress={() => setPick({ dish: null })}
               />
             </DishList>
-          </Animated.View>
+          </Appear>
         ) : (
-          <Animated.View key="who" entering={FadeIn.duration(180)} style={styles.who}>
+          <Appear key="who" style={styles.who}>
             <View style={styles.context}>
               <IconButton
                 icon={<BackIcon size={20} color={colors.ink} strokeWidth={2.2} />}
@@ -153,7 +152,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
                 />
               ))}
             </ListCard>
-          </Animated.View>
+          </Appear>
         )}
       </ScrollView>
     </BottomSheet>

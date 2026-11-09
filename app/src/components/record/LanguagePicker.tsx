@@ -5,9 +5,8 @@
 //   <LanguageSheet visible value onPick onClose />               in a sheet (its own scroll)
 import { useState } from 'react';
 import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { BottomSheet, CheckIcon, CloseIcon, haptic, PressableScale, SearchIcon, Txt } from '@/components/ui';
+import { Appear, BottomSheet, CheckIcon, CloseIcon, haptic, PressableScale, SearchIcon, Txt } from '@/components/ui';
 import { LANGUAGES, matchLanguages, type Language } from '@/lib/languages';
 import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, fonts, radii, shadows } from '@/theme/tokens';
@@ -43,11 +42,11 @@ export function LanguagePicker({ value, onChange, onSheet = false }: { value: st
           style={styles.input}
         />
         {query ? (
-          <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
+          <Appear duration={150}>
             <PressableScale onPress={() => setQuery('')} haptic accessibilityLabel={t('profiles.language.clear')} hitSlop={13} style={styles.clear}>
               <CloseIcon size={14} color={colors.card} strokeWidth={2.6} />
             </PressableScale>
-          </Animated.View>
+          </Appear>
         ) : null}
       </View>
       <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel={t('profiles.language.list')}>

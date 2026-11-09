@@ -18,7 +18,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 RUNNING = ["preparing", "understanding", "writing", "indexing"]
-MAX_FOLLOW_UPS = 5  # convex/lib/recipeJson.ts
 CA_FILE = "/app/rds-ca.pem"  # pipeline/Dockerfile
 SCOPE = "pipeline"
 DAY = "(now() at time zone 'utc')::date"
@@ -118,17 +117,11 @@ def recipe_row(raw: dict) -> dict:
     for i, s in enumerate(objects("steps", 100)):
         if text := _text(s.get("tip")):
             memories.append({"kind": "tip", "text": text, "moment": _moment(s), "step": _order(s, i)})
-    asked: dict[str, dict] = {}
-    for q in objects("follow_up_questions", 20):
-        qid, question = _text(q.get("id"), 100), _text(q.get("question"), 500)
-        if qid and question and qid not in asked:
-            at = by_order.get(q.get("about_step"))
-            asked[qid] = {"id": qid, "question": question, "step": at and at["order"], "ingredient": _text(q.get("ingredient"), 100)}
-    # Ingredient questions first: only these can change the recipe.
-    follow_ups = sorted(asked.values(), key=lambda f: not f["ingredient"])[:MAX_FOLLOW_UPS]
+    # follow_up_questions stay in recipe.json but never become questions for the cook. Caleb, Nov 8: eight auto-written
+    # questions were overwhelming, and the cook should only be asked what a kid asks.
     language = (_text(raw.get("language"), 10) or "").lower()
     return {"title": title, "library_id": _text(raw.get("id"), 200), "steps": steps, "memories": memories,
-            "language": language if re.fullmatch(r"[a-z]{2,3}", language) else None, "follow_ups": follow_ups}
+            "language": language if re.fullmatch(r"[a-z]{2,3}", language) else None}
 
 
 def iam_password(host: str, port: int, user: str, rds=None):
@@ -367,7 +360,7 @@ class PostgresStore:
         self._do(work)
 
     def finish(self, claim: dict, row: dict, keys: dict, result: dict, request_id: str | None) -> bool:
-        """The recipe goes live here, and only here: recipe, follow-ups, the job's end and the follow-on message, all or nothing.
+        """The recipe goes live here, and only here: recipe, the job's end and the follow-on message, all or nothing.
         False means it didn't happen: the cook cancelled, or another worker holds the job."""
         def work(c):
             with c.transaction():
@@ -381,12 +374,6 @@ class PostgresStore:
                 if job["stage"] not in RUNNING:
                     return False
                 recipe_id = self._save_recipe(c, job, claim, row, keys)
-                for f in row["follow_ups"]:
-                    c.execute("""insert into questions (family_id, recipe_id, step_order, asked_by, text, kind, follow_up_id,
-                                                         follow_up_ingredient, status)
-                                 values (%s, %s, %s, %s, %s, 'follow_up', %s, %s, 'asked_cook')
-                                 on conflict (recipe_id, follow_up_id) where follow_up_id is not null do nothing""",
-                              (job["family_id"], recipe_id, f["step"], job["cook_id"], f["question"], f["id"], f["ingredient"]))
                 c.execute("""update jobs set stage = 'done', progress = 1, error = null, finished_at = now(), updated_at = now(),
                                   recipe_id = %s, result_model = %s, result_prompt_version = %s where id = %s""",
                           (recipe_id, result.get("model"), result.get("prompt_version"), job["id"]))

@@ -8,7 +8,8 @@
 //  - `success={{ title, subtitle }}` runs the Luma confirmation: the content fades out, a
 //    SuccessBurst plays at the top-centre, holds 1.4 s, then `onSuccessDone` (default: onClose).
 // Renders in a transparent native Modal so it sits above tabs and navigators on iOS and web.
-// iOS: a sheet opening while another one is still animating out waits for that one's Modal to go
+// iOS: a sheet opening while another one is still animating out (or, created already open, while any
+// other sheet's Modal is up) waits for that one's Modal to go
 // (presenting a Modal mid-dismissal is a UIKit hazard), up to CLOSING_WAIT_MS, then SETTLE_MS more
 // so UIKit's dismissal finishes before the next presentViewController.
 import { BlurView } from 'expo-blur';
@@ -123,8 +124,12 @@ export function BottomSheet({
     () => false,
   );
   // True once this open has had to wait on another sheet; it then mounts from the timer below.
-  const [held, setHeld] = useState(false);
-  const [mounted, setMounted] = useState(visible);
+  // A sheet created already visible (the keyed sheets make a fresh one per opening: "New message" →
+  // "Add family") starts held when another sheet's Modal is up, since that one may be closing in this
+  // same tap and only says so in its effect. Mounting at once presented over a dismissing Modal on iOS:
+  // nothing showed, and an invisible Modal took every tap on the screen (1.1, Nov 8).
+  const [held, setHeld] = useState(() => visible && up.size > 0);
+  const [mounted, setMounted] = useState(() => visible && !held);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
@@ -307,7 +312,7 @@ export function BottomSheet({
             ) : null}
           </Animated.View>
         </KeyboardAvoidingView>
-        <ToastViewport position="top" />
+        <ToastViewport position="top" inSheet />
       </GestureHandlerRootView>
     </Modal>
   );

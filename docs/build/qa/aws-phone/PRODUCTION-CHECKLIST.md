@@ -5,6 +5,27 @@ with a new build number (15 since Nov 7), from main, talking only to `https://ap
 build CUTOVER step 9 submits, so nothing is rebuilt between this check and the submission. Unlike the staging run
 ([CHECKLIST.md](CHECKLIST.md)), this one uses real models, real pushes and the real alerts email.
 
+## 1.1.1: before it goes to App Review
+
+Fill this in as fixes land; the first `production-aws` build of 1.1.1 is checked on Caleb's phone before it's submitted.
+
+**Passed on 1.1.1 (21), Nov 8:** Caleb ran steps 1–3 and reported "Everything works." (App Store, web & builds tab). After
+that, #410 went to every 1.1.0 phone as an OTA at 17:18 PT (production-aws, update group
+`d8ea50c8-4969-4c25-9d84-74f32a4430a1`, from #411's head `0149fe4be`, then #411 closed). Add new 1.1.1 fixes below as
+steps 4 on, and check them on the next build.
+
+1. ✅ **No pot at launch** (#405, native, so only in a new build). Install the first 1.1.1 build from TestFlight **over**
+   the 1.1 already on the phone (build 18 or 20; don't delete it first, or the old snapshot goes with it and this
+   proves nothing). Fully close the app, then open it, three times. Each time the first thing on screen is the egg on
+   sage; the 1.0 cooking pot never flashes. 📸 or a screen recording of one launch.
+2. ✅ **New message → Add family** (#402; also goes out by OTA to 1.1). Messages → New message → Add family: the invite
+   sheet shows. Close it, then tap a chat: it opens.
+3. ✅ **Copy link, then the screen still updates** (#410; its OTA to 1.1.0 waits on this step, from draft #411). Messages
+   → New message → Add family → **Copy link**: the button shows "Copied" with a check. Close the sheet with the X → tap
+   a chat: it opens and you see it → back → tap **Home**: Home shows. Then Recipes → any dish → share → **Copy link**
+   → close → tap around: everything you tap shows. A frozen picture while taps still do things is the bug.
+   📸 or a screen recording if anything stops updating.
+
 ## Build 15: the morning check (Nov 7)
 
 About 15 minutes, in this order. Build 15 is from main `df4337659` (13 and 14 were numbers spent on uploads that never finished): filming waits for your tap (#375), and recipes,

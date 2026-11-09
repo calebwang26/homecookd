@@ -11,10 +11,9 @@
 // A taken name comes back as the server's sentence under the field. It starts fresh on every open.
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ErrorLine, SignInField } from '@/components/signin/SignInScreen';
-import { ActionButton, type ActionState, Avatar, BottomSheet, PressableScale, SegmentedChoice, Txt } from '@/components/ui';
+import { ActionButton, type ActionState, Appear, Avatar, BottomSheet, PressableScale, SegmentedChoice, Txt } from '@/components/ui';
 import { api, errorMessage, type Profile, type Role } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
@@ -103,7 +102,7 @@ function AddPhoneless({ visible, onClose, onSwitch, role: fixedRole }: AddPhonel
         onClose={onClose}
         accessibilityLabel={t('profiles.phoneless.addedLabel', { name: added.name })}
         footer={<ActionButton label={t('profiles.sheet.done')} size="xl" onPress={onClose} />}>
-        <Animated.View entering={FadeIn.duration(180)} style={styles.added}>
+        <Appear style={styles.added}>
           <Avatar profile={added} size={72} />
           <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
             {t('profiles.phoneless.added', { name: added.name })}
@@ -118,7 +117,7 @@ function AddPhoneless({ visible, onClose, onSwitch, role: fixedRole }: AddPhonel
               {t('profiles.phoneless.switchTo', { name: added.name })}
             </Txt>
           </PressableScale>
-        </Animated.View>
+        </Appear>
       </BottomSheet>
     );
   }

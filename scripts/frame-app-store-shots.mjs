@@ -1,9 +1,12 @@
 // Frames the 1.1 App Store screenshots: a caption on top, the raw screen below, 1320 × 2868 (6.9").
-// Reads docs/app-store/screenshots/1.1/raw/*.png and writes the framed copies next to raw/.
+// Reads docs/app-store/screenshots/1.1/raw/*.png and writes the framed copies next to raw/, plus a
+// 1206 × 2622 copy of each in medium/: App Store Connect's default iPhone tab takes only the medium size
+// (1206 × 2622 or 1179 × 2556); the 6.9" ones go in through Media Manager.
 // Usage: node scripts/frame-app-store-shots.mjs [only-this-file.png ...]
-// Needs web/node_modules (cd web && npm ci) and Google Chrome.
+// Needs web/node_modules (cd web && npm ci), Google Chrome and macOS's sips.
 import { createRequire } from 'node:module';
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -52,6 +55,8 @@ try {
       if (!document.fonts.check('600 112px Fraunces')) throw new Error('Fraunces did not load');
     });
     await tab.screenshot({ path: path.join(dir, f) });
+    mkdirSync(path.join(dir, 'medium'), { recursive: true });
+    execFileSync('sips', ['-z', '2622', '1206', path.join(dir, f), '--out', path.join(dir, 'medium', f)], { stdio: 'ignore' });
     console.log('framed', f);
   }
 } finally {

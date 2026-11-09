@@ -1,5 +1,6 @@
 // homecookd UI kit (Hearth layout, the egg brand's colors and mark). Import from '@/components/ui'. See /dev/gallery for every piece on screen.
 export * from './ActionButton';
+export * from './Appear';
 export * from './Avatar';
 export * from './BottomSheet';
 export * from './Brand';

@@ -68,6 +68,10 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **The repo is public (Caleb, Nov 8, 2026)** for unlimited Actions minutes: every tracked file and the whole history can be read by
+  anyone. Nothing private may be committed: no reviewer link or family code, no phone numbers or family members' personal details, no
+  keys or `.env` values. The gitignored `docs/build/.test-family-link`, `.env` and `app/.env` stay untracked. A PR from a fork runs the
+  workflows without secrets; never add `pull_request_target`. `docs/agents/memory/repo-public.md`.
 - **Purge dead branches (Caleb, Nov 2).** Delete a branch when its PR merges (`gh pr merge --delete-branch`, or delete
   the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`,
   or whose draft was superseded by a merged PR. Never delete `main`, a branch with an
@@ -216,10 +220,11 @@ cd app && npx expo start --dev-client                               # the EAS de
 cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
 cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
 cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-testers build on the staging channel (while 1.0 is in App Review)
-scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
+scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); never --channel production (that reaches public 1.0, build 6, on the old backend)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
-scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
-cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # CUTOVER step 8: 1.1 on production AWS (api.homecookd.app), the build step 9 submits; only on the Master Agent's word that production is ready; no EAS Updates to its channel yet
+scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging and production-aws only, refuses production
+scripts/safe-eas-update.sh production-aws "<what changed>" --check-only|--caleb-ok  # a JS fix to production-aws phones: runtime 1.1.0 (build 18, the App Store's 1.1) from a 1.1.0 checkout, or 1.1.1 (build 21, TestFlight) from main; exactly the build profile's values, no app/.env; publishing needs Caleb's yes
+cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1 on production AWS (api.homecookd.app): the App Store build (18, released Nov 8); its JS fixes go out with safe-eas-update.sh production-aws
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
@@ -246,7 +251,7 @@ node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
 node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
-node scripts/frame-app-store-shots.mjs [file.png ...]                # caption and frame docs/app-store/screenshots/1.1/raw/ into 1.1/ (needs web/node_modules, Chrome)
+node scripts/frame-app-store-shots.mjs [file.png ...]                # caption and frame docs/app-store/screenshots/1.1/raw/ into 1.1/ (6.9") and 1.1/medium/ (1206 × 2622); needs web/node_modules, Chrome
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)

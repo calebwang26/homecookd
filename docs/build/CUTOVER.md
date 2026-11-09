@@ -147,18 +147,46 @@ Caleb picks one.
 - **Check:** step 2's list again on production, now with real models: a recording all the way to a recipe, a push, delete account. The reviewer's path from the notes, on the TEST family. A demo family's recipes, if step 7 copied them. The site's pages: a card made on `/miss` and answered on `/a`, a family link on `/i`, a share on `/r`, a dinner on `/d`. Production's alarms stay quiet.
 - **Back:** fix it and build again. Nothing public changed. The test people it made are deleted through the app's own delete.
 
-### 9. Submit 1.1. OK
+### 9. Submit 1.1. Done (Nov 7)
+- **Done:** 1.0 (build 6) was released on Nov 7 at 14:35 PT, and **1.1.0 (build 18, `production-aws`, main `8d4430d0a`)** was submitted as an update at 15:55 PT. It shows **Waiting for Review**, with manual release. How and why: `docs/app-store/SUBMIT-1.1.md`. **Next is step 10**, when Apple approves.
 - **Who:** App Store/web. Salik submits.
 - **Do:** submit the build that passed step 8, not a new one. Under the App Review guard, in one PR: the per-guideline check (2.1 demo access, 4.8 sign-in, 5.1.1(v) delete account, 5.1.2 data sharing and AI consent), the reviewer notes for 1.1's sign-in (a family link, a name, then Sign in with Apple), the App Privacy answers from step 5, and screenshots of any screen that changed. Set 1.1's release to manual too, so it goes out only at step 10.
-- **App Store Connect won't start a new version while 1.0 waits as Pending Developer Release** (open question 1). So this step is: cancel 1.0's pending release (remove it from review, which is allowed from that state), then resubmit **the same version, 1.0, with the AWS build** (a new build number), so no new version is needed. It goes through review again. Releasing 1.0 instead would put real families on Convex, Supabase and GCS. **The api needs nothing different for this:** in these docs "1.1" means the build that talks only to AWS, whatever version number it ships as. The api never reads the version, and the build number is only counted by `LOG_APP_BUILDS`.
+- **The plan until Nov 7 (replaced):** App Store Connect won't start a new version while 1.0 waits as Pending Developer Release (open question 1). So this step was going to be: cancel 1.0's pending release (remove it from review, which is allowed from that state), then resubmit **the same version, 1.0, with the AWS build** (a new build number), so no new version is needed. It goes through review again. **What happened instead (Caleb, Nov 7):** 1.0 was released, and the AWS build went in as version 1.1.0, an update, because a first-version review had taken a week. Real families can now join 1.0 on Convex, Supabase and GCS; they start over on 1.1, so there's no marketing until 1.1 is live, and the old stack stays up until then. **The api needs nothing different for this:** in these docs "1.1" means the build that talks only to AWS, whatever version number it ships as. The api never reads the version, and the build number is only counted by `LOG_APP_BUILDS`.
 - **Check:** 1.1 shows Waiting for Review. Production stays up and watched while Apple reviews, because the reviewer uses it.
 - **Back:** remove 1.1 from review, fix it, submit again.
 
-### 10. Release 1.1, and point the site at the api. OK
+### 10. Release 1.1, and point the site at the api. Done (Nov 8)
+- **Done:** Apple approved 1.1.0, and Caleb released it: live on the App Store at **15:09 PT, Nov 8** (Apple's lookup:
+  `currentVersionReleaseDate` 23:09:41Z). On his "Go", App Store/web set the five values in Vercel, Production only:
+  `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` and `NEXT_PUBLIC_DISH_URL` at `https://api.homecookd.app`,
+  `NEXT_PUBLIC_BUCKET_URL` at `https://media.homecookd.app`, and `NEXT_PUBLIC_DISH_UPLOADS=links`. One production build
+  followed: `homecookd-l7rt4md0p` (a redeploy of `homecookd-glnrxk2qr`, which stays the site's way back).
+- **Checked:**
+  - `web-smoke.mjs`: 86 paths and the extra checks OK.
+  - Every JS chunk of nine pages (40) names `api.homecookd.app` and `media.homecookd.app`, and none names Supabase,
+    Convex or GCS.
+  - CORS allows `homecookd.app` and `www`.
+  - A made-up `/miss` card on production went: `POST /dish/files` 201 → PUT to the private S3 bucket 200 →
+    `/dish/files/confirm` 201 → `/dish/cards` 201, then Ask Mom and the peeks. There was no failed request and no
+    CORS error.
+- **Open:** Mom's voice answer on `/a` isn't proven on production yet. The test's hold-to-talk timed out twice. That's
+  because this Mac's headless Chrome can't open its fake mic on any site (example.com too), not because of the switch,
+  which didn't touch the recorder. Caleb checks it on a phone: open a card's Ask Mom link, hold to talk, then Send.
+- Two made-up "Testkid" cards from those runs are in production's dish tables.
 - **Who:** Caleb presses "Release This Version" on 1.1. In the same hour, App Store/web sets the site's values in Vercel and builds production once: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` and `NEXT_PUBLIC_DISH_URL` at `https://api.homecookd.app`, `NEXT_PUBLIC_BUCKET_URL` at `https://media.homecookd.app`, and `NEXT_PUBLIC_DISH_UPLOADS=links`. The dish values go in one build: the api refuses raw files with a 415, and Convex refuses the links.
 - **Check:** `node infra/scripts/web-smoke.mjs https://homecookd.app`. A card made on `/miss` goes to `api.homecookd.app`: the network tab shows the upload link, the PUT to S3, then `/dish/files/confirm`. A real `/i` link opens 1.1 on an installed phone. The store shows 1.1. The first real sign-ups land in production, and the alarms stay quiet.
 - **Back, for the site:** promote the previous Vercel deployment, in seconds. Only for a broken site, and briefly: a kid's card then goes to Convex, where no parent on 1.1 sees it.
-- **Back, for the app:** there's no going back to Convex after this, because real families are on AWS only. A problem is fixed forward: production's own rollbacks (the previous task definition, RDS's point-in-time restore), an EAS Update for a JS fix through `scripts/safe-eas-update.sh`, or a 1.2 for a native one.
+- **Back, for the app:** there's no going back to Convex after this, because real families are on AWS only. A problem is fixed forward: production's own rollbacks (the previous task definition, RDS's point-in-time restore), an EAS Update for a JS fix through `scripts/safe-eas-update.sh`, or a new version for a native one (1.1.1 or later:
+  Apple closed the 1.1.0 train when it approved 1.1.0, so no new 1.1.0 binary is accepted, TestFlight included).
+  - **The first production update (Nov 8, 16:38 PT):** #402 (New message → Add family froze Messages) went to every 1.1
+    phone through `safe-eas-update.sh production-aws ... --caleb-ok`, on Caleb's yes. It was published from `690bf30c3`,
+    a 1.1.0 commit, with no TestFlight check first, because build 20 couldn't be processed. Branch `production-aws`,
+    runtime 1.1.0, update group `0d8055ef-adde-4877-adb7-fd0998801f6e`. Caleb confirmed it on his build-18 phone
+    ("works now"). The production api showed no 5xx in the hour after. The second update, #410 (the Copy link freeze, group
+    `d8ea50c8-4969-4c25-9d84-74f32a4430a1`, 17:18 PT), went out after Caleb passed it on TestFlight build 1.1.1 (21).
+    Phones take it on a launch after they fetch it. Undo: `cd app && npx eas-cli
+    update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios --message "…"
+    --non-interactive`.
 
 ## What production has on at launch
 
@@ -184,11 +212,11 @@ Not part of the launch. Each needs Caleb's OK, and nothing here has a quick way 
 
 | What | When | How |
 |---|---|---|
-| The laptop worker | No tester films on an old build | Stop it. Keep the code until Convex goes |
+| The laptop worker | No one films on 1.0 any more: public 1.0 (build 6) uses it, and it **still runs on the Mac** (Nov 8) | Stop it. Keep the code until Convex goes |
 | Convex | Nobody opens an old build, and any copy from step 7 is checked | Export, keep that copy no longer than `/privacy` allows, then shut the deployment down |
 | Supabase | The same | Lift the freeze (Caleb's call). Export, pause the project, wait, then delete |
 | GCS and the signer | The same | `MEDIA-MIGRATION.md`, step 12 |
-| Cloud Run voice | Homie is back on AWS, or stays off. **Not confirmed** whether anything still calls it | Check first |
+| Cloud Run voice | Homie is back on AWS, or stays off. Public 1.0 (build 6) still calls it: homie is on there | Check first. When it goes, drop /privacy's "If your app is still version 1.0" paragraph (added Nov 8) |
 | The website's hosting | Not decided: with step 10, or after it (open question 5). It doesn't block 1.1: the site on Vercel calls the api | `WEB-MIGRATION.md`, "The switch and the way back". `/privacy` drops "This website runs on Vercel" then |
 | Vercel | The site has moved and been calm for weeks | Remove the project. PR previews end, so decide that first |
 | `/privacy` | Each store above, once it holds nobody's data | Drop it from "Where it's kept", under the App Review guard |
@@ -273,7 +301,7 @@ Every phone still on the old services runs a TestFlight or development build, or
 
 ## Open questions
 
-1. **Submitting 1.1 while 1.0 is held: partly answered (Nov 2).** A new version can't be created while 1.0 is Pending Developer Release. A developer who hit it could create the next version only after releasing the pending one. Apple's help lists Pending Developer Release among the states a version can be removed from review, after which a new build can be submitted, so this plan cancels 1.0's pending release and resubmits version 1.0 with the AWS build, which is reviewed again (step 9). No new version is created. Not confirmed: one developer reports that a removed, approved version stayed locked until App Store Connect Support reset it. Caleb or Salik: try it, or ask Support, before step 9. Apple emails a reminder after 30 days in Pending Developer Release. Sources: [App and submission statuses](https://developer.apple.com/help/app-store-connect/reference/app-information/app-and-submission-statuses), [Remove a submission from review](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/remove-a-submission-from-review), forum threads [132412](https://developer.apple.com/forums/thread/132412) and [821386](https://developer.apple.com/forums/thread/821386).
+1. **Submitting 1.1 while 1.0 is held: settled (Nov 7).** Caleb released 1.0 and submitted 1.1.0 as an update (step 9). Before that, partly answered (Nov 2): A new version can't be created while 1.0 is Pending Developer Release. A developer who hit it could create the next version only after releasing the pending one. Apple's help lists Pending Developer Release among the states a version can be removed from review, after which a new build can be submitted, so this plan cancels 1.0's pending release and resubmits version 1.0 with the AWS build, which is reviewed again (step 9). No new version is created. Not confirmed: one developer reports that a removed, approved version stayed locked until App Store Connect Support reset it. Caleb or Salik: try it, or ask Support, before step 9. Apple emails a reminder after 30 days in Pending Developer Release. Sources: [App and submission statuses](https://developer.apple.com/help/app-store-connect/reference/app-information/app-and-submission-statuses), [Remove a submission from review](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/remove-a-submission-from-review), forum threads [132412](https://developer.apple.com/forums/thread/132412) and [821386](https://developer.apple.com/forums/thread/821386).
 2. **Copy or start fresh: decided (Caleb, Nov 2: "All good").** Start fresh on production, and rebuild the App Review TEST family there (step 7). Copying a demo family stays possible by hand if Caleb asks; nothing builds a copy tool.
 3. **Convex's scheduled backups: decided (Nov 2).** They keep running until the AWS build is released and Convex is turned off. Then keep one final export (the Oct 25 export deadline still holds) and stop them.
 4. **A demo family's deletion: decided (Nov 2).** While Convex and Supabase run, it goes through the old delete path (`convex/account.ts` and `pipeline/account_purge.py`, which clear Convex, Supabase and GCS). After they're off, their GCS files are deleted by hand, within `/privacy`'s 30 days.
