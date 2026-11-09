@@ -21,6 +21,11 @@ on:
         description: Build the native app even if one with this fingerprint is cached (to time a native build)
         type: boolean
         default: false
+      stall_api:
+        description: "Make the staging api hang, to check open-link.yaml's Try again (first-try: must pass after one; all: must fail)"
+        type: choice
+        options: ['off', first-try, all]
+        default: 'off'
 
 permissions:
   contents: read
@@ -254,9 +259,26 @@ jobs:
           echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+      # stall_api (manual runs only) checks the Try again retry: the api's host resolves to 192.0.2.1 (TEST-NET-1, which
+      # never answers), so the app's requests hang like the trust-check stall. The simulator's sockets are the runner's,
+      # so first-try sees the app's first try in netstat and brings the api back 15 s later, after the app's own 10 s
+      # timeout has put up "We can't reach homecookd."; all keeps it down for the whole run.
       - name: Journeys
+        env:
+          STALL_API: ${{ inputs.stall_api || 'off' }}
         run: |
           mkdir -p "$RUNNER_TEMP/maestro-out"
+          if [ "$STALL_API" != off ]; then
+            HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
+            dns() { sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; }
+            echo "192.0.2.1 $HOST # stall_api" | sudo tee -a /etc/hosts >/dev/null; dns
+            echo "stall_api=$STALL_API: $HOST hangs from $(date -u +%T)"
+            if [ "$STALL_API" = first-try ]; then
+              ( until netstat -an | grep -q '192\.0\.2\.1\.443'; do sleep 1; done
+                echo "The app's first try at $(date -u +%T)"; sleep 15
+                sudo sed -i '' '/# stall_api$/d' /etc/hosts; dns; echo "$HOST answers again from $(date -u +%T)" ) &
+            fi
+          fi
           maestro --device "$UDID" test app/e2e/journeys --format junit --output "$RUNNER_TEMP/maestro-out/report.xml" \
             --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID"
           echo "T_JOURNEYS=$(date +%s)" >> "$GITHUB_ENV"
@@ -274,6 +296,11 @@ jobs:
             echo "| Maestro journeys | $(m "$T_BOOT" "$T_JOURNEYS") |"
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
           } >> "$GITHUB_STEP_SUMMARY"
+          # A journey that needed open-link.yaml's Try again (a "We can't reach homecookd." card) says so, even when it passed.
+          node scripts/journey-retries.mjs "$RUNNER_TEMP/maestro-out" | while IFS= read -r LINE; do
+            echo "::warning title=Try again::$LINE"
+            echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Keep Maestro's screenshots and report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

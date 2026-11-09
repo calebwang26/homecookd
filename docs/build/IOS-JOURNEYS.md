@@ -90,6 +90,24 @@ Open sometimes closes the dialog without handing the link to the app (runs 5 and
 link arrived). The subflow tries open, tap and wait up to three times. A link that carries a key is echoed in Maestro's
 own logs, so those journeys never upload `commands.json` or `maestro.log`.
 
+**The trust-check stall and Try again (Master Agent, Nov 9).** Twice on Nov 9 (runs 42592011253 and 42614847250) the
+journey ended on "We can't reach homecookd." The app's request reached CloudFront and got its certificate within about
+20 ms. Then the simulator's certificate check (trustd) stopped answering every process, not only the app, for a minute or
+more after boot, and the app gave up after its own 10 s. Opening the same link again doesn't ask the api again, so the
+subflow's retries didn't help. Now:
+- An attempt that finds that card, on a link this subflow opened, taps the card's own Try again, which asks the api
+  again, and waits for the expected screen. Without the card, the attempt opens the link as before. So the three attempts
+  cover about a minute.
+- The card still up after the last attempt fails the journey.
+- Each tap saves a `try-again-N` screenshot. A journey that passed only after a tap gets a warning and a line in the job
+  summary ("passed after 1 "Try again" retry, trust-check stall"), so a real api outage can't hide behind a green run
+  (`scripts/journey-retries.mjs`).
+- To check it: `gh workflow run ios-journeys.yml --ref <branch> -f stall_api=first-try` must pass with that line, and
+  `-f stall_api=all` must fail. Both point the api's host at 192.0.2.1 (an address that never answers) on the runner;
+  `first-try` brings it back 15 s after the app's first try.
+- If the stall comes back with the retry in place, the next fix is on the simulator's side (reset trustd, or warm the
+  certificate check before the journeys), not more taps.
+
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
 This Mac has no Xcode or Simulator, so the journeys run only in CI.
