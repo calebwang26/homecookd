@@ -14,6 +14,10 @@ name: Launch, then a link that doesn't work
 - takeScreenshot: 00-first-screen
 # A made-up 22-character family link: the app peeks it on staging and shows the dead-link card.
 - openLink: "homecookd://i?t=AAAAAAAAAAAAAAAAAAAAAA"
+# iOS asks before an outside link opens an app by its scheme ("Open in "homecookd"?"). A tapped universal link doesn't.
+- tapOn:
+    text: "Open"
+    optional: true
 - extendedWaitUntil:
     visible: ".*(That invite link doesn.t work|This link doesn.t work anymore).*"
     timeout: 30000

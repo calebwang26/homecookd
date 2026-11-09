@@ -171,6 +171,24 @@ export async function leaveFamily(ctx: Ctx, rawId: string) {
   return { ok: true };
 }
 
+/**
+ * POST /profiles/:id/role {role: cook | learner}: someone moves between the cooks and the ones who miss it (Caleb, Nov 9). The same rule as leaving and as /family's
+ * `locked`: a person with their own phone moves only from that phone; someone with no phone can be moved from any phone in the family. Their recipes, jobs, messages
+ * and asks stay as they are, and their next POST /v1/sessions/start answers the new role. The answer is their profile as /family shows it; the same role is a no-op.
+ */
+export async function setRole(ctx: Ctx, rawId: string, b: Body) {
+  const id = rawId.toLowerCase();
+  const role = roleOf(b.role, true)!;
+  const p = ctx.profiles.find((x) => x.id === id || x.supabase_id === id);
+  if (!p) throw notFound("id: no such person in this family");
+  if (lockedFor(ctx, p.id)) throw refused(403, "only_self", `Only ${p.name} can change this, on their own phone.`);
+  await limit("profile-role", ctx.family.id, 30, 60);
+  const person = p.role === role ? p : await tx((c) => data.setPersonRole(c, ctx.family.id, p.id, role));
+  if (!person) throw notFound("id: no such person in this family");
+  const invited = await invitedIds(ctx.family.id);
+  return { ...toProfile(person), invited: invited.has(person.id), has_phone: ctx.phones.has(person.id), locked: false, memorial: person.memorial };
+}
+
 /** POST /devices: swaps a saved family code for this phone's own key. It adds itself next (addSelf). Not from a key: a second key would belong to nobody. */
 export async function swapCodeForKey(ctx: Ctx, b: Body) {
   if (ctx.device) throw invalid("x-device-key", "This phone already has its own key.");

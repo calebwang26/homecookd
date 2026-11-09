@@ -192,6 +192,8 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /profiles/self": oldProof("POST", "/profiles/self"),
   "OPTIONS /profiles/:id/remove": preflight,
   "POST /profiles/:id/remove": oldProof("POST", "/profiles/x/remove"),
+  "OPTIONS /profiles/:id/role": preflight,
+  "POST /profiles/:id/role": oldProof("POST", "/profiles/x/role"),
   "OPTIONS /devices": preflight,
   "POST /devices": oldProof("POST", "/devices"),
   "OPTIONS /devices/revoke": preflight,
