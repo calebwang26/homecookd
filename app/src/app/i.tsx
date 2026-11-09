@@ -39,17 +39,14 @@ import {
   isInviteFixture,
   JoinCard,
   joinTitle,
+  peekFailed,
   leaveTo,
   MoveCard,
   sentBy,
-  CHECK_CONNECTION,
   NOT_FOUND,
-  OUR_SIDE,
   SignInScreen,
   SmallLink,
   TermsLine,
-  TRY_SOON,
-  UNREACHABLE,
   type InviteView,
   type Peeked,
   type Provider,
@@ -57,26 +54,16 @@ import {
   useClaimPeek,
 } from '@/components/signin';
 import { ActionButton, haptic } from '@/components/ui';
-import { api, ApiError, type Role } from '@/lib/api';
+import { api, type Role } from '@/lib/api';
 import { isJoinToken } from '@/lib/auth';
 import { claimStep, nameKey, type ClaimAnswer } from '@/lib/auth/join';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
-import type { T } from '@/lib/words/words';
 
 const WEB = Platform.OS === 'web';
 const DEV_WEB = __DEV__ && WEB;
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-
-/** A failed peek, in people's words. Only the server's own invite sentences are shown as they are. */
-function peekFailed(e: unknown, t: T): Peeked {
-  if (!(e instanceof ApiError)) return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
-  if ((e.status === 404 || e.status === 400) && /^That invite/.test(e.message)) return { state: 'missing', sentence: e.message };
-  if (e.kind === 'network' || e.kind === 'timeout') return { state: 'unreachable', sentence: t(UNREACHABLE), line: t(CHECK_CONNECTION) };
-  if (e.status === 429) return { state: 'unreachable', sentence: t('signin.invite.tooMany'), line: t(TRY_SOON) };
-  return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
-}
 
 /** What the peek answered. A failure is put in words when the card draws (in this phone's language). */
 type Answer = Extract<Peeked, { state: 'ok' }> | { state: 'failed'; error: unknown };

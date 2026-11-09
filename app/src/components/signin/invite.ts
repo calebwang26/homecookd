@@ -17,7 +17,7 @@
 // same family name, the invited person and the inviter are in it, and a pending invite's person is
 // still "invited" there (a person of that name who already joined means another family that just
 // looks the same). A family invite names nobody, so the family name and the inviter must do.
-import type { Family, InvitePeek, InviteState, Profile } from '@/lib/api';
+import { ApiError, type Family, type InvitePeek, type InviteState, type Profile } from '@/lib/api';
 import { english, type T, type WordKey } from '@/lib/words/words';
 
 export type Gone = Exclude<InviteState, 'pending'>;
@@ -61,6 +61,22 @@ export const UNREACHABLE = 'signin.invite.unreachable' satisfies WordKey;
 export const CHECK_CONNECTION = 'signin.invite.checkConnection' satisfies WordKey;
 export const OUR_SIDE = 'signin.invite.ourSide' satisfies WordKey;
 export const TRY_SOON = 'signin.invite.trySoon' satisfies WordKey;
+
+/**
+ * A failed peek, in this phone's language. The api's code decides, never its English: on 1.1 the client puts the
+ * app's own words for a code in `message` (lib/aws/errorWords: not_found is "That isn't here anymore."), so a
+ * missing link is its 404 `not_found`. 1.0's server sentence ("That invite link doesn't work.") still counts.
+ * A missing link shows NOT_FOUND, not "our side" (the CI journey, Nov 9).
+ */
+export function peekFailed(e: unknown, t: T = english): Peeked {
+  if (!(e instanceof ApiError)) return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
+  if ((e.status === 404 || e.status === 400) && (e.body?.code === 'not_found' || /^That invite/.test(e.message))) {
+    return { state: 'missing', sentence: t(NOT_FOUND) };
+  }
+  if (e.kind === 'network' || e.kind === 'timeout') return { state: 'unreachable', sentence: t(UNREACHABLE), line: t(CHECK_CONNECTION) };
+  if (e.status === 429) return { state: 'unreachable', sentence: t('signin.invite.tooMany'), line: t(TRY_SOON) };
+  return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
+}
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 const byName = (people: Profile[], name: string | null | undefined) => people.find((p) => norm(p.name) === norm(name)) ?? null;
