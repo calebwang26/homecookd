@@ -614,7 +614,7 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
   }) as unknown as typeof fetch;
   const lib = makeLibrary({ baseUrl: "https://media.test/", fetch: fakeFetch, clock: () => clock });
 
-  const index = await lib.libraryIndex();
+  const index = (await lib.libraryIndex())!;
   assert.deepEqual(index.get("mom-dal"), { title: "Mom's Dal", cook_name: "Mom", sample: false });
   assert.equal(index.get("mom-sample")?.sample, true);
   assert.deepEqual(dishesOf(index, " MOM"), ["mom-dal", "mom-sample"]); // the app's cookProfile rule
@@ -635,12 +635,21 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
   assert.equal(calls.length, fetched);
 
   clock = 11 * 60_000;
-  down = true; // stale & the host is down: empty Map, null, "can't say", and nothing cached
-  assert.equal((await lib.libraryIndex()).size, 0);
+  down = true; // stale & the host is down: null, null, "can't say", and nothing cached
+  assert.equal(await lib.libraryIndex(), null);
   assert.equal(await lib.recipeInfo("mom-dal"), null);
   assert.equal(await lib.exists("mom-dal"), null);
   down = false;
-  assert.equal((await lib.libraryIndex()).size, 2);
+  assert.equal((await lib.libraryIndex())?.size, 2);
+
+  // A library that reads fine and lists nothing (Caleb, Nov 9: no sample recipes) is an empty Map, never the outage's null.
+  files["library.json"] = [];
+  clock = 22 * 60_000;
+  const none = await lib.libraryIndex();
+  assert.ok(none instanceof Map);
+  assert.equal(none.size, 0);
+  assert.deepEqual(dishesOf(none, "Mom"), []);
+  assert.deepEqual(dishesOf(null, "Mom"), []);
   assert.equal((await lib.recipeInfo("mom-dal"))?.title, "Mom's Dal");
 });
 

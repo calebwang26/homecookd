@@ -619,6 +619,7 @@ class Copy(Base):
         self.assertEqual(peak[0], 3)
 
     def test_recipe_json_waits_for_its_media_and_library_json_goes_last(self):
+        self.target = Target(G, S, own_library=False)
         order = []
         real_put = self.s3.put
         self.s3.put = lambda b, k, *a, **kw: (order.append(k), real_put(b, k, *a, **kw))[1]
@@ -629,7 +630,30 @@ class Copy(Base):
         self.assertTrue(self.run_pass(workers=1).ok)
         self.assertEqual(order[-2:], ["dish/recipe.json", "library.json"])
 
+    def test_s3s_own_library_json_is_never_copied_rewritten_or_deleted_from_gcs(self):
+        """Caleb, Nov 9: production's library.json is [] (no sample recipes). GCS's 10-entry list must never come back over it."""
+        self.s3._store(S, "library.json", b"[]", {}, {})  # written in S3 itself, not copied
+        self.gcs.put(G, "library.json", b'[{"id": "dish"}]')
+        self.gcs.put(G, "dish/recipe.json", b"{}")
+        self.gcs.put(G, "dish/play.mp4", b"v")
+        result = self.run_pass()
+        self.assertTrue(result.ok)
+        self.assertEqual(result.excluded, 1)
+        self.assertEqual(self.s3.current(S, "library.json"), b"[]")
+        # An old pass's ledger row (from before this rule) changes nothing: not recopied when GCS's changes, not deleted when it goes.
+        self.ledger.mark_copied(G, self.gcs.head(G, "library.json"), None)
+        self.gcs.put(G, "library.json", b'[{"id": "dish"}, {"id": "more"}]')
+        self.assertTrue(self.run_pass().ok)
+        self.gcs.delete(G, "library.json")
+        self.assertTrue(self.run_pass().ok)
+        self.assertEqual(self.s3.current(S, "library.json"), b"[]")
+        self.gcs.put(G, "library.json", b'[{"id": "dish"}]')
+        self.ledger.mark_copied(G, self.gcs.head(G, "library.json"), None)
+        rw.Rewriter(self.gcs, self.s3, self.ledger, Log(self.logs), NEW, sleep=lambda _: None).run([self.target], write=True)
+        self.assertEqual(self.s3.current(S, "library.json"), b"[]")
+
     def test_recipe_json_is_held_while_its_media_fails(self):
+        self.target = Target(G, S, own_library=False)
         self.gcs.put(G, "library.json", b"[]")
         self.gcs.put(G, "bad/recipe.json", b"{}")
         self.gcs.put(G, "bad/play.mp4", b"v")
@@ -902,6 +926,10 @@ def library_bytes():
 
 
 class Rewrite(Base):
+    def setUp(self):
+        super().setUp()
+        self.target = Target(G, S, own_library=False)  # these cover the library rewrite itself; production's media keeps its own (Copy tests)
+
     def seed(self):
         for name in ("play.mp4", "voice.m4a", "poster.jpg", "steps/01.jpg", "steps/02.jpg"):
             self.gcs.put(G, f"dish/{name}", b"media")
