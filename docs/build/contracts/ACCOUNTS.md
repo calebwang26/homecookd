@@ -30,7 +30,7 @@ The "Conventions" section applies to every area.
 | Used by | The Accounts family routes (`/family`, `/profiles…`, `/join-links…`, `/devices/revoke`), and `/v1/sessions/start` (in the body) | Every `/v1/*` route but three: `/v1/sessions/start` and `/v1/shares/open` are public, and `/v1/sessions/end` reads the token without checking it |
 
 - **Both, at once.** The family and people routes take only the device key. No `/v1` route lists the family, adds a person, leaves or makes a join link. So 1.1 keeps both credentials (open item 2).
-- **`x-profile-id: <personId>`**, next to the device key, says who is acting. **Required** on `/join-links`, `/join-links/revoke`, `/profiles/:id/remove`. **Optional** on `/family`, `/profiles`. **Ignored** on `/devices/revoke`.
+- **`x-profile-id: <personId>`**, next to the device key, says who is acting. **Required** on `/join-links`, `/join-links/revoke`, `/profiles/:id/remove`, `/profiles/:id/role`. **Optional** on `/family`, `/profiles`. **Ignored** on `/devices/revoke`.
 - **Keep them in SecureStore.** Never log or show either one. Only their SHA-256 is stored on the server.
 - **No refresh route.** When a `/v1` call answers 401 `signed_out`, call `/v1/sessions/start` once with the stored key and the same `profileId`, then repeat the call once. If that answers 401 `signed_out` too, the key is dead: clear everything and go to sign-in.
 - **One person per session.** A session is one person on one phone. To act as someone with no phone (Grandma on Mom's phone), start a second session with her id.
@@ -379,6 +379,21 @@ An `email` is refused: 403 `forbidden`, "Emails can't be added in this version. 
 - 503 `accounts_not_moved`.
 
 A retry after a lost answer gets 401 `signed_out` (own phone) or 403 `removed_from_family`, "That person was removed from this family. Pick who you are." (a lent phone). Both mean it worked.
+
+### `POST /profiles/:id/role`: move between the cooks and the ones who miss it (`x-device-key` + `x-profile-id`)
+
+Caleb, Nov 9. **Body:** `{role: "cook" | "learner"}`. Allowed when `:id` is this phone's own person, or someone with no phone (any phone in the
+family can move them): the same rule as leaving, and as `/family`'s `locked`. Nobody changes someone else who has their own phone.
+
+**Answer:** their profile, as `/family` lists it: `{id, name, role, relation, avatar_key, invited, has_phone, locked: false, memorial}`. The same role
+again is a no-op 200. Only the role changes: their recipes, jobs, messages and asks stay. Their next `POST /v1/sessions/start` answers the new `role`.
+
+**Errors:**
+- 400 `invalid`, `field: "role"`, "role must be cook or learner";
+- 403 `only_self`, "Only <Name> can change this, on their own phone.";
+- 404 `not_found`, "id: no such person in this family";
+- 429 `rate_limited` (30 an hour per family);
+- 503 `accounts_not_moved`.
 
 ### `POST /join-links`: the family's link (`x-device-key` + `x-profile-id`)
 

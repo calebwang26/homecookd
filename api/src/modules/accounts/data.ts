@@ -156,6 +156,16 @@ export async function moveFace(q: Queryable, faceId: string, from: string, to: s
   return (rowCount ?? 0) > 0;
 }
 
+/** Among the cooks or the ones who miss it (POST /profiles/:id/role). Nothing else of theirs changes. Null when they're no longer in this family. */
+export async function setPersonRole(q: Queryable, familyId: string, personId: string, role: Role): Promise<Person | null> {
+  assertOwnsPeople();
+  const { rows } = await q.query(
+    `update people set role = $3 where id = $1 and family_id = $2 and removed_at is null and deleted_at is null returning ${PERSON}`,
+    [personId, familyId, role],
+  );
+  return rows[0] ?? null;
+}
+
 export async function setRelationIfUnset(q: Queryable, personId: string, relation: string): Promise<void> {
   assertOwnsPeople();
   await q.query(`update people set relation = $2 where id = $1 and relation is null`, [personId, relation]);
