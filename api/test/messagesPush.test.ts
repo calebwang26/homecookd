@@ -113,7 +113,7 @@ test("dedupe, no phone, and Expo down", { skip }, async () => {
   w.expo.down = true;
   await drain();
   const [log] = await logOf(w.leo.id);
-  assert.deepEqual([log.status, log.error], ["failed", "HTTP 503"]);
+  assert.deepEqual([log.status, log.error, log.attempts], ["queued", "HTTP 503", 1], "tried again later (pushMachine.test.ts)");
   assert.equal((await tokensOf(w.leo.id)).length, 1); // a failed send is never a dead token
 });
 
@@ -319,15 +319,19 @@ test("retention: a dead token is pruned; Expo's answer never fails the send", { 
   assert.deepEqual((await tokensOf(w.dad.id)).map((t) => t.token), [tokenFor("alive")]);
 });
 
-test("Expo down: the message still landed, and the failure is on the log", { skip }, async () => {
+test("Expo down: the message still landed, and its push goes once Expo is back", { skip }, async () => {
   const w = await world();
   await phone(w, w.dad, "dad");
   w.expo.down = true;
   const pair = await pairOf(w, w.mom, w.dad);
   const sent = await text(w, w.mom, pair, "Hi");
   await drain();
-  assert.equal((await logOf(w.dad.id))[0].status, "failed");
+  assert.equal((await logOf(w.dad.id))[0].status, "queued", "to be tried again");
   assert.equal(ok(await get(w.app, w.dad, `/v1/threads/${pair}/messages`)).messages[0].id, sent.id);
+  w.expo.down = false;
+  await dueNow();
+  await drain();
+  assert.deepEqual(pushes(w.expo).map(([to, , body]) => [to, body]), [[tokenFor("dad"), "Hi"]], "Expo's back: the push goes");
 });
 
 test("retention: a circle question pushes the cooks but the asker, naming the dish; a 1:1 question only the one asked", { skip }, async () => {
