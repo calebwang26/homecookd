@@ -77,7 +77,14 @@ export async function runSend(
   clock: SendClock = realClock,
 ): Promise<'ignored' | 'declined' | 'sent' | 'failed'> {
   if (!go('tap')) return 'ignored';
-  if (!(await steps.consent())) {
+  // A consent check that throws (reading her answer from storage) is a no: never stuck in asking.
+  let yes = false;
+  try {
+    yes = await steps.consent();
+  } catch {
+    yes = false;
+  }
+  if (!yes) {
     go('declined');
     return 'declined';
   }

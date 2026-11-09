@@ -257,6 +257,27 @@ await test('no to the AI companies: back to idle, nothing sent, Send can be tapp
   assert.equal(await again, 'declined');
 });
 
+await test('the consent check throws (storage): a no, back to idle, and a new tap asks again', async () => {
+  const r = rig();
+  const run = r.tap();
+  await flush();
+  r.consent[0].reject(new Error('storage unreadable'));
+  assert.equal(await run, 'declined');
+  assert.equal(r.held.now(), 'idle', 'never stuck in asking');
+  assert.deepEqual(r.log, ['consent'], 'nothing sent');
+  const again = r.tap();
+  await flush();
+  assert.equal(r.held.now(), 'asking');
+  assert.equal(r.consent.length, 2, 'the new tap asks');
+  r.consent[1].resolve(true);
+  await flush();
+  r.sends[0].started();
+  r.sends[0].resolve();
+  await r.clock.advance(LEAST + S.FADE_MS);
+  assert.equal(await again, 'sent');
+  assert.deepEqual(r.states, ['idle', 'asking', 'idle', 'asking', 'uploading', 'creatingJob', 'sent', 'done']);
+});
+
 await test('it fails before the upload started (the hello, the copies): failed after the least time, then idle', async () => {
   const r = rig();
   const run = r.tap();
