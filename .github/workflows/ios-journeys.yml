@@ -68,7 +68,7 @@ jobs:
         run: |
           pod install
           echo "T_PODS=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Build for the simulator (Release: the JS is bundled in, no Metro)
+      - name: "Build for the simulator (Release, so the JS is bundled in: no Metro)"
         working-directory: app/ios
         run: |
           set -o pipefail
