@@ -199,7 +199,8 @@ def test_claude_batch_sends_one_request_at_half_price():
 def test_a_slow_batch_is_cancelled_and_sent_the_normal_way_and_a_failed_one_raises():
     fake = FakeAnthropic(ORDER)
     fake.messages = SimpleNamespace(batches=FakeBatches(ORDER, polls=None))
-    with env(CLAUDE_BATCH="1", CLAUDE_BATCH_WAIT_S="0"), patched(claude, "BATCH_POLL_S", 0):
+    with env(CLAUDE_BATCH="1", CLAUDE_BATCH_WAIT_S="0"), patched(claude, "BATCH_POLL_S", 0), \
+            patched(claude, "SETTLE_S", 0):
         reply = claude.ClaudeText("claude-sonnet-5-5", client=fake).generate("p", order.OrderAnswer)
     assert fake.messages.batches.cancelled == ["batch_1"] and len(fake.calls) == 1 and reply.batch is False
     fake = FakeAnthropic()
@@ -217,6 +218,221 @@ def test_a_slow_batch_is_cancelled_and_sent_the_normal_way_and_a_failed_one_rais
         assert claude.ClaudeText(client=FakeAnthropic(), batch=True).batch is False  # the rollback
     with env(CLAUDE_BATCH="1"):
         assert claude.ClaudeText(client=FakeAnthropic()).batch is True  # the language eval
+
+
+# ---------- a batch call's lifecycle (claude.BatchState): one test per move in ALLOWED ----------
+
+S = claude.BatchState
+
+
+class ScriptedBatches:
+    """client.messages.batches: ends after `ends_after` checks (None: never on its own), ends at once once cancelled
+    (unless cancel_ends is False), and answers `outcome`, or `after_cancel` once cancelled. fail: {method: exception}."""
+
+    def __init__(self, ends_after: int | None = 1, outcome: str = "succeeded", after_cancel: str = "canceled",
+                 cancel_ends: bool = True, stop: str = "end_turn", fail: dict | None = None):
+        self.ends_after, self.outcome, self.after_cancel, self.cancel_ends = ends_after, outcome, after_cancel, cancel_ends
+        self.stop, self.fail = stop, fail or {}
+        self.created, self.cancelled, self.checks = [], [], 0
+
+    def create(self, requests):
+        self.created.append(requests)
+        return SimpleNamespace(id=f"batch_{len(self.created)}")
+
+    def retrieve(self, batch_id):
+        if "retrieve" in self.fail:
+            raise self.fail["retrieve"]
+        self.checks += 1
+        ended = (self.ends_after is not None and self.checks >= self.ends_after) or \
+            (batch_id in self.cancelled and self.cancel_ends)
+        return SimpleNamespace(processing_status="ended" if ended else "in_progress")
+
+    def cancel(self, batch_id):
+        self.cancelled.append(batch_id)
+
+    def results(self, batch_id):
+        if "results" in self.fail:
+            raise self.fail["results"]
+        usage = SimpleNamespace(input_tokens=1000, output_tokens=300, cache_read_input_tokens=0,
+                                cache_creation_input_tokens=None)
+        msg = SimpleNamespace(content=[SimpleNamespace(type="text", text=json.dumps(ORDER))], stop_reason=self.stop,
+                              stop_details=None, usage=usage)
+        kind = self.after_cancel if batch_id in self.cancelled else self.outcome
+        yield SimpleNamespace(custom_id="call", result=SimpleNamespace(type=kind, message=msg, error="boom"))
+
+
+@contextlib.contextmanager
+def batch_call(batches: ScriptedBatches, *answers, model: str = "claude-sonnet-5-5", wait: str = "300"):
+    """A batched ClaudeText on `batches` with its run's registry in a temp folder: yields (gen, registry, fake)."""
+    fake = FakeAnthropic(*answers)
+    fake.messages = SimpleNamespace(batches=batches)
+    with tempfile.TemporaryDirectory() as tmp, env(CLAUDE_BATCH=None, CLAUDE_BATCH_WAIT_S=wait), \
+            patched(claude, "BATCH_POLL_S", 0), patched(claude, "SETTLE_S", 0):
+        gen = claude.ClaudeText(model, client=fake, batch=True)
+        gen.batches = claude.BatchRegistry(Path(tmp) / claude.BATCHES)
+        yield gen, gen.batches, fake
+
+
+def test_every_move_outside_the_table_is_refused():
+    for a in S:
+        for b in S:
+            call = claude.BatchCall("b", "m", None, a)
+            try:
+                call.advance(b)
+                assert (a, b) in claude.ALLOWED, (a, b)
+                assert call.state is b
+            except claude.ClaudeError:
+                assert (a, b) not in claude.ALLOWED, (a, b)
+
+
+def test_open_ended_used_answers_from_the_batch_and_leaves_the_registry_empty():
+    with batch_call(ScriptedBatches(ends_after=2)) as (gen, registry, fake):
+        reply = gen.generate("p", order.OrderAnswer)
+        assert reply.batch is True and json.loads(reply.text) == ORDER and fake.calls == []
+        assert registry.read() == {} and not registry.path.with_name(claude.BATCHES + ".tmp").exists()
+
+
+def test_waited_out_but_finished_anyway_is_used_not_paid_for_twice():
+    batches = ScriptedBatches(ends_after=None, after_cancel="succeeded")  # open -> cancelling -> ended -> used
+    with batch_call(batches, wait="0") as (gen, registry, fake):
+        reply = gen.generate("p", order.OrderAnswer)
+        assert batches.cancelled == ["batch_1"] and reply.batch is True and fake.calls == [] and registry.read() == {}
+
+
+def test_waited_out_and_cancelled_before_it_ran_goes_the_normal_way():
+    batches = ScriptedBatches(ends_after=None, after_cancel="canceled")  # ... -> ended -> unbilled
+    with batch_call(batches, ORDER, wait="0") as (gen, registry, fake):
+        reply = gen.generate("p", order.OrderAnswer)
+        assert batches.cancelled == ["batch_1"] and reply.batch is False and len(fake.calls) == 1
+        assert registry.read() == {}
+
+
+def test_a_cancel_still_ending_stays_listed_and_reap_records_what_it_billed():
+    batches = ScriptedBatches(ends_after=None, cancel_ends=False, after_cancel="succeeded")
+    with batch_call(batches, ORDER, wait="0") as (gen, registry, fake):
+        assert gen.generate("p", order.OrderAnswer).batch is False and len(fake.calls) == 1  # the normal way, at once
+        assert registry.read() == {"batch_1": {"state": "cancelling", "model": "claude-sonnet-5-5"}}
+        recorded = []
+        assert claude.reap(registry.path, recorded.append, fake, wait_s=0) == 0  # still ending: listed for later
+        batches.cancel_ends = True
+        assert claude.reap(registry.path, recorded.append, fake, wait_s=0) == 1  # cancelling -> ended -> recorded
+        assert [(r.batch, r.model, r.usage_metadata.prompt_token_count) for r in recorded] == \
+            [(True, "claude-sonnet-5-5", 1000)]
+        assert registry.read() == {} and claude.reap(registry.path, recorded.append, fake) == 0  # never twice
+
+
+def test_an_error_or_stop_while_open_cancels_the_batch_before_it_raises():
+    for failure in (RuntimeError("connection reset"), KeyboardInterrupt()):
+        batches = ScriptedBatches(ends_after=None, fail={"retrieve": failure})
+        with batch_call(batches) as (gen, registry, _):
+            try:
+                gen.generate("p", order.OrderAnswer)
+                raise AssertionError("it should raise")
+            except (RuntimeError, KeyboardInterrupt) as e:
+                assert e is failure
+            assert batches.cancelled == ["batch_1"]  # open -> cancelling; attempt 2 won't leave it running unseen
+            assert registry.read()["batch_1"]["state"] == "cancelling"
+
+
+def test_an_ended_batch_whose_results_cant_be_read_stays_listed_for_reap():
+    batches = ScriptedBatches(fail={"results": RuntimeError("502")})
+    with batch_call(batches) as (gen, registry, fake):
+        try:
+            gen.generate("p", order.OrderAnswer)
+            raise AssertionError("it should raise")
+        except RuntimeError:
+            pass
+        assert batches.cancelled == [] and registry.read()["batch_1"]["state"] == "ended"
+        batches.fail = {}
+        recorded = []
+        assert claude.reap(registry.path, recorded.append, fake, wait_s=0) == 1 and registry.read() == {}
+
+
+def test_an_errored_or_expired_batch_raises_and_bills_nothing():
+    for outcome in ("errored", "expired"):
+        with batch_call(ScriptedBatches(outcome=outcome)) as (gen, registry, _):
+            try:
+                gen.generate("p", order.OrderAnswer)
+                raise AssertionError("it should raise")
+            except claude.ClaudeError as e:
+                assert outcome in str(e)
+            assert registry.read() == {}  # ended -> unbilled
+
+
+def test_reap_cancels_a_killed_runs_open_batches_and_records_only_what_billed():
+    for after_cancel, billed in (("canceled", 0), ("succeeded", 1)):
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = claude.BatchRegistry(Path(tmp) / claude.BATCHES)
+            claude.BatchCall("batch_1", "claude-sonnet-5-5", registry)  # left open by a killed run
+            batches = ScriptedBatches(ends_after=None, after_cancel=after_cancel)
+            fake = SimpleNamespace(messages=SimpleNamespace(batches=batches))
+            recorded = []
+            with patched(claude, "BATCH_POLL_S", 0):  # open -> cancelling -> ended -> unbilled or recorded
+                assert claude.reap(registry.path, recorded.append, fake, wait_s=0) == billed
+            assert batches.cancelled == ["batch_1"] and len(recorded) == billed and registry.read() == {}
+
+
+def test_a_refusal_on_batch_is_sent_again_with_the_fallback_and_both_are_recorded():
+    with batch_call(ScriptedBatches(stop="refusal"), ORDER) as (gen, _, fake):
+        reply = gen.generate("p", order.OrderAnswer)
+        assert reply.batch is False and fake.calls[0]["fallbacks"] == "default"  # the normal way carries it
+        with tempfile.TemporaryDirectory() as tmp:
+            usage = process.Usage(Path(tmp) / "usage.json")
+            usage.add("merge", gen.model, None, 1, 2.0, reply)
+            refused, answer = usage.calls
+        assert refused["batch"] is True and refused["error"].startswith("refused on batch") and not refused["ok"]
+        assert refused["cost_usd"] == math_close((1000 * 1.00 + 300 * 5.00) / 1e6)  # billed at batch prices
+        assert answer["ok"] and answer["batch"] is False
+    with batch_call(ScriptedBatches(stop="refusal"), model="claude-haiku-5-5") as (gen, _, fake):
+        try:  # Haiku has no fallback to try
+            gen.generate("p", order.OrderAnswer)
+            raise AssertionError("it should raise")
+        except claude.ClaudeError as e:
+            assert "declined" in str(e) and fake.calls == []
+
+
+def test_the_registry_is_never_read_half_written():
+    import threading
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = claude.BatchRegistry(Path(tmp) / claude.BATCHES)
+        bad, done = [], threading.Event()
+
+        def reader():
+            while not done.is_set():
+                if registry.path.exists():
+                    try:
+                        json.loads(registry.path.read_text())
+                    except ValueError:
+                        bad.append(1)
+
+        watcher = threading.Thread(target=reader)
+        watcher.start()
+        writers = [threading.Thread(target=lambda n=n: [registry.put(f"b{n}-{i}", {"state": "open", "model": "m"})
+                                                          for i in range(40)]) for n in range(6)]
+        for t in writers:
+            t.start()
+        for t in writers:
+            t.join()
+        done.set()
+        watcher.join()
+        assert bad == [] and len(registry.read()) == 240
+
+
+def test_process_reap_batches_records_a_killed_runs_bill_at_batch_price():
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        registry = claude.BatchRegistry(work / claude.BATCHES)
+        claude.BatchCall("batch_1", "claude-sonnet-5-5", registry, S.CANCELLING)
+        batches = ScriptedBatches(ends_after=1, outcome="succeeded")
+        fake = SimpleNamespace(messages=SimpleNamespace(batches=batches))
+        usage = process.Usage(work / "usage.json")
+        with patched(claude.anthropic, "Anthropic", lambda **_k: fake), env(ANTHROPIC_API_KEY="fake"):
+            assert process.reap_batches(work, usage) == 1
+        saved = json.loads((work / "usage.json").read_text())["calls"]
+        assert [(c["kind"], c["model"], c["batch"], c["ok"]) for c in saved] == \
+            [("batch-reaped", "claude-sonnet-5-5", True, True)]
+        assert saved[0]["cost_usd"] == math_close((1000 * 1.00 + 300 * 5.00) / 1e6)
+        assert process.reap_batches(work, usage) == 0  # an empty registry opens no client
 
 
 def test_haiku_costs_more_above_100k_prompt_tokens():

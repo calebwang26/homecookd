@@ -328,6 +328,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
+.venv/bin/python pipeline/batch_reap.py data/out/<id>/work          # what a killed run's Claude batches billed, into its usage.json (queue_worker runs it after a kill)
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
 .venv/bin/python pipeline/test_queue_worker.py                     # the queue worker (TEST_DATABASE_URL adds real Postgres; needs requirements-queue.txt)

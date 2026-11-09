@@ -123,6 +123,9 @@ def spec_for(claim: dict, objects: list[dict]) -> dict:
             "live": {"liveLog": [], "liveGaps": [], "videoGaps": gaps} if gaps else None}
 
 
+REAP_TIMEOUT_S = 30  # batch_reap.py after a kill: what the child's Claude batches billed (pipeline/claude.py)
+
+
 class ChildJob:
     def __init__(self, proc: subprocess.Popen, work: Path, usage_file: Path, out_dir: Path):
         self.proc, self.work, self.usage_file, self.out_dir = proc, work, usage_file, out_dir
@@ -175,6 +178,20 @@ class ChildJob:
         r = resource.getrusage(resource.RUSAGE_CHILDREN)
         kb = r.ru_maxrss / (1024 if sys.platform == "darwin" else 1)  # bytes on macOS, kilobytes on Linux
         return {"cpu_s": round(r.ru_utime + r.ru_stime, 1), "max_rss_mb": round(kb / 1024), "disk_peak_mb": round(self.disk_peak / 1e6)}
+
+    def reap(self) -> None:
+        """After kill: Claude batches the child left open can still bill (pipeline/claude.py). batch_reap.py cancels them
+        and adds what they billed to usage.json, so calls() reads it like the child's own."""
+        try:
+            if not json.loads((self.usage_file.parent / "claude_batches.json").read_text()):
+                return
+        except (OSError, ValueError):
+            return
+        try:
+            subprocess.run([sys.executable, str(Path(__file__).with_name("batch_reap.py")), str(self.usage_file.parent)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=REAP_TIMEOUT_S)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
 
     def kill(self) -> None:
         """The whole group: ffmpeg and the model calls' threads go too."""
@@ -404,6 +421,7 @@ class Worker:
             try:
                 outcome = self._watch(run)
                 run.child.kill()  # stopped already, or to be stopped: nothing it does after this counts
+                run.child.reap()  # except what its Claude batches billed
                 self._save_calls(run, run.child.calls())
                 self._settle(run, outcome)
             finally:

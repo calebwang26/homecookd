@@ -185,12 +185,13 @@ def raise_404():
 
 
 class FakeChild:
-    """ticks run one per poll: a dict of events and calls, or a function of the spec. Then it exits with result."""
+    """ticks run one per poll: a dict of events and calls, or a function of the spec. Then it exits with result. reaped:
+    the calls batch_reap.py would add after the kill (what its open Claude batches billed)."""
 
-    def __init__(self, spec: dict, ticks: list, result=good_result, forever: bool = False):
+    def __init__(self, spec: dict, ticks: list, result=good_result, forever: bool = False, reaped: list | None = None):
         self.spec, self.ticks, self._result, self.forever = spec, list(ticks), result, forever
-        self.pending_events, self.pending_calls = [], []
-        self.killed = self.cleaned = False
+        self.pending_events, self.pending_calls, self.reaped = [], [], list(reaped or [])
+        self.killed = self.cleaned = self.reaped_after_kill = False
 
     def poll(self):
         if self.killed:
@@ -224,6 +225,11 @@ class FakeChild:
 
     def kill(self):
         self.killed = True
+
+    def reap(self):
+        self.reaped_after_kill = self.killed
+        self.pending_calls += self.reaped
+        self.reaped = []
 
     def cleanup(self):
         self.cleaned = True
@@ -835,6 +841,22 @@ def cancelling_while_it_runs_stops_it(box: Box):
     idle = FakeRunner({})
     box.deliver(box.worker(idle))
     assert not idle.specs and ctx.job(job_id)["stage"] == "failed" and box.queue.alive() == []
+
+
+@scenario
+def a_cancelled_jobs_open_claude_batch_still_counts(box: Box):
+    """Killed during the writer's batch: what that batch billed (batch_reap.py) reaches the job's cost and today's."""
+    ctx = box.ctx
+    job_id = box.job_with_upload()
+    box.queue.send(job_id)
+    runner = FakeRunner({"ticks": [GOOD_TICKS[0], GOOD_TICKS[1], lambda spec: ctx.cancel(job_id)], "forever": True,
+                         "reaped": [call(0.03, "batch-reaped")]})
+    box.deliver(box.worker(runner))
+    child = runner.children[0]
+    assert child.killed and child.reaped_after_kill
+    assert ctx.job(job_id)["stage"] == "failed" and ctx.job(job_id)["error"] == "Cancelled."
+    assert [c["purpose"] for c in ctx.calls(job_id)] == ["extract", "batch-reaped"]
+    assert Decimal(ctx.job(job_id)["cost_usd"]) == Decimal("0.53") and ctx.spent() == Decimal("0.53")
 
 
 @scenario
@@ -1736,6 +1758,44 @@ def test_a_real_child_reports_through_its_files():
         assert child.disk_peak > 0 and child.usage()["cpu_s"] >= 0
         child.cleanup()
         assert not child.work.exists() and not child.out_dir.exists()
+
+
+def test_reap_runs_batch_reap_only_when_a_batch_is_listed():
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "out" / "work"
+        work.mkdir(parents=True)
+        child = qw.ChildJob(None, Path(tmp), work / "usage.json", work.parent)
+        ran = []
+        saved = qw.subprocess.run
+        qw.subprocess.run = lambda cmd, **kw: ran.append((cmd, kw["timeout"]))
+        try:
+            child.reap()  # no registry
+            (work / "claude_batches.json").write_text("{}")
+            child.reap()  # nothing listed
+            assert ran == []
+            (work / "claude_batches.json").write_text(json.dumps({"msgbatch_1": {"state": "open", "model": "m"}}))
+            child.reap()
+        finally:
+            qw.subprocess.run = saved
+        assert ran == [([sys.executable, str(Path(qw.__file__).with_name("batch_reap.py")), str(work)], qw.REAP_TIMEOUT_S)]
+
+
+def test_reap_never_holds_the_worker_past_its_timeout():
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "work"
+        work.mkdir()
+        (work / "claude_batches.json").write_text(json.dumps({"msgbatch_1": {"state": "open", "model": "m"}}))
+        child = qw.ChildJob(None, Path(tmp), work / "usage.json", Path(tmp))
+        saved = qw.subprocess.run
+
+        def slow(cmd, **kw):
+            raise subprocess.TimeoutExpired(cmd, kw["timeout"])
+
+        qw.subprocess.run = slow
+        try:
+            child.reap()  # gives up quietly: what it hasn't recorded stays listed for the next run of the job
+        finally:
+            qw.subprocess.run = saved
 
 
 def test_killing_a_real_child_takes_ffmpeg_with_it():
