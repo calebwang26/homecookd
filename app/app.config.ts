@@ -59,6 +59,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ['expo-contacts', { contactsPermission: 'homecookd opens your contacts so you can invite family with a text.' }],
   ];
   if (googleScheme) plugins.push(['@react-native-google-signin/google-signin', { iosUrlScheme: googleScheme }]);
+  // The launch screen under a new name, so iOS can't keep showing an old version's snapshot (1.0's pot).
+  plugins.push('./plugins/withFreshLaunchScreen');
   // Android's notification accent is the Hearth green (theme/tokens colors.green); its channel id
   // matches the one the api sends (channelId 'default') and lib/push.ts creates.
   if (installed('expo-notifications')) {
