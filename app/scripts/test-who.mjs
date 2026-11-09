@@ -2,6 +2,8 @@
 // them all, who gets the recipe and the button's words. TS run by Node's type stripping.
 //   node scripts/test-who.mjs
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -97,6 +99,32 @@ test('a finished recording (the done view, a resend after a crash) goes to the s
   assert.deepEqual(W.doneTo(mom.id, profiles, learners, { ...none, requestFrom: caleb.id }).recipients, [caleb]);
   // Alone in the family: nobody to send to.
   assert.equal(W.doneTo(mom.id, [mom], [], none).nobody, true);
+});
+
+// Moving between the cooks and the ones who miss it (components/profiles/switchRole.ts, Caleb Nov 8).
+// Its imports leave off '.ts', as the app's do.
+registerHooks({
+  resolve(spec, ctx, next) {
+    const base = spec.startsWith('.') && ctx.parentURL ? join(dirname(fileURLToPath(ctx.parentURL)), spec) : null;
+    if (base && !/\.[a-z]+$/.test(base) && existsSync(`${base}.ts`)) return next(pathToFileURL(`${base}.ts`).href, ctx);
+    return next(spec, ctx);
+  },
+});
+const SR = await import(pathToFileURL(join(root, 'src/components/profiles/switchRole.ts')).href);
+
+test('switch role: the other section, and the words for me or for someone by name', () => {
+  assert.equal(SR.otherRole('learner'), 'cook');
+  assert.equal(SR.otherRole('cook'), 'learner');
+  assert.deepEqual(SR.switchRoleWords('Shirley', true, 'cook'), {
+    row: 'Move me to the cooks',
+    title: 'Move to the cooks?',
+    line: 'Home will show Record a new recipe, for the dishes the family misses.',
+  });
+  assert.deepEqual(SR.switchRoleWords('Grandpa Joe', false, 'learner'), {
+    row: 'Move Grandpa Joe to the ones who miss it',
+    title: 'Move Grandpa Joe to the ones who miss it?',
+    line: 'Home will show the family’s recipes to cook.',
+  });
 });
 
 console.log(`\n${passed} passed`);
