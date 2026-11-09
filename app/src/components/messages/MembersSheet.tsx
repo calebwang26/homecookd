@@ -21,6 +21,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 
 import { AddFamilySheet } from '@/components/profiles';
 import { ActionButton, type ActionState, Appear, Avatar, BottomSheet, ListCard, ListRow, PlusIcon, PressableScale, Txt, useToast } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { openChatWith } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
@@ -105,7 +106,8 @@ function Members({
     try {
       const id = await openChatWith(p.id);
       onClose();
-      router.push({ pathname: '/chat/[id]', params: { id } });
+      // The chat opens once the sheet's Modal is gone (lib/sheets/coordinator), never under it.
+      afterClose(() => router.push({ pathname: '/chat/[id]', params: { id } }));
     } catch (e) {
       toast.show(errorMessage(e, t('messages.openFailed')), { tone: 'error' });
     } finally {

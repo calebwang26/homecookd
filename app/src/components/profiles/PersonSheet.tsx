@@ -23,6 +23,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { ErrorLine } from '@/components/signin/SignInScreen';
 import { ActionButton, type ActionState, ArrowRightIcon, Avatar, BottomSheet, ChatIcon, NoPhoto, PressableScale, Txt } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { errorMessage, type Profile } from '@/lib/api';
 import { openChatWith } from '@/lib/messaging';
 import { openRecipe } from '@/lib/navigation';
@@ -38,7 +39,7 @@ const MAX_DISHES = 3;
 
 /** The sheet slides away first (no screen change under a closing Modal), then home, then `next`. */
 function homeThen(home: Href, next: () => void) {
-  setTimeout(() => {
+  afterClose(() => {
     if (router.canDismiss()) router.dismissAll();
     router.replace(home);
     setTimeout(next, CHAT_AFTER_HOME_MS);
