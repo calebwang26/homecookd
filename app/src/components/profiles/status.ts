@@ -230,10 +230,10 @@ export function useFamilyStatus(profiles: Profile[], familyKey: string | null, t
       }
       if (th === null) {
         // Their messages couldn't be read: last known line, else only what we know for sure.
-        out[p.id] = savedLine(p.id) ?? quietStatus(p, recipesByCook(entries, p.name).length, t);
+        out[p.id] = savedLine(p.id) ?? quietStatus(p, recipesByCook(entries, p).length, t);
         continue;
       }
-      out[p.id] = p.role === 'cook' ? cookStatus(p, th, recipesByCook(entries, p.name).length, t) : learnerStatus(p, th, t);
+      out[p.id] = p.role === 'cook' ? cookStatus(p, th, recipesByCook(entries, p).length, t) : learnerStatus(p, th, t);
     }
     return out;
   }, [profiles, threads, entries, saved, key, t]);

@@ -140,7 +140,7 @@ function useUpdates(dismissed: readonly string[]): { items: Update[]; ready: boo
 
   // Someone cooked one of my own dishes (anyone can forward anyone's recipe; this says "your").
   // One row per person and dish; never the "Leo has your ..." fallback for a dish only sent.
-  const mineIds = new Set(recipesByCook(entries, me?.name).map((e) => e.id));
+  const mineIds = new Set(recipesByCook(entries, me).map((e) => e.id));
   const made: MadeUpdate[] = [];
   const seen = new Set<string>();
   for (const c of k.cooked) {

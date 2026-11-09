@@ -156,7 +156,7 @@ function Members({
   };
 
   const line = (p: Profile) => {
-    const n = p.role === 'cook' ? recipesByCook(entries, p.name).length : 0;
+    const n = p.role === 'cook' ? recipesByCook(entries, p).length : 0;
     const rel = (p.relation ?? '').trim();
     const recipes = n === 1 ? t('messages.members.recipe', { n }) : t('messages.members.recipes', { n });
     const parts = [rel && rel.toLowerCase() !== p.name.trim().toLowerCase() ? rel : null, n ? recipes : null];

@@ -10,6 +10,7 @@
 //   sharedAdded(rows, prev)         the ingredients each dish's cook confirmed after the video
 //   withAdded(recipe, added)        those added to its ingredient list
 //   mergeLibrary(base, family)      the family's new dishes first, then library.json's, one per id
+//   cookedBy(entry, person)         whether that person cooked the dish (recipes.ts recipesByCook)
 // Pure, so scripts/test-library.mjs runs it in Node.
 import type { Ingredient, LibraryEntry, Recipe, Special, Story } from './types';
 
@@ -49,7 +50,7 @@ export type FamilyRecipe = {
 /** One of them (convex/schema.ts recipes.addedIngredients): `said` is her answer, in English when there is one. */
 export type AddedIngredient = { name: string; said?: string; step?: number; questionId?: string };
 
-type Person = { name: string; relation: string | null };
+type Person = { id?: string; name: string; relation: string | null };
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 const https = (s: unknown) => (typeof s === 'string' && /^https:\/\//.test(s.trim()) ? s.trim() : null);
@@ -75,17 +76,20 @@ function listedRows(rows: readonly FamilyRecipe[]): { row: FamilyRecipe; id: str
  * The family's finished dishes as library entries, in `rows` order (recipes.list: newest first),
  * one per library id. A dish still being made, or one that failed, isn't listed: the kid's library
  * has no "being made" card, and the cook's own upload already shows as a ProcessingRow. Neither is a
- * dish without a library id or an https recipe.json to load. The relation comes from the family's
- * profile with the cook's name.
+ * dish without a library id or an https recipe.json to load. The cook's profile is the one whose id is
+ * the row's cookId (1.1), which the entry keeps as `cook_id`, else the one with the cook's name (Convex,
+ * whose people ids aren't profile ids); the relation comes from it.
  */
 export function familyEntries(rows: readonly FamilyRecipe[], people: readonly Person[] = []): LibraryEntry[] {
   return listedRows(rows).map(({ row: r, id, url }) => {
     const cook = typeof r.cookName === 'string' ? r.cookName.trim() : '';
-    const person = cook ? people.find((p) => norm(p.name) === norm(cook)) : undefined;
+    const byId = typeof r.cookId === 'string' && r.cookId ? people.find((p) => p.id === r.cookId) : undefined;
+    const person = byId ?? (cook ? people.find((p) => norm(p.name) === norm(cook)) : undefined);
     return {
       id,
       title: (typeof r.title === 'string' && r.title.trim()) || 'A family recipe',
       cook_name: cook || 'Family',
+      ...(byId ? { cook_id: r.cookId } : null),
       relation: person?.relation?.trim() ?? '',
       poster_url: https(r.coverUrl),
       tags: [],
@@ -93,6 +97,21 @@ export function familyEntries(rows: readonly FamilyRecipe[], people: readonly Pe
       recipe_url: url,
     };
   });
+}
+
+/**
+ * Whether `person` cooked the dish. A family dish goes by its cook_id, as the api's hearts and dish stats
+ * do (#453), so a renamed cook keeps hers; one without (library.json's, or Convex's) by name, case and
+ * spaces aside.
+ */
+export function cookedBy(
+  e: Pick<LibraryEntry, 'cook_id' | 'cook_name'>,
+  person: { id?: string | null; name?: string | null } | null | undefined,
+): boolean {
+  if (!person) return false;
+  if (e.cook_id) return e.cook_id === person.id;
+  const n = norm(person.name);
+  return !!n && norm(e.cook_name) === n;
 }
 
 /**

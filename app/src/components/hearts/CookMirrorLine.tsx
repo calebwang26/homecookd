@@ -19,7 +19,7 @@ import { colors } from '@/theme/tokens';
 import { FacesRow } from './FacesRow';
 
 export type CookMirrorLineProps = {
-  /** My dishes: recipesByCook(entries, me.name). */
+  /** My dishes: recipesByCook(entries, me). */
   entries: LibraryEntry[];
   /** GET /dish-stats for those dishes (null while loading: nothing shows). */
   stats: DishStatsLike | null | undefined;

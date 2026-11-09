@@ -114,6 +114,11 @@ export type LibraryEntry = {
   id: string;
   title: string;
   cook_name: string;
+  /**
+   * The family profile who cooked it (familyEntries), when the recipe's cookId is one of the family's profiles
+   * (1.1: they share one id). library.json's dishes, and Convex's (its people ids aren't profile ids), have none.
+   */
+  cook_id?: string;
   relation: string;
   poster_url: string | null;
   tags: string[];
