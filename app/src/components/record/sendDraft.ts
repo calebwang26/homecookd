@@ -54,6 +54,8 @@ export type SendInput = {
   note?: string | null;
   /** The card's thumbnail video, when it isn't the first clip (sendKept: the original pick, not its copy, which goes once sent). */
   thumb?: string | null;
+  /** Heard once the background upload has started (Send's machine: uploading, then creatingJob). */
+  onStarted?: () => void;
 };
 
 export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string; dishAskId?: string | null };
@@ -129,7 +131,7 @@ export function ensureJob(row: StoredJob, liveKnown: boolean): void {
 }
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
-export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null, note, thumb }: SendInput): Promise<StoredJob> {
+export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null, note, thumb, onStarted }: SendInput): Promise<StoredJob> {
   await requireAiConsent();
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
@@ -158,6 +160,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure
   // here never stops the send: the home card asks again until Convex has the job (ensureJob).
   if (noteId) markUnsentJob(noteId, job.job_id);
+  onStarted?.();
   const made = tryJob(job);
   // The note goes once the job exists and the videos are all in (a 45-minute upload takes a while).
   if (noteId) {
