@@ -18,7 +18,7 @@ import {
   purgeOutside,
   PURGE_STUCK_MS,
   restartPurges,
-  retryOutside,
+  retryDeletion,
   runPurge,
   startDeletion,
   useVoiceClones,
@@ -1523,11 +1523,11 @@ test("a Cartesia failure is tried again later, each wait longer, and given up lo
   await q(`update account_deletions set external_tried_at = now() - interval '30 days' where id = $1`, [did]);
   assert.ok(!(await dueOutside()).includes(did), "stopped, and someone was told");
   voiceStub();
-  assert.equal(await retryOutside(did), "queued");
+  assert.equal(await retryDeletion(did), "outside");
   assert.ok((await dueOutside()).includes(did));
   assert.equal(await purgeOutside(did), "done");
-  assert.equal(await retryOutside(did), "done", "never reopens one that's finished");
-  assert.equal(await retryOutside("nope"), "missing");
+  assert.equal(await retryDeletion(did), "done", "never reopens one that's finished");
+  assert.equal(await retryDeletion("nope"), "missing");
 });
 
 test("the schedule queues what's due, and clears expired sessions and old lists", { skip }, async () => {
