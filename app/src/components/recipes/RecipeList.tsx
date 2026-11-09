@@ -13,7 +13,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { KitchenHeader } from '@/components/hearts';
-import { Chip, EmptyState, HeartIcon } from '@/components/ui';
+import { Chip, EmptyState, HeartIcon, SkeletonRow } from '@/components/ui';
 import type { Profile, RecipeStat } from '@/lib/api';
 import { earnsStamp, kitchenFor, type KitchenCount } from '@/lib/kitchenCounts';
 import type { LibraryEntry, Recipe } from '@/lib/recipes';
@@ -94,9 +94,11 @@ type Props = {
   /** The family (session profiles), for the cook's face and whose dish counts. */
   profiles?: Profile[];
   meId?: string | null;
+  /** The family's own dishes have been checked (useLibrary's familyChecked): only then is an empty list "No recipes yet". */
+  checked?: boolean;
 };
 
-export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, recipes, filter, onFilter, onOpen, kitchens: counts, profiles, meId }: Props) {
+export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, recipes, filter, onFilter, onOpen, kitchens: counts, profiles, meId, checked = true }: Props) {
   const { t } = useWords();
   const groups = useMemo(() => cookOrder(entries, cooks), [entries, cooks]);
   const byId = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
@@ -115,6 +117,15 @@ export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, r
     [counts, profiles, stats, meId],
   );
 
+  if (!entries.length && !checked) {
+    return (
+      <View accessible accessibilityLabel={t('parent.recipes.loading')} style={styles.col}>
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </View>
+    );
+  }
   if (!entries.length) {
     return (
       <EmptyState

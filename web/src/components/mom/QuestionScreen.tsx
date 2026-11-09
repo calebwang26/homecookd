@@ -14,7 +14,7 @@ import type { QuestionId } from '@/lib/dish/types';
 import ui from '@/components/dish/ui.module.css';
 import m from './mom.module.css';
 import s from './QuestionScreen.module.css';
-import { transition, view, type QEvent, type QState } from './questionMachine';
+import { ARM_MS, transition, view, type QEvent, type QState } from './questionMachine';
 
 export type Pending = { qid: QuestionId; clip: Clip };
 /** retry: keep the clip, offer Try again · redo: refused, record again · gone: MomApp shows another screen */
@@ -28,23 +28,58 @@ const NO_PROMPT_MS = 500;
 
 type Press = { id: number; t0: number; up: boolean; cancelled: boolean; stops: boolean };
 
+/**
+ * The one reload a refused mic gets (Safari keeps "Don't Allow" until the page loads again): where she was,
+ * so MomApp brings her back to the same question, and so a second refusal there explains instead of reloading.
+ */
+const RESUME_KEY = 'homecookd.mom.resume';
+const RESUME_MS = 10 * 60_000;
+export type Resume = { path: string; index: number; at: number };
+export function readResume(): Resume | null {
+  try {
+    const r = JSON.parse(sessionStorage.getItem(RESUME_KEY) ?? 'null') as Resume | null;
+    return r && r.path === location.pathname + location.search && Date.now() - r.at < RESUME_MS ? r : null;
+  } catch {
+    return null;
+  }
+}
+function writeResume(index: number) {
+  try {
+    sessionStorage.setItem(RESUME_KEY, JSON.stringify({ path: location.pathname + location.search, index, at: Date.now() }));
+  } catch {
+    /* private mode: the reload still clears Safari's refusal */
+  }
+}
+function clearResume() {
+  try {
+    sessionStorage.removeItem(RESUME_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
 type Props = {
   kid: string;
   questions: ShownQuestion[];
   answered: QuestionId[];
   canRecord: boolean;
   onSave: (pending: Pending) => Promise<SaveOutcome>;
-  onFinish: () => Promise<void>;
+  /** True when her Send went through (or there was nothing to send). */
+  onFinish: () => Promise<boolean>;
   onBack: () => void;
+  /** The question to open on, after the page reloaded for the mic (readResume). */
+  startAt?: number;
 };
 
-export function QuestionScreen({ kid, questions, answered, canRecord, onSave, onFinish, onBack }: Props) {
+export function QuestionScreen({ kid, questions, answered, canRecord, onSave, onFinish, onBack, startAt }: Props) {
   const { t } = useLang();
   const [state, setState] = useState<QState<Pending>>(() => ({
     phase: { k: 'idle', note: null },
-    index: Math.max(0, questions.findIndex((q) => !answered.includes(q.id))),
+    index: startAt !== undefined && startAt < questions.length ? startAt : Math.max(0, questions.findIndex((q) => !answered.includes(q.id))),
     n: questions.length,
+    redos: 0,
   }));
+  const [copied, setCopied] = useState(false);
   const now = useRef(state);
   const press = useRef<Press | null>(null);
   const handled = useRef(false);
@@ -63,21 +98,36 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
     setState(step.state);
     if (moved && window.scrollY > 0) window.scrollTo(0, 0);
     if (step.cmd === 'scheduleNext') nextTimer.current = window.setTimeout(() => dispatch({ type: 'NEXT' }), SAVED_MS);
-    else if (step.cmd === 'finish') void onFinish();
+    else if (step.cmd === 'finish') void onFinish().then((ok) => void (ok || dispatch({ type: 'FINISH_FAILED' })));
     else if (step.cmd === 'leave') onBack();
-    else if (step.cmd === 'reload') window.location.reload(); // Safari keeps a "Don't Allow" until the page loads again
+    else if (step.cmd === 'reload') {
+      // Safari keeps a "Don't Allow" until the page loads again. Once, and back to this question (MomApp reads it).
+      writeResume(step.state.index);
+      window.location.reload();
+    }
     return true;
+  };
+
+  /** The mic, or 'timeout' when the browser hasn't answered within ARM_MS (a prompt left open, a browser that never replies). */
+  const openWithin = async (): Promise<boolean | 'timeout'> => {
+    let timer: number | undefined;
+    const answer = await Promise.race([rec.open(), new Promise<'timeout'>((r) => (timer = window.setTimeout(() => r('timeout'), ARM_MS)))]);
+    window.clearTimeout(timer);
+    if (answer === 'timeout') rec.forgetOpen(); // the next press asks the browser again
+    return answer;
   };
 
   const start = async (p: Press | null) => {
     const prompted = !rec.hasStream();
     if (!dispatch({ type: 'PRESS' })) return;
-    const ok = await rec.open();
+    const ok = await openWithin();
     if (now.current.phase.k !== 'arming') return; // she moved on: never begin() behind her back
+    if (ok === 'timeout') return void dispatch({ type: 'MIC_TIMEOUT', inApp: inAppBrowser() });
     if (!ok) return void dispatch({ type: 'MIC_DENIED', inApp: inAppBrowser() });
     // She let go while the browser asked for the microphone: don't record behind her back.
     if (p?.up && prompted && (p.cancelled || performance.now() - p.t0 > NO_PROMPT_MS)) return void dispatch({ type: 'MIC_LATE' });
     if (!rec.begin()) return void dispatch({ type: 'BEGIN_FAILED' });
+    clearResume(); // the mic works: a later refusal may reload once again
     dispatch({ type: 'MIC_OK', tap: !p || p.up });
   };
 
@@ -100,11 +150,20 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
   };
 
   const resend = (pending: Pending) => {
-    if (dispatch({ type: 'RETRY_TAP', pending })) void save(pending);
+    if (dispatch({ type: 'RETRY_TAP' })) void save(pending);
   };
 
   const retryMic = async () => {
-    dispatch({ type: 'MIC_RETRY', ok: await rec.open() });
+    const ok = (await openWithin()) === true;
+    // One reload per question: a second refusal here, after the reload, explains instead of looping.
+    dispatch({ type: 'MIC_RETRY', ok, mayReload: readResume()?.index !== now.current.index });
+  };
+
+  const copyLink = () => {
+    void navigator.clipboard?.writeText(window.location.href).then(
+      () => setCopied(true),
+      () => setCopied(false),
+    );
   };
 
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
@@ -151,6 +210,7 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
     if (press.current || repeat) return;
     const ph = now.current.phase;
     if (ph.k === 'retry') resend(ph.pending);
+    else if (ph.k === 'sendFailed') dispatch({ type: 'RETRY_TAP' });
     else if (ph.k === 'blocked') void retryMic();
     else if (ph.k === 'recording') void stopAndSend();
     else if (ph.k === 'idle') void start(null);
@@ -254,6 +314,12 @@ export function QuestionScreen({ kid, questions, answered, canRecord, onSave, on
         <p id={labelId} className={s.label} role="status">
           {t(v.label)}
         </p>
+        {v.copyLink && (
+          // An in-app browser, or one that can't record: the way out is the same page in Safari or Chrome.
+          <button type="button" className={`${ui.press} ${ui.secondary}`} onClick={copyLink} aria-live="polite">
+            {copied ? t('m3.copied') : t('m3.copyLink')}
+          </button>
+        )}
         {v.skipShown && (
           <button type="button" className={`${ui.press} ${ui.textLink} ${s.skip}`} data-hidden={!v.skipEnabled || undefined} disabled={!v.skipEnabled} onClick={() => dispatch({ type: 'NEXT' })}>
             {isAnswered ? (last ? t('m3.done') : t('m3.next')) : t('m3.skip')}

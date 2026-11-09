@@ -75,7 +75,9 @@ export function CameraCard({
   });
 
   const Camera = cam.Camera;
-  if (!slot || (!standIn && (!Camera || !cam.device || !cam.usable))) return null;
+  // A CI simulator journey (EXPO_PUBLIC_E2E=1) has no camera: the card shows a plain stand-in (useInAppCamera e2eCamera).
+  const e2e = process.env.EXPO_PUBLIC_E2E === '1';
+  if (!slot || (!standIn && !e2e && (!Camera || !cam.device || !cam.usable))) return null;
   // Reduce Motion: no movement, the card is simply drawn where it belongs.
   const frame = reduce && big ? to : from;
   return (
@@ -100,6 +102,8 @@ export function CameraCard({
           onInitialized={cam.onInitialized}
           onError={cam.onError}
         />
+      ) : e2e ? (
+        <View style={[StyleSheet.absoluteFill, styles.e2e]} accessibilityLabel="Test camera" />
       ) : null}
       {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Your plate" /> : null}
       {!big ? <Status cam={cam} preview={!!standIn} /> : null}
@@ -136,6 +140,7 @@ function Status({ cam, preview }: { cam: InAppCamera; preview: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  e2e: { backgroundColor: '#3a5a48' },
   card: { position: 'absolute', borderRadius: radii.card, overflow: 'hidden', backgroundColor: colors.ink, transformOrigin: 'center' },
   pill: {
     position: 'absolute',

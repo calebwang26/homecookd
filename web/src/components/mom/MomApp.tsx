@@ -15,7 +15,7 @@ import type { Ask, InLang } from '@/lib/dish/types';
 import { spokenLang } from '@/lib/dish/words';
 import { MomRecipe } from './MomRecipe';
 import { FillScreen, GuessScreen, IntroScreen, SentScreen } from './MomScreens';
-import { QuestionScreen, type Pending, type SaveOutcome, type ShownQuestion } from './QuestionScreen';
+import { QuestionScreen, type Pending, type SaveOutcome, type ShownQuestion, readResume } from './QuestionScreen';
 import ui from '@/components/dish/ui.module.css';
 import s from './mom.module.css';
 import { momTransition, type MomEvent, type Stage } from './momMachine';
@@ -50,6 +50,7 @@ function Mom() {
   const [retryLang, setRetryLang] = useState<string | null>(null); // the one language still translating after the first peek
   const [english, setEnglish] = useState(false);
   const [list, setList] = useState<string[]>([]); // the question ids she's answering, fixed when she starts
+  const [startAt, setStartAt] = useState<number | undefined>(undefined); // back from a mic reload: her question
   const [recordable, setRecordable] = useState(true);
   const askRef = useRef<Ask | null>(null);
   const toSent = useCallback(() => send({ type: 'FILL_DONE' }), [send]);
@@ -71,7 +72,13 @@ function Mom() {
     peekAsk(k).then(
       (a) => {
         keep(a);
-        send({ type: 'LOADED', finished: a.finished, merging: a.merging });
+        // Reloaded for the mic (QuestionScreen's one reload): straight back to her question.
+        const resume = !a.finished && a.questions.length ? readResume() : null;
+        if (resume) {
+          setList(a.questions.map((q) => q.id));
+          setStartAt(resume.index);
+        }
+        send({ type: 'LOADED', finished: a.finished, merging: a.merging, resume: !!resume });
       },
       (e: unknown) => {
         setFailure(e instanceof DishError && e.kind === 'not-found' ? 'not-found' : 'offline');
@@ -125,18 +132,25 @@ function Mom() {
   useEffect(() => {
     if (stage !== 'fill' || !token) return;
     const t0 = Date.now();
+    let peeking = false; // one peek at a time: a slow answer never stacks another behind it
     const timer = window.setInterval(() => {
       const a = askRef.current;
       if (a?.version || (a && !a.merging) || Date.now() - t0 > FILL_WAIT_MS) {
         window.clearInterval(timer);
-        send({ type: 'FILL_STOPPED', version: !!a?.version });
+        send({ type: 'FILL_STOPPED', version: !!a?.version, finished: !!a?.finished });
         return;
       }
+      if (peeking) return;
+      peeking = true;
       // With her language, so her version comes back translated in the same answer (no English flash).
-      peekAsk(token, lang).then((a) => {
-        keep(a);
-        if (lang !== 'en') setInLangs((m) => ({ ...m, [lang]: a.inLang?.lang === lang ? a.inLang : (m[lang] ?? null) }));
-      }, () => {});
+      peekAsk(token, lang)
+        .then((a) => {
+          keep(a);
+          if (lang !== 'en') setInLangs((m) => ({ ...m, [lang]: a.inLang?.lang === lang ? a.inLang : (m[lang] ?? null) }));
+        }, () => {})
+        .finally(() => {
+          peeking = false;
+        });
     }, POLL_MS);
     return () => window.clearInterval(timer);
   }, [stage, token, lang, send]);
@@ -190,17 +204,22 @@ function Mom() {
     }
   };
 
-  const onFinish = async () => {
+  /** Her Send. False when it didn't go through: QuestionScreen says so and offers Try again. */
+  const onFinish = async (): Promise<boolean> => {
     const a = askRef.current;
-    if (!token || !a) return;
-    if (!a.answered.length) return send({ type: 'FINISH', answered: 0, ok: true });
+    if (!token || !a) return false;
+    if (!a.answered.length) {
+      send({ type: 'FINISH', answered: 0, ok: true });
+      return true;
+    }
     let ok = true;
     try {
       keep(await finishAsk(token));
     } catch {
-      ok = false; // her answers are saved; the fill screen polls and Send is retried by the kid's page (spec §4)
+      ok = false; // her answers are saved on the server; only the Send is missing
     }
     send({ type: 'FINISH', answered: a.answered.length, ok });
+    return ok;
   };
 
   if (stage === 'loading') {
@@ -241,7 +260,7 @@ function Mom() {
       return (
         <>
           <TopBar />
-          <QuestionScreen kid={kid} questions={shown} answered={ask.answered} canRecord={recordable} onSave={onSave} onFinish={onFinish} onBack={() => send({ type: 'QUESTIONS_BACK' })} />
+          <QuestionScreen kid={kid} questions={shown} answered={ask.answered} canRecord={recordable} onSave={onSave} onFinish={onFinish} onBack={() => send({ type: 'QUESTIONS_BACK' })} startAt={startAt} />
         </>
       );
     case 'nothing':
