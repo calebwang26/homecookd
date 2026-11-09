@@ -388,7 +388,7 @@ class PostgresStore:
         def work(c):
             with c.transaction():
                 job = c.execute(
-                    """select id, family_id, cook_id, recipe_id, language, stage, attempts, cancelled_at from jobs
+                    """select id, family_id, cook_id, recipe_id, recording_id, language, stage, attempts, cancelled_at from jobs
                         where id = %s for update""", (claim["id"],)).fetchone()
                 if job is None or job["cancelled_at"] is not None or job["attempts"] != claim["attempts"]:
                     return False
@@ -411,20 +411,24 @@ class PostgresStore:
         from psycopg.types.json import Jsonb
         fields = (row["title"], row["library_id"], keys["media_prefix"], keys["recipe_json_key"], keys["cover_key"],
                   keys.get("cover_version"), Jsonb(row["steps"]), Jsonb(row["memories"]), row["language"] or job["language"])
-        opt_in = claim.get("memories_opt_in")
+        # Her latest answer to "share the stories and tips?" wins (decision 2): one she gave on the recipe itself (memories_opt_in_at)
+        # always stands; otherwise the recording's, read now, not at the claim, which can be hours old.
+        recording_answer = "(select rec.memories_opt_in from recordings rec where rec.id = %s)"
         if job["recipe_id"]:
             found = c.execute(
-                """update recipes set status = 'ready', title = %s, library_id = %s, media_prefix = %s, recipe_json_key = %s,
+                f"""update recipes set status = 'ready', title = %s, library_id = %s, media_prefix = %s, recipe_json_key = %s,
                           cover_key = %s, cover_stock_path = null, cover_version = %s, steps = %s, memories = %s, language = %s,
-                          moss_indexed_at = null, memories_opt_in = coalesce(%s, memories_opt_in)
-                    where id = %s returning id""", (*fields, opt_in, job["recipe_id"])).fetchone()
+                          moss_indexed_at = null,
+                          memories_opt_in = case when memories_opt_in_at is not null then memories_opt_in
+                                                 else coalesce({recording_answer}, memories_opt_in) end
+                    where id = %s returning id""", (*fields, job["recording_id"], job["recipe_id"])).fetchone()
             if found:  # else it went with its cook's account: a new row, as worker.published
                 return found["id"]
         return c.execute(
-            """insert into recipes (title, library_id, media_prefix, recipe_json_key, cover_key, cover_version, steps, memories,
+            f"""insert into recipes (title, library_id, media_prefix, recipe_json_key, cover_key, cover_version, steps, memories,
                                     language, memories_opt_in, family_id, cook_id, status)
-               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'ready') returning id""",
-            (*fields, bool(opt_in), job["family_id"], job["cook_id"])).fetchone()["id"]
+               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce({recording_answer}, false), %s, %s, 'ready') returning id""",
+            (*fields, job["recording_id"], job["family_id"], job["cook_id"])).fetchone()["id"]
 
     def sweep(self, lease_s: int, max_failures: int, message: str, stranded_s: int) -> list[dict]:
         """Jobs nobody is moving, as [{id, stage, was}]. A running job whose lease lapsed (its worker died) counts a failure: woken

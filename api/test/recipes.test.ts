@@ -56,6 +56,7 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     await optIn(dad, id, false);
     assert.deepEqual((await get(leo, id)).data.memories, []);
     assert.equal((await recipe(id)).moss_indexed_at, null, "whatever re-syncs search finds it");
+    assert.notEqual((await recipe(id)).memories_opt_in_at, null, "her own answer: a later publish never overwrites it");
     await closeRecipeWrites();
   });
 

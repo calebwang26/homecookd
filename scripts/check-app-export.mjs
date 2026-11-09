@@ -3,7 +3,8 @@
 //   node scripts/check-app-export.mjs app/<export dir> --aws <host>   the AWS build: the export must hold this api host
 //   node scripts/check-app-export.mjs app/<export dir> --no-aws <host> any other channel: it must not
 //   ... --also <host> (repeatable): it must hold this too; --not <host> (repeatable): it must not hold this
-// It always refuses an export holding something shaped like a key, or app/.env's family code.
+// It always refuses an export holding something shaped like a key, or app/.env's family code, and one holding the CI
+// simulator hooks (EXPO_PUBLIC_E2E: the e2e/sign-in link) unless --e2e says it's that build (scripts/check-e2e-stripped.mjs).
 // The key shapes are the same as check-merge-safe.mjs's on aws-migration.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -17,8 +18,12 @@ const KEY_SHAPES = [
 
 const [out, mode, host, ...rest] = process.argv.slice(2);
 const also = [], not = [];
+let e2e = false;
 for (let i = 0; i < rest.length; i += 2) {
-  if (rest[i] === '--also' && rest[i + 1]) also.push(rest[i + 1]);
+  if (rest[i] === '--e2e') {
+    e2e = true;
+    i -= 1;
+  } else if (rest[i] === '--also' && rest[i + 1]) also.push(rest[i + 1]);
   else if (rest[i] === '--not' && rest[i + 1]) not.push(rest[i + 1]);
   else { console.error(`unknown argument ${rest[i]}`); process.exit(2); }
 }
@@ -41,6 +46,8 @@ const listAll = (d, acc = []) => {
   return acc;
 };
 const files = listAll(dir).filter((f) => /\.(js|hbc|json|map|html)$/.test(f));
+/** In a build made with EXPO_PUBLIC_E2E=1 only (app/+native-intent.tsx); a store build folds it away. */
+const E2E_MARK = 'e2e/sign-in';
 const failures = [];
 const rel = (f) => path.relative(ROOT, f);
 
@@ -57,6 +64,7 @@ for (const file of files) {
   if (text.includes(host)) hostSeen = true;
   for (const h of also) if (text.includes(h)) alsoSeen.add(h);
   for (const h of not) if (text.includes(h)) notSeen.add(h);
+  if (!e2e && text.includes(E2E_MARK)) failures.push(`${rel(file)} holds the CI simulator hooks (${E2E_MARK}): it was built with EXPO_PUBLIC_E2E=1, or Metro's cache kept that build's code (export with --clear).`);
 }
 for (const h of also) if (!alsoSeen.has(h)) failures.push(`the export doesn't hold ${h}.`);
 for (const h of notSeen) failures.push(`the export holds ${h}, which this channel's build doesn't.`);

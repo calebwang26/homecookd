@@ -229,6 +229,7 @@ node app/scripts/pcm-echo-server.mjs                               # test socket
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
 cd app && node scripts/test-sheets.mjs                             # the sheet machine and coordinator (lib/machine.ts, lib/sheets/): every state × event, afterClose on a fake clock
+node scripts/check-e2e-stripped.mjs                                # the CI simulator hooks (EXPO_PUBLIC_E2E=1) never reach a store build: two cleared iOS exports (~3 min)
 cd app && node scripts/test-aws.mjs                               # the 1.1 AWS client (src/lib/aws): error shapes, sessions, retries (fake fetch)
 cd app && node scripts/aws-accounts-staging.mjs                    # the same client against AWS staging: read-only Accounts checks
 cd app && node scripts/aws-accounts-flows.mjs                      # Accounts flows on AWS staging with test people (TEST_SIGNIN_KEY; deletes them after)
