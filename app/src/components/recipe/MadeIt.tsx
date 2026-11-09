@@ -18,6 +18,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { PostcardStep } from '@/components/postcard';
 import { ActionButton, EggMascot, PressableScale, SendIcon, SuccessBurst, Txt } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import type { Profile } from '@/lib/api';
 import type { CookedRef } from '@/lib/messaging';
 import { canPostcard } from '@/lib/postcardLogic';
@@ -108,8 +109,7 @@ function ShareLove({ recipe, poster, onLeave }: { recipe: Recipe; poster: string
     shownAt.current = null;
     if (lasted < SHOWN_MIN_MS) return;
     // Let the sheet finish sliding away before the screen changes under it.
-    const t = setTimeout(onLeave, motion.sheetCloseMs + 80);
-    return () => clearTimeout(t);
+    return afterClose(onLeave, motion.sheetCloseMs + 80);
   }, [asked, share.visible, onLeave]);
 
   return (

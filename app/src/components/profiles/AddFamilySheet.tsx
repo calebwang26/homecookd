@@ -35,6 +35,7 @@ import { ExternalRow } from '@/components/share/ExternalRow';
 import { cooksFirst } from '@/components/share/FamilyRow';
 import { InviteCard } from '@/components/share/InviteCard';
 import { BottomSheet, PlusIcon, PressableScale, Txt } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { ApiError, type Profile, type Role } from '@/lib/api';
 import { familyInviteText, familyJoinLink } from '@/lib/invites';
 import { useSession } from '@/lib/session';
@@ -70,14 +71,13 @@ function InviteSheet({ visible, onClose, onSwitch, initialRole }: AddFamilySheet
   const [phonelessOpen, setPhonelessOpen] = useState(false);
   useEffect(() => {
     if (step !== 'phoneless') return;
-    const t = setTimeout(() => setPhonelessOpen(true), motion.sheetCloseMs + 40);
-    return () => clearTimeout(t);
+    return afterClose(() => setPhonelessOpen(true), motion.sheetCloseMs + 40);
   }, [step]);
   const switchTo = (them: Profile) => {
     onClose();
     if (onSwitch) return onSwitch(them);
     // No screen change under a closing Modal: go once the sheet is gone.
-    setTimeout(() => {
+    afterClose(() => {
       if (router.canDismiss()) router.dismissAll();
       setMe(them);
       router.replace(homeFor(them));

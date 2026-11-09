@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { CravingSheet } from '@/components/craving/CravingSheet';
 import { ActionButton, listEnter, PressableScale, RecordDotIcon, ScreenWash, Txt } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { useHomieScreen } from '@/lib/homie/hooks';
 import { useWords } from '@/lib/words/useWords';
 import { colors, motion, radii, shadows, space } from '@/theme/tokens';
@@ -44,8 +45,7 @@ export function TwoDoors({ onSeen, onDone, onSent }: TwoDoorsProps) {
   // Home comes once the sheet has slid away (never pull a Modal out mid-animation).
   useEffect(() => {
     if (!leaving) return;
-    const timer = setTimeout(onDone, motion.sheetCloseMs + 40);
-    return () => clearTimeout(timer);
+    return afterClose(onDone, motion.sheetCloseMs + 40);
   }, [leaving, onDone]);
 
   const ask = () => {

@@ -1,3 +1,4 @@
+// @machine
 // One sheet's lifecycle (components/ui/BottomSheet), as a table. Its native Modal is up in `open` and
 // `closing`; the coordinator (./coordinator.ts) holds every sheet's state so they can wait on each other.
 //
