@@ -107,6 +107,8 @@ test("each invariant counts and names its violating rows, never the healthy row 
   await w.deletion("now()", "now() - interval '2 days'", 3, "null");
   await w.deletion("now()", "now() - interval '2 days'", 10, "now()");
   await w.deletion("now()", "now() - interval '2 days'", 0, "null"); // the team's retry: a fresh count
+  // A long purge still batching two hours on hasn't stopped: the same window as the team's list (deletion.ts STALLED).
+  await db().query(`update account_deletions set purge_run_at = now() - interval '5 minutes' where id = $1`, [await w.deletion("null", "now() - interval '2 hours'", 0, "null")]);
 
   bad.outbox_stuck = [await w.outbox(5, "null")];
   await w.outbox(4, "null");

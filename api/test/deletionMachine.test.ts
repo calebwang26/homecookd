@@ -7,6 +7,7 @@ import { db } from "../src/db.js";
 import { run, parse } from "../src/deletions.js";
 import { MAX_OUTSIDE_ATTEMPTS, purgeOutside, retryDeletion, runPurge, stageOf, startDeletion, useVoiceClones } from "../src/modules/accounts/deletion.js";
 import { accountsSweep } from "../src/modules/accounts/tasks.js";
+import { checkInvariants, INVARIANTS } from "../src/modules/platform/invariants.js";
 import { freshDatabase, hasDatabase, makeFamily, makePerson, setup } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
@@ -169,6 +170,9 @@ test("the team's command: stalled lists what stopped, retry starts it again; a t
     [gaveUp, MAX_OUTSIDE_ATTEMPTS],
   );
   const fine = (await startDeletion(await makePerson(f.id, "KEEP-NAME"), "person"))!;
+  // A long purge still batching two hours on: not stopped, for the list as for the alarm (deletion_stalled reads the same STALLED).
+  const busy = (await startDeletion(await makePerson(f.id), "person"))!;
+  await db().query(`update account_deletions set requested_at = now() - interval '2 hours', purge_run_at = now() - interval '5 minutes' where id = $1`, [busy]);
   const io = () => {
     const out: string[] = [];
     const err: string[] = [];
@@ -181,6 +185,11 @@ test("the team's command: stalled lists what stopped, retry starts it again; a t
   assert.deepEqual(listed.map((d) => [d.id, d.stage]).sort(), [[stopped, "purging"], [gaveUp, "gave_up"]].sort());
   assert.equal(listed.find((d) => d.id === gaveUp).outsideError, "S3 uploads: AccessDenied");
   assert.ok(!a.out.join("\n").includes(fine) && !a.out.join("\n").includes("KEEP-NAME"), "only what stopped, and never a name");
+  assert.ok(!a.out.join("\n").includes(busy), "a purge still batching hasn't stopped");
+  const only = INVARIANTS.filter((i) => i.name === "deletion_stalled");
+  const named: string[] = [];
+  await checkInvariants({ log: { info: () => {}, warn: () => {}, error: (o: { id?: string }) => void (o.id && named.push(o.id)) } } as never, only);
+  assert.deepEqual(named.sort(), [stopped, gaveUp].sort(), "the alarm names exactly what the list does");
 
   const b = io();
   assert.equal(await run(["retry", gaveUp], b.io), 0);
