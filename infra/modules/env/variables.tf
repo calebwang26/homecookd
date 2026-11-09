@@ -125,6 +125,12 @@ variable "alert_email" {
   type = string
 }
 
+variable "invariant_alarms" {
+  description = "Alarms on the invariant sweep's metrics (invariants.tf). Production sets it; staging keeps the metrics and pages nobody"
+  type        = bool
+  default     = false
+}
+
 variable "github_repository" {
   description = "owner/name. GitHub's job_workflow_ref claim uses the name, so renaming the repo stops the deploy login until this changes"
   type        = string
