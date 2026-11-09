@@ -12,6 +12,7 @@ import { dishTasks } from "./modules/dish/tasks.js";
 import { jobTasks } from "./modules/jobs/tasks.js";
 import { syncTasks } from "./modules/sync/tasks.js"; // temporary: comes off with the sync (docs/build/SYNC-MIGRATION.md)
 import { messageTasks } from "./modules/messages/tasks.js";
+import { checkInvariants } from "./modules/platform/invariants.js";
 
 type Task = (payload: Record<string, unknown>, trace: Trace) => Promise<void>;
 
@@ -30,7 +31,9 @@ async function prune(): Promise<void> {
   }
 }
 
-const TASKS: Record<string, Task> = { ...dishTasks, ...jobTasks, ...syncTasks, ...communityTasks, ...messageTasks, ...accountTasks, "platform.prune": prune };
+const TASKS: Record<string, Task> = { ...dishTasks, ...jobTasks, ...syncTasks, ...communityTasks, ...messageTasks, ...accountTasks, "platform.prune": prune,
+  "platform.invariants": async (_payload, trace) => void (await checkInvariants(trace)),
+};
 
 /**
  * One message, from the outbox ({outboxId, requestId, payload}) or a schedule ({payload}). An unknown or broken one throws, so it's seen. The worker's own

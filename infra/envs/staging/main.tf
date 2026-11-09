@@ -98,6 +98,7 @@ module "env" {
     "messages.daily"        = { expression = "rate(1 day)", task = "messages.daily" }
     "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
     "accounts.sweep"        = { expression = "rate(1 hour)", task = "accounts.sweep" }
+    "platform.invariants"   = { expression = "rate(5 minutes)", task = "platform.invariants" }
   }
 
   services = {

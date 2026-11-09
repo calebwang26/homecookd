@@ -51,3 +51,10 @@ test merged), **retired** (code goes with the old stack).
 | 35 | Dinner invite, invite page, shared recipe, clip playback | App Store, web & builds | `web/src/components/dinner-invite/`, `invite/`, `recipe-web/`, `dish/parts.tsx` | implicit | 3 |
 | 36 | A sheet torn down with its screen while its Modal is up (iOS: RN Fabric's `prepareForRecycle` never dismisses the presented Modal, so an empty one can stay over the app) | App screens | `react-native` `RCTModalHostViewComponentView.mm`; seen from `components/ui/BottomSheet.tsx` | implicit | 1.1.2 native |
 | 37 | Account & privacy: "Email the team a report" with `machineHistory()` and the device and app version (no Sentry in the app) | App screens | `app/src/app/index.tsx` Account sheet, `lib/machine.ts` | to build | 3 |
+
+**The invariant sweep (Nov 9).** Every 5 minutes `platform.invariants` (`api/src/modules/platform/invariants.ts`) counts the states that must never be
+true: a queued job with no wake-up owed for 3 h, a running job silent for 15 min, a push queued an hour past its time, a dish ask merging for 10 min, an
+account deletion stalled for an hour or given up outside, an outbox row with 5 failed sends, a recipe shared or hidden while not ready, a full dinner
+with seats left. Each count is a CloudWatch metric (`infra/modules/env/invariants.tf`); production alarms on any of them, and on the sweep itself going
+quiet for 15 minutes. The violating rows' ids are in the api log as `INVARIANT <name>` lines, so a chat can act on them. A machine made explicit adds its
+invariant there (the SQL, a test with a healthy look-alike, and the filter's key).
