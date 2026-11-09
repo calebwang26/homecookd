@@ -21,5 +21,6 @@ how the first freeze was misdiagnosed.
   as a state marker is written with a temp file and an atomic rename.
 Each machine is its own PR by its owner chat. The Master Agent merges a lifecycle PR only with (1) the table, (2) a real
 test of every state × event (not a regex on source), and (3) identical behaviour, or a bug Caleb approved by name.
+**CI (Nov 8):** a machine file carries `state-machine-test: <its test>` as a header line, and `scripts/check-machine-tests.mjs` (CI's `changes` job) fails a PR that changes the file without the test. Add the marker when you make a machine explicit.
 Each machine's file starts with a 20-line block: states, events, guards, the one invariant. Add every machine to
 `docs/agents/STATE-MACHINES.md`.
