@@ -2,6 +2,22 @@
 // cook with them) and neighbors ask to join. The address stays private: only the host and the guests they accepted ever see it.
 // "Invite friends": the host and accepted guests share one link per dinner; whoever opens it sees only the dish, the host's name and when, and counts once per phone
 // or browser in "X going".
+//
+// A dinner's machine (Caleb, Nov 8: decision 5; docs/agents/STATE-MACHINES.md row 11). The guarded updates are in data.ts; 085_dinner_reopen.sql's CHECK ties a
+// takedown to a hidden, cancelled dinner.
+// state-machine-test: api/test/dinnerMachine.test.ts
+//
+//   status    open <-> full -> ... ; open | full -> cancelled (its host leaves or deletes, its dish goes, the team removes it)
+//             cancelled by the team (taken_down_at) -> open | full again by the team's keep, while it can
+//   events    yes (respondToJoin)        open -> full when it takes the last seat; full, cancelled or started: refused
+//             no                         answers the ask; the dinner doesn't change
+//             seat frees                 full -> open: an accepted guest deleted their account (purge), or left the family they asked from (only dinners ahead)
+//             host or dish gone          open | full -> cancelled (account.ts; one that has started keeps what it was)
+//             remove (the team's review) open | full -> cancelled, hidden, taken_down_at; one already cancelled is only hidden
+//             keep (the team's review)   hidden -> shown; taken down -> open, or full by its seats, if it hasn't started and its host and dish are still there
+//   asks      pending -> accepted | declined; an ask goes with its guest (deleted, or left with the dinner still ahead)
+//   guards    every update names the status it leaves; the seat count is read under the dinner's row lock
+//   invariant a full dinner always has every seat taken (platform/invariants.ts dinner_full_with_seats)
 import { randomBytes } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
@@ -43,7 +59,8 @@ async function viewDinners(signed: Signed, shield: Shield, dinners: DinnerRow[],
   const opens = await data.inviteOpenCounts(db(), ids);
   const onHosted = (await data.requestsOn(db(), hosted)).filter((r) => !shield.blocked.has(r.guest_family_id));
   const people = await peopleByIds(db(), [signed.personId, ...dinners.map((d) => d.host_id), ...onHosted.map((r) => r.guest_id)]);
-  // A pending ask from a guest who has gone can't be said yes to, so it leaves the host's list. One already answered stays: it's what happened, and a yes holds its seat.
+  // A pending ask from a guest who has gone can't be said yes to, so it leaves the host's list. Their asks on dinners ahead go when they leave (account.ts), and one
+  // on a dinner that has started stays: it's what happened.
   const asks = onHosted.filter((r) => r.status !== "pending" || !goneFrom(people.get(r.guest_id), r.guest_family_id));
   const families = await familiesByIds(db(), dinners.map((d) => d.host_family_id));
   const me = people.get(signed.personId);
