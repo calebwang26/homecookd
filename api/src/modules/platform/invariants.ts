@@ -5,7 +5,6 @@
 import * as Sentry from "@sentry/node";
 import { db } from "../../db.js";
 import { STUCK_ATTEMPTS } from "../../outbox.js";
-import { MAX_OUTSIDE_ATTEMPTS } from "../accounts/deletion.js";
 import type { Trace } from "../dish/budget.js";
 
 /** The ids logged for one invariant in one run. The count is always whole. */
@@ -51,13 +50,12 @@ export const INVARIANTS: Invariant[] = [
     args: [],
   },
   {
-    // The purge inside the database stalled, or the purge outside it gave up (accounts/deletion.ts MAX_OUTSIDE_ATTEMPTS).
+    // The purge inside the database stalled, or the purge outside it gave up (accounts/deletion.ts). node dist/deletions.js stalled lists them, retry <id> restarts one.
     name: "deletion_stalled",
     owner: "AWS backend",
     sql: `select id from account_deletions
-           where (purged_at is null and requested_at < now() - interval '1 hour')
-              or (purged_at is not null and external_purged_at is null and external_attempts >= $1)`,
-    args: [MAX_OUTSIDE_ATTEMPTS],
+           where (purged_at is null and requested_at < now() - interval '1 hour') or external_gave_up_at is not null`,
+    args: [],
   },
   {
     name: "outbox_stuck",

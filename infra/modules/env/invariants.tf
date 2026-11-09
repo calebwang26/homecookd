@@ -7,7 +7,7 @@ locals {
     job_running_stale       = { metric = "InvariantJobRunningStale", look = "A running job's heartbeat stopped 15 minutes ago and nothing has taken it back" }
     push_queued_stale       = { metric = "InvariantPushQueuedStale", look = "A push has been queued an hour past its send time, or sending for an hour: push.sweep isn't moving it" }
     dish_merge_stuck        = { metric = "InvariantDishMergeStuck", look = "A dish ask has been merging Mom's answers for over 10 minutes" }
-    deletion_stalled        = { metric = "InvariantDeletionStalled", look = "An account deletion stalled for an hour, or its purge outside the database gave up" }
+    deletion_stalled        = { metric = "InvariantDeletionStalled", look = "An account deletion stalled for an hour, or its purge outside the database gave up: node dist/deletions.js stalled, then retry <id>" }
     outbox_stuck            = { metric = "InvariantOutboxStuck", look = "An outbox row failed to send 5 times or more" }
     recipe_shared_not_ready = { metric = "InvariantRecipeSharedNotReady", look = "A recipe that isn't ready is shared or hidden on Community" }
     dinner_full_with_seats  = { metric = "InvariantDinnerFullWithSeats", look = "A dinner says full with seats left" }
