@@ -39,6 +39,8 @@ jobs:
           done
       # A state machine's table changed without its test (docs/agents/STATE-MACHINES.md): every section's PRs.
       - run: node scripts/check-machine-tests.mjs "origin/$GITHUB_BASE_REF"
+      # The repo scripts' own tests (the canary order, safe-eas-update.sh's arguments, the marker check): fast, no network.
+      - run: node --test scripts/*.test.mjs
 
   secrets:
     runs-on: ubuntu-latest

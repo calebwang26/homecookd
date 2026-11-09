@@ -199,6 +199,10 @@ Caleb picks one.
       d8ea50c8-4969-4c25-9d84-74f32a4430a1 --destination-branch production-aws --platform ios --non-interactive`.
     - Undo for 1.1.1, back to build 21's own JS: `update:roll-back-to-embedded --channel production-aws
       --runtime-version 1.1.1 --platform ios`.
+  - **Canary order (Nov 9, #PR):** every later update goes to 1.1.1 first. `safe-eas-update.sh` refuses 1.1.0 until the
+    newest 1.1.1 group is 2 hours old (`CANARY_HOURS`) and holds the same copy of every app/src file the 1.1.0 checkout
+    changed since build 18. `scripts/check-canary.mjs` prints the time it becomes allowed and any file that differs.
+    `--canary-ok "<reason>"` skips the wait, and the update's message carries the reason.
 
 ## What production has on at launch
 
