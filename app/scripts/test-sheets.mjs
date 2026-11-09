@@ -2,7 +2,7 @@
 // under node: every state × event pair against the expected table, then the coordinator on a fake clock.
 //   cd app && node scripts/test-sheets.mjs
 //
-// 1. lib/machine.ts: a missing entry is a no-op (null), never a throw.
+// 1. lib/machine.ts: a missing entry is a no-op (null), never a throw; step() keeps the last 20 events.
 // 2. The sheet table (hidden, held, open, closing), every pair; how `visible` becomes an event.
 // 3. The root host table (the AI consent ask waits for no sheet up), every pair.
 // 4. afterClose: waits for every sheet up at the call, then SETTLE_MS, never before minMs, never past the cap.
@@ -23,7 +23,7 @@ registerHooks({
   },
 });
 const load = (p) => import(pathToFileURL(join(root, p)).href);
-const { machine } = await load('src/lib/machine.ts');
+const { machine, machineHistory, clearMachineHistory, HISTORY_SIZE } = await load('src/lib/machine.ts');
 const SM = await load('src/lib/sheets/machine.ts');
 const C = await load('src/lib/sheets/coordinator.ts');
 const { motion } = await load('src/theme/tokens.ts');
@@ -86,6 +86,25 @@ await test('machine: a listed event moves, an unlisted one is null (a no-op), ne
   assert.equal(door.transition('shut', 'open'), 'ajar');
   assert.equal(door.transition('ajar', 'open'), null);
   assert.equal(door.transition('shut', 'close'), null);
+});
+
+await test('machine: step() records every event (no-ops too), keeps the last 20, and transition() records nothing', () => {
+  clearMachineHistory();
+  const door = machine('door', ['open', 'close'], { shut: { open: 'ajar' }, ajar: { close: 'shut' } });
+  door.transition('shut', 'open');
+  assert.deepEqual(machineHistory(), {}, 'transition is pure');
+  assert.equal(door.step('shut', 'open'), 'ajar');
+  assert.equal(door.step('ajar', 'open'), null);
+  const h = machineHistory().door;
+  assert.deepEqual(h.map(({ event, from, to }) => [event, from, to]), [['open', 'shut', 'ajar'], ['open', 'ajar', null]]);
+  assert.equal(typeof h[0].t, 'number');
+  for (let i = 0; i < 30; i += 1) door.step(i % 2 ? 'ajar' : 'shut', i % 2 ? 'close' : 'open');
+  assert.equal(HISTORY_SIZE, 20);
+  assert.equal(machineHistory().door.length, 20, 'a ring of 20');
+  assert.equal(machineHistory().door.at(-1).event, 'close', 'newest last');
+  machineHistory().door.pop();
+  assert.equal(machineHistory().door.length, 20, 'a copy, not the buffer');
+  clearMachineHistory();
 });
 
 await test('sheet: every state × event (today\'s BottomSheet, as a table)', () => {

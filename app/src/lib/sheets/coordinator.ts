@@ -1,3 +1,4 @@
+// @machine
 // The one owner of every sheet's state (./machine.ts), so sheets and screens can wait on each other
 // instead of guessing delays. BottomSheet reports its state here; nothing else writes it.
 //

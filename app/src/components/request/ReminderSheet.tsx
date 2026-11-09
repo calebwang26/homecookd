@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { AppState, Linking, StyleSheet, View } from 'react-native';
 
 import { ActionButton, BottomSheet, haptic, PressableScale, SegmentedChoice, Txt, useToast } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { askReminderPermission, reminderPermission, setAskReminder, useAskReminder, type ReminderPermission } from '@/lib/askReminders';
 import { setFilmingDay, type CravingAsk } from '@/lib/cravings';
 import { dayName, dayPlural, dayShort, everyLine, partName, recordUrl, REMINDER_PARTS, type ReminderPart } from '@/lib/reminders';
@@ -79,7 +80,7 @@ export function ReminderSheet({ ask, visible, onClose }: { ask: CravingAsk; visi
 
   const makingNow = () => {
     onClose();
-    setTimeout(() => router.push(recordForAsk(ask)), SHEET_GONE_MS);
+    afterClose(() => router.push(recordForAsk(ask)), SHEET_GONE_MS);
   };
 
   const off = perm === 'denied';

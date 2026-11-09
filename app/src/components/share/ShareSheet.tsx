@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { nightTitle } from '@/components/community/labels';
 import { Appear, BottomSheet, CheckIcon, CloseIcon, EggMascot, haptic, Txt, useToast } from '@/components/ui';
+import { machineHistory } from '@/lib/machine';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { totalTimeLabel } from '@/lib/format';
 import { useRecipe } from '@/lib/recipes';
@@ -317,6 +318,8 @@ class BodyGuard extends Component<{ children: ReactNode; t: T }, { failed: boole
     return { failed: true };
   }
   componentDidCatch(error: unknown) {
+    // The machines' recent events: how the sheets got here (lib/machine.ts).
+    if (__DEV__) console.warn('[machines]', JSON.stringify(machineHistory()));
     trail('sheet body crashed (caught)', error);
   }
   render() {

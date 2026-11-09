@@ -11,6 +11,7 @@ import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Appear, Avatar, BackIcon, BottomSheet, ChatIcon, ChevronRightIcon, IconButton, ListCard, ListRow, Txt, useToast } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { errorMessage, type Profile } from '@/lib/api';
 import { openChatWith, openCircle } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
@@ -63,10 +64,13 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
       const { id, ask } = await open();
       const recipe = pick?.dish?.id;
       onClose();
-      router.push({
-        pathname: '/chat/[id]',
-        params: { id, ...(recipe ? { recipe } : {}), ...(ask ? { ask: '1' } : {}) },
-      });
+      // The chat opens once the sheet's Modal is gone (lib/sheets/coordinator), never under it.
+      afterClose(() =>
+        router.push({
+          pathname: '/chat/[id]',
+          params: { id, ...(recipe ? { recipe } : {}), ...(ask ? { ask: '1' } : {}) },
+        }),
+      );
     } catch (e) {
       toast.show(errorMessage(e, t('messages.openFailed')), { tone: 'error' });
     } finally {
