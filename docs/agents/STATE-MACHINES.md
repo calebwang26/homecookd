@@ -3,6 +3,12 @@
 Every lifecycle in the codebase, explicit or still implicit, with its owner and its state. Rule and pattern:
 `docs/agents/memory/state-machines.md`. Add a row when you make one explicit; keep the file and test columns true.
 
+**The marker (CI-enforced):** a machine file names its test in a header line within its first 40 lines, on a line of its
+own: `// state-machine-test: questionMachine.test.ts` (TS/JS) or `# state-machine-test: test_claude.py` (Python). A bare
+name is next to the file; a path with a slash is from the repo root. CI's `changes` job runs
+`scripts/check-machine-tests.mjs`, which fails a PR that changes a marked file without changing its test, or whose marker
+names a test that doesn't exist. Each owner adds the marker to their own machines.
+
 Status: **implicit** (flags, timers, strings; the survey of Nov 8, 2026 found it), **explicit** (table + transition
 test merged), **retired** (code goes with the old stack).
 
