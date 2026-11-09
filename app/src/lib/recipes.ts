@@ -1,5 +1,6 @@
-// Recipes: the family library & each recipe.json from the public bucket, falling back to the JSON
-// bundled in assets/data/ on ANY error (no env var, offline, bad JSON, 404...).
+// Recipes: the family library & each recipe.json from the media bucket. The app bundles no recipes (bundled.ts
+// is empty, Caleb Nov 8: every family starts with none), so on ANY error (offline, bad JSON, 404...) the public
+// list is empty and only the family's own dishes show.
 // The library also lists the signed-in family's own finished dishes from Convex (recipes.list, live;
 // familyLibrary.ts): the pipeline publishes those to Convex, never to the public library.json. Their
 // recipe.json is the row's recipeJsonUrl in the media bucket, loaded and cached like the others.
@@ -181,8 +182,32 @@ export function fetchRecipe(entryOrId: LibraryEntry | string): Promise<{ recipe:
   return p;
 }
 
+/**
+ * The ten sample dishes every phone used to share (Uncle Ray's steak, the Biryani, ...), retired on Nov 8: a
+ * family starts with none and nothing crosses between families. An old link or heart to one finds nothing,
+ * even while their files are still on the media host. A family's own dish is never refused, whatever its id.
+ */
+export const RETIRED_SAMPLES: ReadonlySet<string> = new Set([
+  'weed-steak',
+  'chicken-biryani',
+  'auntie-lin-scallion-pancakes',
+  'dad-ginger-scallion-fish',
+  'dad-sunday-chili',
+  'gordon-stir-fry',
+  'gordon-gnocchi',
+  'gordon-cheesecake',
+  'grandma-hand-pulled-noodle-soup',
+  'grandma-red-braised-pork',
+]);
+
+/** A retired sample that isn't one of the signed-in family's own dishes. */
+export function isRetiredSample(id: string, familyIds: Iterable<string> = family.entries.map((e) => e.id)): boolean {
+  return RETIRED_SAMPLES.has(id) && ![...familyIds].includes(id);
+}
+
 async function fetchRecipeUncached(entryOrId: LibraryEntry | string): Promise<{ recipe: Recipe; source: Source } | null> {
   const id = typeof entryOrId === 'string' ? entryOrId : entryOrId.id;
+  if (isRetiredSample(id)) return null;
   const entry = typeof entryOrId === 'string' ? entryCache.get(id) : entryOrId;
   // The entry's recipe_url first, then the conventional bucket path (covers a cold start on a
   // deep link, when only the bundled library is known).
@@ -397,9 +422,8 @@ function subscribeLib(l: () => void) {
 }
 
 /**
- * The family library. Starts with the bundled copy (never empty offline), then swaps in the bucket
- * copy once it arrives, with the signed-in family's own dishes from Convex in front. `loaded` turns
- * true after the first remote attempt.
+ * The family library: the signed-in family's own dishes, plus library.json's (empty since Nov 8). Starts
+ * empty, never with samples. `loaded` turns true after the first remote attempt.
  */
 export function useLibrary(): LibraryState & { refresh: () => Promise<void> } {
   useFamilyLibrary();
