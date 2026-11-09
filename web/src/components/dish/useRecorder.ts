@@ -142,11 +142,20 @@ export function useRecorder(onLimit: () => void, maxMs = MAX_MS) {
       );
       opening.current = asking;
       void asking.then(() => {
-        opening.current = null;
+        if (opening.current === asking) opening.current = null; // never a newer request's (forgetOpen)
       });
     }
     return opening.current;
   }, [live, release]);
+
+  /**
+   * Stop waiting on a mic request that never answered (a prompt left open, a browser that never replies), so
+   * the next open() asks the browser again instead of returning the same pending promise. If the old request
+   * answers later, its stream is still kept, and the next open() finds it live.
+   */
+  const forgetOpen = useCallback(() => {
+    opening.current = null;
+  }, []);
 
   const begin = useCallback((): boolean => {
     const s = stream.current;
@@ -241,5 +250,5 @@ export function useRecorder(onLimit: () => void, maxMs = MAX_MS) {
     };
   }, [cancel, release]);
 
-  return { recording, elapsedMs, hasStream: live, open, begin, stop, cancel };
+  return { recording, elapsedMs, hasStream: live, open, forgetOpen, begin, stop, cancel };
 }

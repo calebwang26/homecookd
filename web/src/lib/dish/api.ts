@@ -39,14 +39,16 @@ async function call<T>(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS):
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
+  let data: (T & { error?: string; code?: string; message?: string }) | null;
   try {
     res = await fetch(`${DISH_URL}${path}`, { method: 'POST', ...init, signal: controller.signal });
+    // The body is read under the same deadline: a response that starts and then stalls times out too.
+    data = (await res.json().catch(() => null)) as typeof data;
   } catch {
     throw new DishError('network');
   } finally {
     clearTimeout(timer);
   }
-  const data = (await res.json().catch(() => null)) as (T & { error?: string; code?: string; message?: string }) | null;
   // Convex answers `{error: <sentence>, code}`. The new api's one shape is `{error: <code>, message: <sentence>}`.
   const said = process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links' ? data?.message : data?.error;
   const msg = typeof said === 'string' ? said : '';
