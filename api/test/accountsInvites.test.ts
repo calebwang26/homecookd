@@ -242,6 +242,51 @@ test("remove: someone with no phone leaves from a lent or shared phone, which st
   assert.equal((await row("devices", "id = $1", [phone.id])).person_id !== grandma, true, "the write doesn't make it hers");
 });
 
+test("role: you move yourself from your own phone, and someone with no phone from any family phone; nobody else (Caleb, Nov 9)", { skip }, async () => {
+  const { f, mom, phone, me } = await familyWithCook();
+  const leo = await makePerson(f.id, "Leo", "kid");
+  const leoPhone = await makeDevice(f.id, leo);
+  const grandma = await makePerson(f.id, "Grandma", "kid");
+  const roleOf = async (id: string) => (await row("people", "id = $1", [id])).role;
+
+  // Mom moves Leo, who has his own phone: refused, and nothing changes.
+  const refused = await api.post(`/profiles/${leo}/role`, { role: "cook" }, me);
+  assert.equal(refused.status, 403);
+  assert.deepEqual(said(refused), ["only_self", "Only Leo can change this, on their own phone."]);
+  assert.equal(await roleOf(leo), "kid");
+
+  // Leo moves himself, from his phone: 200 with his profile as /family shows it.
+  const moved = await api.post(`/profiles/${leo}/role`, { role: "cook" }, device(leoPhone.key, leo));
+  assert.equal(moved.status, 200);
+  assert.deepEqual(
+    { ...moved.data, id: undefined },
+    { id: undefined, name: "Leo", role: "cook", relation: null, avatar_key: null, invited: false, has_phone: true, locked: false, memorial: false },
+  );
+  assert.equal(await roleOf(leo), "cook");
+  const family = await api.get("/family", device(leoPhone.key, leo));
+  assert.equal(family.data.profiles.find((p: { name: string }) => p.name === "Leo").role, "cook");
+  // His next session answers the new role.
+  const session = await api.post("/v1/sessions/start", { deviceKey: leoPhone.key, profileId: leo });
+  assert.equal(session.data.role, "cook");
+
+  // Grandma has no phone: Mom moves her, from Mom's phone; the same role again is a no-op 200.
+  assert.equal((await api.post(`/profiles/${grandma}/role`, { role: "cook" }, me)).status, 200);
+  assert.equal(await roleOf(grandma), "cook");
+  const again = await api.post(`/profiles/${grandma}/role`, { role: "cook" }, me);
+  assert.equal(again.status, 200);
+  assert.equal(again.data.role, "cook");
+  assert.equal((await api.post(`/profiles/${grandma}/role`, { role: "learner" }, me)).data.role, "learner");
+  assert.equal(await roleOf(grandma), "kid");
+
+  // Bad input, and someone not in this family.
+  assert.deepEqual(said(await api.post(`/profiles/${grandma}/role`, { role: "chef" }, me)), ["invalid", "role must be cook or learner"]);
+  assert.equal((await api.post(`/profiles/${grandma}/role`, {}, me)).status, 400);
+  const other = await familyWithCook();
+  assert.equal((await api.post(`/profiles/${other.mom}/role`, { role: "learner" }, me)).status, 404);
+  assert.equal(await roleOf(other.mom), "cook");
+  assert.equal(await roleOf(mom), "cook", "nothing else moved");
+});
+
 test("join links: one link for the family all week, peek says kind link, 1.0's accept gets 426, revoke turns it off", { skip }, async () => {
   const { me } = await familyWithCook();
   const first = await api.post("/join-links", {}, me);
