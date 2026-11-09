@@ -14,6 +14,8 @@
 // Retention PR 7 touches (RETENTION-HANDOFF 4): while it works the button says "Wrapping…" beside
 // its spinner; the burst holds a paper plane that lifts off, and under "On its way to Leo" the
 // little egg settles in: "You can close the app" (the uploads are the OS's background transfers).
+// The button is a state machine (components/record/sendMachine.ts, decision 8): one tap, one send, and
+// nothing on the screen can be tapped again until "On its way" shows, or "Didn't send" says why.
 // Dev aids (web screenshots): `?preview=1|dish` (stills), `?preview=done` (the burst),
 // `?preview=wrapping` (the button mid-send).
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,12 +35,14 @@ import { HelloCard } from '@/components/record/HelloCard';
 import { SettleEgg } from '@/components/record/SettleEgg';
 import { MAX_TITLE } from '@/components/record/sendDraft';
 import { sendKept } from '@/components/record/sendKept';
+import { buttonState, runSend, sending as isSending, sendMachine, type SendState } from '@/components/record/sendMachine';
 import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
-import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
+import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt } from '@/components/ui';
 import { afterClose } from '@/lib/sheets/coordinator';
 import { ensureAiConsent } from '@/lib/aiConsent';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
+import { useMachineNow } from '@/lib/machine';
 import { useSession } from '@/lib/session';
 import { MAX_RECORDING_HOURS, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
@@ -108,9 +112,13 @@ export default function SendScreen() {
   const [helloRecording, setHelloRecording] = useState(false);
   const [addSheet, setAddSheet] = useState(false);
   const [phoneSheet, setPhoneSheet] = useState(false);
-  const [state, setState] = useState<ActionState>(() => (__DEV__ && params.preview === 'wrapping' ? 'loading' : 'idle'));
+  const [phase, go] = useMachineNow(sendMachine, (): SendState => {
+    if (__DEV__ && params.preview === 'wrapping') return 'uploading';
+    return __DEV__ && params.preview === 'done' ? 'done' : 'idle';
+  });
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(() => (__DEV__ && params.preview === 'done' ? 'On its way to Leo' : null));
+  const [doneLabel, setDoneLabel] = useState(() => (__DEV__ && params.preview === 'done' ? 'On its way to Leo' : ''));
+  const done = phase === 'done' ? doneLabel : null;
   // Set when Send is tapped while something is missing: the helper turns red.
   const [nudge, setNudge] = useState(false);
   const titleRef = useRef<TextInput>(null);
@@ -158,7 +166,7 @@ export default function SendScreen() {
   );
 
   const send = async () => {
-    if (state !== 'idle') return;
+    if (phase !== 'idle') return;
     if (blocked) {
       setNudge(true);
       if (!dish && selected.length > 0) titleRef.current?.focus();
@@ -172,53 +180,53 @@ export default function SendScreen() {
       setError(t('parent.send.pickWho'));
       return;
     }
-    if (!(await ensureAiConsent())) return;
-    setError(null);
-    setState('loading');
-    const started = Date.now();
-    try {
-      let helloUp: { path: string; duration_s: number } | null = null;
-      if (hello) {
-        try {
-          helloUp = await uploadVoice(hello);
-        } catch (e) {
-          throw new Error(t('parent.send.helloFailed', { reason: errorMessage(e, '') }).replace(/\s+/g, ' '));
-        }
-      }
-      // With a note on the phone: if the app dies mid-upload, the next launch sends it again (sendKept).
-      await sendKept({
-        me,
-        draft,
-        clips: selected,
-        kids: to.picked,
-        recipients,
-        toLabel,
-        dish,
-        hello: helloUp,
-        familyId: family?.id ?? null,
-        forKids: to.picked.map((p) => p.id),
-        everyone: to.everyone,
-        requestFrom: null,
-      });
-      // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
-      // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
-      sentJob.current = true;
-      const wait = motion.loadingMinMs - (Date.now() - started);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      if (!mounted.current) return;
-      setState('idle');
-      content.set(withTiming(0, { duration: 200 }));
-      const doneLabel = to.everyone ? t('parent.send.onItsWayEveryone') : toLabel ? t('parent.send.onItsWayTo', { name: toLabel }) : t('parent.send.onItsWay');
-      setTimeout(() => mounted.current && setDone(doneLabel), 220);
-    } catch (e) {
-      const wait = motion.loadingMinMs - (Date.now() - started);
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      if (!mounted.current) return;
-      const msg = e instanceof Error && e.message ? e.message : errorMessage(e);
-      setError(/connection|reach/i.test(msg) ? msg : t('parent.send.checkConnection', { error: msg.replace(/\.?$/, '.') }).replace(/\.\./g, '.'));
-      setState('error');
-      setTimeout(() => mounted.current && setState('idle'), 1800);
-    }
+    // One tap, one send (sendMachine): a tap the machine doesn't take does nothing, not even ask.
+    await runSend(
+      go,
+      {
+        consent: () => ensureAiConsent(),
+        send: async (started) => {
+          setError(null);
+          let helloUp: { path: string; duration_s: number } | null = null;
+          if (hello) {
+            try {
+              helloUp = await uploadVoice(hello);
+            } catch (e) {
+              throw new Error(t('parent.send.helloFailed', { reason: errorMessage(e, '') }).replace(/\s+/g, ' '));
+            }
+          }
+          // With a note on the phone: if the app dies mid-upload, the next launch sends it again (sendKept).
+          await sendKept({
+            me,
+            draft,
+            clips: selected,
+            kids: to.picked,
+            recipients,
+            toLabel,
+            dish,
+            hello: helloUp,
+            familyId: family?.id ?? null,
+            forKids: to.picked.map((p) => p.id),
+            everyone: to.everyone,
+            requestFrom: null,
+            onStarted: started,
+          });
+          // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
+          // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
+          sentJob.current = true;
+        },
+        fade: () => {
+          setDoneLabel(to.everyone ? t('parent.send.onItsWayEveryone') : toLabel ? t('parent.send.onItsWayTo', { name: toLabel }) : t('parent.send.onItsWay'));
+          content.set(withTiming(0, { duration: 200 }));
+        },
+        failed: (e) => {
+          const msg = e instanceof Error && e.message ? e.message : errorMessage(e);
+          setError(/connection|reach/i.test(msg) ? msg : t('parent.send.checkConnection', { error: msg.replace(/\.?$/, '.') }).replace(/\.\./g, '.'));
+        },
+        alive: () => mounted.current,
+      },
+      motion.loadingMinMs,
+    );
   };
 
   const openAdd = () => (phoneOnly ? setPhoneSheet(true) : setAddSheet(true));
@@ -230,7 +238,7 @@ export default function SendScreen() {
     afterClose(() => void (kind === 'camera' ? pick.record() : pick.library()), 600);
   };
 
-  const sending = state === 'loading';
+  const sending = isSending(phase);
 
   // No leaving mid-send (Back pill or the iOS swipe): the job and the draft change hands here.
   const navigation = useNavigation();
@@ -354,7 +362,7 @@ export default function SendScreen() {
           <ActionButton
             label={sendLabel}
             size="xl"
-            state={state}
+            state={buttonState(phase)}
             onPress={send}
             icon={<SendIcon size={22} color={colors.ink} />}
             loadingLabel={t('parent.send.wrapping')}
