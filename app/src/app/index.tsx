@@ -54,14 +54,17 @@ import {
   deleteAccountWords,
   LanguageEntry,
   NewPhoneSheet,
+  otherRole,
   PersonSheet,
+  type PersonStatus,
   ProfileTile,
   SelfSheet,
+  SwitchRoleSheet,
+  switchRoleWords,
   TILE_HEIGHT,
+  type TileChoice,
   TileSkeleton,
   useFamilyStatus,
-  type PersonStatus,
-  type TileChoice,
 } from '@/components/profiles';
 import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, ScreenWash, Txt } from '@/components/ui';
 import type { Profile, Role } from '@/lib/api';
@@ -190,6 +193,8 @@ export default function Profiles() {
     afterClose(open, motion.sheetCloseMs + 40);
   };
   const [deleting, setDeleting] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
+  // "Move me to the cooks" / "... the ones who miss it": whoever this phone may delete, it may move (Caleb, Nov 8).
+  const [switching, setSwitching] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
   // A phone that just joined (no person yet) never takes over a face: it asks the family.
   const pick = (p: Profile) =>
     deviceNeedsProfile && !p.invited
@@ -370,8 +375,30 @@ export default function Profiles() {
           afterClose(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
         }}
       />
+      <SwitchRoleSheet
+        visible={switching.open}
+        person={switching.who}
+        own={switching.own}
+        onClose={() => setSwitching((s) => ({ ...s, open: false }))}
+        // Moved: the family reloads with their new section, and they go to its home once the sheet is gone.
+        onMoved={(moved) => {
+          setSwitching((s) => ({ ...s, open: false }));
+          void refresh();
+          enter(moved, motion.sheetCloseMs + 40);
+        }}
+      />
       <BottomSheet visible={account} onClose={() => setAccount(false)} title={t('profiles.picker.account')} accessibilityLabel={t('profiles.picker.account')}>
         <View style={styles.accountRows}>
+          {deletable ? (
+            <ActionButton
+              label={switchRoleWords(deletable.name.trim(), removal === 'own', otherRole(deletable.role), t).row}
+              variant="outline"
+              size="lg"
+              labelWeight={700}
+              onPress={() => fromAccount(() => setSwitching({ open: true, who: deletable, own: removal === 'own' }))}
+              accessibilityHint={t('profiles.picker.asksFirst')}
+            />
+          ) : null}
           <ActionButton label={t('profiles.picker.signOutLink')} variant="outline" size="lg" labelWeight={700} onPress={() => fromAccount(() => setSigningOut(true))} accessibilityHint={t('profiles.picker.asksFirst')} />
           {deletable ? (
             <ActionButton
