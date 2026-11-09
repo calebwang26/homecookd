@@ -35,6 +35,7 @@ import { MAX_TITLE } from '@/components/record/sendDraft';
 import { sendKept } from '@/components/record/sendKept';
 import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
+import { afterClose } from '@/lib/sheets/coordinator';
 import { ensureAiConsent } from '@/lib/aiConsent';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
@@ -224,10 +225,9 @@ export default function SendScreen() {
 
   const addFrom = (kind: 'camera' | 'library') => {
     setAddSheet(false);
-    // Let the sheet's Modal finish closing before the camera / picker presents (iOS).
-    // The sheet closes in 240 ms, then its native Modal still has to go away; presenting over it
-    // fails on iOS. (usePickVideos also recovers if a picker never shows.)
-    setTimeout(() => void (kind === 'camera' ? pick.record() : pick.library()), 600);
+    // Let the sheet's Modal finish closing before the camera / picker presents (iOS): presenting over it
+    // fails. Once it's gone, and never sooner than 600 ms. (usePickVideos also recovers if a picker never shows.)
+    afterClose(() => void (kind === 'camera' ? pick.record() : pick.library()), 600);
   };
 
   const sending = state === 'loading';

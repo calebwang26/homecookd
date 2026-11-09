@@ -12,6 +12,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { pickToastViewport, useSheetsVersion, type ToastViewportRef } from '@/lib/sheets/coordinator';
 import { colors, tabBar } from '@/theme/tokens';
 
 import { Appear } from './Appear';
@@ -26,7 +27,7 @@ type ToastItem = { id: number; message: string } & ToastOptions;
 type Ctx = {
   show: (message: string, opts?: ToastOptions) => void;
   hide: () => void;
-  register: (id: string) => () => void;
+  register: (id: string, sheetId?: string) => () => void;
   activeViewport: string | null;
   current: ToastItem | null;
 };
@@ -35,7 +36,9 @@ const ToastContext = createContext<Ctx | null>(null);
 
 export function ToastProvider({ children, bottom = tabBar.clearance - 4 }: { children: ReactNode; bottom?: number }) {
   const [current, setCurrent] = useState<ToastItem | null>(null);
-  const [viewports, setViewports] = useState<string[]>([]);
+  const [viewports, setViewports] = useState<ToastViewportRef[]>([]);
+  // A sheet opening or closing can change which viewport is on screen.
+  const sheetsVersion = useSheetsVersion();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useRef(0);
 
@@ -52,16 +55,20 @@ export function ToastProvider({ children, bottom = tabBar.clearance - 4 }: { chi
     timer.current = setTimeout(() => setCurrent(null), opts.durationMs ?? 2200);
   }, []);
 
-  const register = useCallback((id: string) => {
-    setViewports((v) => [...v.filter((x) => x !== id), id]);
-    return () => setViewports((v) => v.filter((x) => x !== id));
+  const register = useCallback((id: string, sheetId?: string) => {
+    setViewports((v) => [...v.filter((x) => x.id !== id), { id, sheetId }]);
+    return () => setViewports((v) => v.filter((x) => x.id !== id));
   }, []);
 
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
+  // The newest viewport on screen: never one inside a sheet that is held or closing (lib/sheets/coordinator).
+  // Picked on every render; sheetsVersion re-renders this when a sheet opens or closes.
+  void sheetsVersion;
+  const activeViewport = pickToastViewport(viewports);
   const value = useMemo<Ctx>(
-    () => ({ show, hide, register, current, activeViewport: viewports[viewports.length - 1] ?? null }),
-    [show, hide, register, current, viewports],
+    () => ({ show, hide, register, current, activeViewport }),
+    [show, hide, register, current, activeViewport],
   );
 
   return (
@@ -90,13 +97,24 @@ export function useToast(): Pick<Ctx, 'show' | 'hide'> {
  * sheet's native Modal the toast fades in with Appear and leaves without a fade: an `entering` or `exiting`
  * animation cut short in there can freeze the screen on iOS (Appear.tsx).
  */
-export function ToastViewport({ bottom = 32, position = 'bottom', inSheet = false }: { bottom?: number; position?: 'top' | 'bottom'; inSheet?: boolean }) {
+export function ToastViewport({
+  bottom = 32,
+  position = 'bottom',
+  inSheet = false,
+  sheetId,
+}: {
+  bottom?: number;
+  position?: 'top' | 'bottom';
+  inSheet?: boolean;
+  /** The sheet it's inside (BottomSheet passes it): toasts go here only while that sheet is open. */
+  sheetId?: string;
+}) {
   const ctx = useContext(ToastContext);
   const id = useId();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const register = ctx?.register;
-  useEffect(() => register?.(id), [register, id]);
+  useEffect(() => register?.(id, sheetId), [register, id, sheetId]);
   if (!ctx || ctx.activeViewport !== id || !ctx.current) return null;
   const t = ctx.current;
   const place = [
