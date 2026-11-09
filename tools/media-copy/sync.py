@@ -31,6 +31,9 @@ from ledger import Ledger
 # The media bucket's own folders. jobs/ holds a cook's name and dish in a status file only GCS readers use, the two marker folders
 # are instructions to the laptop's worker, and trash/ is recipes someone deleted, which have no reason to reach a new company.
 MEDIA_EXCLUDED = ("jobs/", "trash/", "cancellations/", "deletions/")
+# S3's library.json is its own (Caleb, Nov 9: people start with no sample recipes, so production's is [] and library/samples.json keeps the
+# old list). Never copied, rewritten or deleted from GCS's, whatever GCS's does.
+MEDIA_EXCLUDED_KEYS = ("library.json",)
 MAX_OLD_VERSION_DAYS = 28  # infra/modules/env/storage.tf. /privacy has 30 days, and S3's expiry can run a little late.
 STALE_UPLOAD_S = 24 * 3600
 
@@ -39,13 +42,14 @@ STALE_UPLOAD_S = 24 * 3600
 class Target:
     gcs: str
     s3: str
+    own_library: bool = True  # S3's library.json is its own (MEDIA_EXCLUDED_KEYS). Only tests of the library rewrite turn it off.
 
     @property
     def is_media(self) -> bool:
         return "media" in self.gcs
 
     def excluded(self, key: str) -> bool:
-        return self.is_media and key.startswith(MEDIA_EXCLUDED)
+        return self.is_media and (key.startswith(MEDIA_EXCLUDED) or (self.own_library and key in MEDIA_EXCLUDED_KEYS))
 
 
 @dataclass
@@ -280,7 +284,7 @@ class Syncer:
     def _carry_deletions(self, t: Target, listing: dict[str, GcsObject], r: PassResult) -> None:
         self._drain_deleting(t, r)
         rows = [row for row in self.ledger.rows(t.gcs, "copied", "copying", "failed")
-                if row["key"].startswith(self.cfg.only_prefix)]
+                if row["key"].startswith(self.cfg.only_prefix) and not t.excluded(row["key"])]
         missing = [row["key"] for row in rows if row["key"] not in listing]
         if not missing:
             return

@@ -125,6 +125,12 @@ keep working if `media.homecookd.app` is pointed back at GCS.
 
 ## The sample library
 
+**Since Nov 9 production's `library.json` is `[]`** (Caleb: people start with no sample recipes). Today's 10-entry list is kept at
+`library/samples.json`, under `library/`, which the account purge refuses to touch. `~/.homecookd-ops/library-restore.sh` puts it back. The
+sample folders themselves stay, so an old link to a sample still opens. `sync` never copies `library.json`, and `rewrite` never rewrites
+it: it's in `MEDIA_EXCLUDED_KEYS` (`tools/media-copy/sync.py`), so GCS's list can't come back over S3's own, even through an old
+`copied` row, a new GCS generation or a GCS delete. The api reads `[]` as no library dishes, not an outage (#418).
+
 Added Nov 5 (#366). Production starts fresh (CUTOVER.md, open question 2), so nothing above runs there and its media bucket has no
 `library.json`. Three things read the public library from the media host:
 
