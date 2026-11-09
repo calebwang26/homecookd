@@ -187,6 +187,25 @@ export const PROFILES = {
   'profiles.delete.cookHint': 'Deletes the account and its recipes for good',
   'profiles.delete.hint': 'Deletes the account for good',
   'profiles.delete.cantUndo': 'This can’t be undone.',
+
+  // Moving between the cooks and the ones who miss it (components/profiles/SwitchRoleSheet)
+  'profiles.switch.rowCooksOwn': 'Move me to the cooks',
+  'profiles.switch.rowCooks': 'Move {name} to the cooks',
+  'profiles.switch.rowMissItOwn': 'Move me to the ones who miss it',
+  'profiles.switch.rowMissIt': 'Move {name} to the ones who miss it',
+  'profiles.switch.titleCooksOwn': 'Move to the cooks?',
+  'profiles.switch.titleCooks': 'Move {name} to the cooks?',
+  'profiles.switch.titleMissItOwn': 'Move to the ones who miss it?',
+  'profiles.switch.titleMissIt': 'Move {name} to the ones who miss it?',
+  'profiles.switch.lineCooks': 'Home will show Record a new recipe, for the dishes the family misses.',
+  'profiles.switch.lineMissIt': 'Home will show the family’s recipes to cook.',
+  'profiles.switch.stays': 'Messages and recipes stay as they are.',
+  'profiles.switch.move': 'Move',
+  'profiles.switch.moving': 'Moving',
+  'profiles.switch.notMovedShort': 'Didn’t move',
+  'profiles.switch.notMoved': 'That didn’t work. Try again.',
+  'profiles.switch.notReady': 'Moving isn’t ready yet. Try again later.',
+  'profiles.switch.keep': 'Keep as is',
   'profiles.delete.appleConfirm': 'Apple will ask you to confirm.',
 
   // "Your language" and the language list (LanguageEntry, record/LanguagePicker)
