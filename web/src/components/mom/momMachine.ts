@@ -15,6 +15,9 @@
 // fill screen ending on a finished ask (decision 3, Caleb's yes on Nov 8). A failed Send stays on the
 // questions, where QuestionScreen says so and offers Try again; a fill that ends on an unfinished ask goes
 // back there too. A page reloaded for the mic comes back to the questions (LOADED with resume).
+//
+// CI (scripts/check-machine-tests.mjs) fails a change to this file without one to its test:
+// state-machine-test: momMachine.test.ts
 
 export type Stage = 'loading' | 'error' | 'intro' | 'guess' | 'questions' | 'nothing' | 'fill' | 'sent' | 'recipe';
 export const STAGES: readonly Stage[] = ['loading', 'error', 'intro', 'guess', 'questions', 'nothing', 'fill', 'sent', 'recipe'];
