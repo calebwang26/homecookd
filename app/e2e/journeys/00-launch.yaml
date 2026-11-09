@@ -1,0 +1,22 @@
+# The spike's journey (docs/build/IOS-JOURNEYS.md): a fresh install opens on the first screen (join.tsx), then a family
+# link that doesn't exist opens its own card from the staging api and says so. No account, no secret, nothing written.
+# Text selectors are regexes: `.*` around a line tolerates the app's curly quotes.
+appId: ${APP_ID}
+name: Launch, then a link that doesn't work
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*Cook your family.s food.*"
+    timeout: 60000
+- assertVisible: ".*Got a link from your family.*"
+- assertVisible: ".*Sign in with Apple.*"
+- takeScreenshot: 00-first-screen
+# A made-up 22-character family link: the app peeks it on staging and shows the dead-link card. The subflow answers iOS's
+# "Open in homecookd?" and tries again when the link doesn't reach the app.
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: "homecookd://i?t=AAAAAAAAAAAAAAAAAAAAAA"
+      EXPECT: ".*(That invite link doesn.t work|This link doesn.t work anymore).*"
+- takeScreenshot: 00-dead-link
