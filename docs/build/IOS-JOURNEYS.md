@@ -27,6 +27,11 @@ Rules for the public repo: never `pull_request_target`, so a fork's PR gets no s
 never print a family link, a test id or a key (`::add-mask::`). A seeded family (`app/scripts/aws-phone-run.mjs setup`) is
 deleted in `if: always()`. `TEST_SIGNIN_KEY` is an Actions secret, set by Caleb.
 
+A link from outside goes through `app/e2e/flows/open-link.yaml`. iOS asks "Open in homecookd?" first, and a tap on its
+Open sometimes closes the dialog without handing the link to the app (runs 5 and 7 tapped the same point, and only run 5's
+link arrived). The subflow tries open, tap and wait up to three times. A link that carries a key is echoed in Maestro's
+own logs, so those journeys never upload `commands.json` or `maestro.log`.
+
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
 This Mac has no Xcode or Simulator, so the journeys run only in CI.

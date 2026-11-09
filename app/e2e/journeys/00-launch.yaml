@@ -12,13 +12,11 @@ name: Launch, then a link that doesn't work
 - assertVisible: ".*Got a link from your family.*"
 - assertVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 00-first-screen
-# A made-up 22-character family link: the app peeks it on staging and shows the dead-link card.
-- openLink: "homecookd://i?t=AAAAAAAAAAAAAAAAAAAAAA"
-# iOS asks before an outside link opens an app by its scheme ("Open in "homecookd"?"). A tapped universal link doesn't.
-- tapOn:
-    text: "Open"
-    optional: true
-- extendedWaitUntil:
-    visible: ".*(That invite link doesn.t work|This link doesn.t work anymore).*"
-    timeout: 30000
+# A made-up 22-character family link: the app peeks it on staging and shows the dead-link card. The subflow answers iOS's
+# "Open in homecookd?" and tries again when the link doesn't reach the app.
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: "homecookd://i?t=AAAAAAAAAAAAAAAAAAAAAA"
+      EXPECT: ".*(That invite link doesn.t work|This link doesn.t work anymore).*"
 - takeScreenshot: 00-dead-link
