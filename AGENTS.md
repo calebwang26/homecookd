@@ -223,7 +223,7 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); never --channel production (that reaches public 1.0, build 6, on the old backend)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
 scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging and production-aws only, refuses production
-scripts/safe-eas-update.sh production-aws "<what changed>" --check-only|--caleb-ok  # a JS fix to every 1.1 phone (build 18, runtime 1.1.0): exactly the build profile's values, no app/.env; publishing needs Caleb's yes
+scripts/safe-eas-update.sh production-aws "<what changed>" --check-only|--caleb-ok  # a JS fix to every 1.1 phone (build 18, runtime 1.1.0): exactly the build profile's values, no app/.env; publishing needs Caleb's yes; main is 1.1.1 since Nov 8, so publish it from a 1.1.0 commit (690bf30c3)
 cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1 on production AWS (api.homecookd.app): the App Store build (18, released Nov 8); its JS fixes go out with safe-eas-update.sh production-aws
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
