@@ -176,7 +176,17 @@ Caleb picks one.
 - **Who:** Caleb presses "Release This Version" on 1.1. In the same hour, App Store/web sets the site's values in Vercel and builds production once: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` and `NEXT_PUBLIC_DISH_URL` at `https://api.homecookd.app`, `NEXT_PUBLIC_BUCKET_URL` at `https://media.homecookd.app`, and `NEXT_PUBLIC_DISH_UPLOADS=links`. The dish values go in one build: the api refuses raw files with a 415, and Convex refuses the links.
 - **Check:** `node infra/scripts/web-smoke.mjs https://homecookd.app`. A card made on `/miss` goes to `api.homecookd.app`: the network tab shows the upload link, the PUT to S3, then `/dish/files/confirm`. A real `/i` link opens 1.1 on an installed phone. The store shows 1.1. The first real sign-ups land in production, and the alarms stay quiet.
 - **Back, for the site:** promote the previous Vercel deployment, in seconds. Only for a broken site, and briefly: a kid's card then goes to Convex, where no parent on 1.1 sees it.
-- **Back, for the app:** there's no going back to Convex after this, because real families are on AWS only. A problem is fixed forward: production's own rollbacks (the previous task definition, RDS's point-in-time restore), an EAS Update for a JS fix through `scripts/safe-eas-update.sh`, or a 1.2 for a native one.
+- **Back, for the app:** there's no going back to Convex after this, because real families are on AWS only. A problem is fixed forward: production's own rollbacks (the previous task definition, RDS's point-in-time restore), an EAS Update for a JS fix through `scripts/safe-eas-update.sh`, or a new version for a native one (1.1.1 or later:
+  Apple closed the 1.1.0 train when it approved 1.1.0, so no new 1.1.0 binary is accepted, TestFlight included).
+  - **The first production update (Nov 8, 16:38 PT):** #402 (New message → Add family froze Messages) went to every 1.1
+    phone through `safe-eas-update.sh production-aws ... --caleb-ok`, on Caleb's yes. It was published from `690bf30c3`,
+    a 1.1.0 commit, with no TestFlight check first, because build 20 couldn't be processed. Branch `production-aws`,
+    runtime 1.1.0, update group `0d8055ef-adde-4877-adb7-fd0998801f6e`. Caleb confirmed it on his build-18 phone
+    ("works now"). The production api showed no 5xx in the hour after. The second update, #410 (the Copy link freeze, group
+    `d8ea50c8-4969-4c25-9d84-74f32a4430a1`, 17:18 PT), went out after Caleb passed it on TestFlight build 1.1.1 (21).
+    Phones take it on a launch after they fetch it. Undo: `cd app && npx eas-cli
+    update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios --message "…"
+    --non-interactive`.
 
 ## What production has on at launch
 
