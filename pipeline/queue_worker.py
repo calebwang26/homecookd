@@ -38,18 +38,21 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_ROOT = ROOT / "data" / "out"  # prep.OUT_ROOT, without importing the pipeline here
 INPUT = ROOT / "input" / "queue"
 
+# The row is the machine; a message only wakes it (docs/agents/STATE-MACHINES.md). A wait never holds a message: it deletes it and owes a new
+# one through the outbox (store.wake_later), so SQS's receive count only catches a message whose handling keeps crashing.
 MAX_RECEIVES = 3  # the jobs queue's maxReceiveCount (infra/modules/env/queues.tf): the 4th receive moves it to dead letters
+MAX_FAILURES = 3  # jobs.failures: tries that went wrong (the child failed or died, the lease lapsed). The third fails the job visibly
+STRANDED_S = 3 * 3600  # queued this long with no wake-up owed: woken again (dead-lettered, or behind a long backlog)
+NO_UPLOAD_GIVE_UP_S = 24 * 3600  # queued with no files in S3 for a day: the cook is told
 LEASE_S = 600  # a running job with no heartbeat for this long has lost its worker
 VISIBILITY_S = 900  # longer than the lease, so a message that comes back finds the dead worker's lease over
 BEAT_S = 30  # how late a cancel can be noticed
 EXTEND_S = 120
 TICK_S = 2
 MAX_JOB_S = 10 * 3600  # SQS can't hold a message past 12 hours from a receive, so a job ends visibly before that
-DUPLICATE_HOLD_S = 3600  # another worker is on it: look again later, when it's probably done
 UPLOAD_RETRY_S = 900
-RETRY_HOLD_S = 300  # after a failed try, times the tries so far
+RETRY_HOLD_S = 300  # after a failed try, times the failures so far
 BAD_MESSAGE_HOLD_S = 60
-MAX_HOLD_S = 43000  # just under SQS's 12 hours
 SWEEP_EVERY_S = 300
 IDLE_BACKOFF_S = 30
 FINISH_TRIES, FINISH_RETRY_S = 4, 20  # stays inside Fargate's 120 seconds after a stop signal
@@ -312,9 +315,15 @@ class Worker:
         if self.swept_at is not None and now - self.swept_at < SWEEP_EVERY_S:
             return
         self.swept_at = now
-        for job_id in self.store.sweep(LEASE_S, MAX_RECEIVES, MSG_FAILED):
-            self.log("job failed: its worker died on the last try", "error", job_id=job_id)
-            self.report("JobAbandoned", job_id)
+        for row in self.store.sweep(LEASE_S, MAX_FAILURES, MSG_FAILED, STRANDED_S):
+            if row["stage"] == "failed":
+                self.log("job failed: its worker died on its last try", "error", job_id=row["id"])
+                self.report("JobAbandoned", row["id"])
+            elif row["was"] == "running":
+                self.log("job woken again: its worker died", "warning", job_id=row["id"])
+            else:
+                self.log("job woken again: queued with no wake-up owed", "warning", job_id=row["id"])
+                self.report("JobStranded", row["id"])
 
     def _hold(self, msg: Message, seconds: int, log: Log) -> None:
         try:
@@ -347,7 +356,7 @@ class Worker:
 
         state = self.store.peek(job_id, LEASE_S)
         if state and state["stage"] == "queued" and not state["cancelled"] and self.store.spent_today() >= self.daily_cap:
-            self._pause_for_budget(msg, job_id, log)
+            self._pause_for_budget(msg, job_id, log, body.get("requestId"))
             return
         claim = self.store.claim(job_id, LEASE_S)
         if claim is None:
@@ -356,10 +365,14 @@ class Worker:
         log = log.bind(attempt=claim["attempts"])
         run = Run(msg, claim, log, body.get("requestId"), cost=Decimal(claim.get("cost_usd") or 0), started=self.clock())
         log("job claimed")
+        if int(claim.get("failures") or 0) >= MAX_FAILURES:  # taking over a lapsed run counted one more: its last worker died too
+            self._fail(run, MSG_FAILED, "JobAbandoned")
+            return
         self._start(run)
 
     def _not_claimed(self, msg: Message, job_id: str, log: Log) -> None:
-        """A repeat of something, or too early. Only a job that's over lets go of its message."""
+        """A repeat, or too early. Nothing here waits on this message: whoever runs the job holds its own, and the sweep wakes one
+        whose worker died."""
         state = self.store.peek(job_id, LEASE_S)
         if state is None:
             log("job is gone: dropped")  # deleted with its account, whose purge takes the files
@@ -370,29 +383,38 @@ class Worker:
             log("repeat of a finished job: dropped", stage=state["stage"])
             self._delete(msg, log)
         elif state["stage"] == "uploading":
-            log("upload isn't finished: waiting", stage="uploading")
-            self._hold(msg, UPLOAD_RETRY_S, log)
+            log("upload isn't finished: dropped", stage="uploading")  # the api sends the job's message when it is (jobs/data.ts queueJob)
+            self._delete(msg, log)
         else:
-            log("another worker is on it: waiting", stage=state["stage"])
-            self._hold(msg, DUPLICATE_HOLD_S, log)
+            log("another worker is on it: dropped", stage=state["stage"])
+            self._delete(msg, log)
 
-    def _pause_for_budget(self, msg: Message, job_id: str, log: Log) -> None:
+    def _pause_for_budget(self, msg: Message, job_id: str, log: Log, request_id: str | None) -> None:
         log("daily spend cap reached: job waits", "warning")
-        self.store.pause(job_id, MSG_PAUSED)
-        self._hold(msg, min(seconds_to_next_utc_day(), MAX_HOLD_S), log)
+        if self.store.wake_later(job_id, seconds_to_next_utc_day(), request_id, error=MSG_PAUSED):
+            self._delete(msg, log)
+        else:
+            self._not_claimed(msg, job_id, log)
         if self.store.note_daily_cap():
             self.report("DailySpendCapReached", job_id)
+
+    def _wake_later(self, run: Run, delay_s: int, failure: bool = False, error: str | None = None) -> None:
+        """Hands the run back (queued) with a new wake-up owed in `delay_s`, then lets this message go."""
+        if self.store.wake_later(run.claim["id"], delay_s, run.request_id, claim=run.claim, failure=failure, error=error):
+            self._delete(run.msg, run.log)
+        else:
+            self._claim_gone(run)
 
     def _start(self, run: Run) -> None:
         claim, msg, log = run.claim, run.msg, run.log
         objects = self.storage.list_upload(claim["upload_key"])
         if not objects:
-            if msg.receive_count >= MAX_RECEIVES:
+            created = claim.get("created_at")
+            if created and (datetime.now(timezone.utc) - created).total_seconds() >= NO_UPLOAD_GIVE_UP_S:
                 self._fail(run, MSG_NO_UPLOAD, "NoUpload")
             else:
                 log("no upload yet: waiting")
-                self.store.release(claim)
-                self._hold(msg, UPLOAD_RETRY_S, log)
+                self._wake_later(run, UPLOAD_RETRY_S)
             return
         if any(o["size"] == 0 for o in objects):
             self._fail(run, MSG_EMPTY, "EmptyUpload")
@@ -507,14 +529,12 @@ class Worker:
         elif outcome == "cancelled":
             self._cancelled(msg, claim, log)
         elif outcome == "stopping":
-            # Back to the queue for the next task. If this was the last try, it goes to the dead letters, whose alarm says so.
-            self.store.release(claim)
-            self._hold(msg, 0, log)
+            # Back to the queue for the next task, woken at once. A stop isn't the job's fault: it counts no failure.
+            self._wake_later(run, 0)
         elif outcome == "over_job_cap":
             self._fail(run, MSG_FAILED, "JobSpendCapReached")
         elif outcome == "over_daily_cap":
-            self.store.release(claim, MSG_PAUSED)
-            self._hold(msg, min(seconds_to_next_utc_day(), MAX_HOLD_S), log)
+            self._wake_later(run, seconds_to_next_utc_day(), error=MSG_PAUSED)
             if self.store.note_daily_cap():
                 self.report("DailySpendCapReached", claim["id"])
         elif outcome == "too_slow":
@@ -585,15 +605,18 @@ class Worker:
             self._claim_gone(run)
 
     def _try_again(self, run: Run, why: str) -> None:
-        """Maybe an outage or a bad moment, so SQS brings it back. On the last try the cook is told, and the message goes on to
-        the dead letters for the alarm."""
+        """Maybe an outage or a bad moment: it counts a failure and is woken again later, longer each time. The MAX_FAILURES-th tells
+        the cook. The budget is the row's failures, never the message's receive count, so a job first run on a late receive still
+        gets every try."""
         run.log("job try failed", "error", error_type=why)
         self.report(why, run.claim["id"])
-        last = run.msg.receive_count >= MAX_RECEIVES
-        if not (self.store.fail(run.claim, MSG_FAILED) if last else self.store.release(run.claim)):
-            self._claim_gone(run)
+        failures = int(run.claim.get("failures") or 0) + 1
+        if failures < MAX_FAILURES:
+            self._wake_later(run, RETRY_HOLD_S * failures, failure=True)
+        elif self.store.fail(run.claim, MSG_FAILED):
+            self._delete(run.msg, run.log)
         else:
-            self._hold(run.msg, 0 if last else RETRY_HOLD_S * run.msg.receive_count, run.log)
+            self._claim_gone(run)
 
     def _cancelled(self, msg: Message, job: dict, log: Log) -> None:
         """Her raw video goes, as Convex mode does, and anything this job published. If S3 fails the message stays, so it's tried
