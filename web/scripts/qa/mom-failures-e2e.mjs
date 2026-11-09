@@ -1,6 +1,7 @@
 // Mom's answer page (/a) in the states that went wrong (docs/agents/STATE-MACHINES.md, decision 3), in real
 // Chrome against the local fake of /dish/* (started here in-process). One run per state:
 //   denied     the mic is refused: "Turn on the microphone", Try again on the mic
+//   reload     Try again on a refused mic reloads the page (Safari keeps "Don't Allow" until then)
 //   hung       the browser's mic prompt never answers
 //   in-app     an Instagram in-app browser that refuses the mic
 //   refused    every saved answer comes back 415 (a lasting refusal)
@@ -113,6 +114,35 @@ const runs = {
     return page;
   },
 
+  async reload() {
+    const page = await momPage({ mic: 'denied' });
+    await toQuestions(page, (await askUrl()).url);
+    await page.getByRole('button', { name: 'Skip this one' }).click(); // to question 2, so "back to her question" is visible
+    await page.getByText('2 of 3').waitFor();
+    await mic(page).click();
+    await page.getByText('Turn on the microphone for this page, then try again.').waitFor({ timeout: 5000 });
+    await Promise.all([page.waitForEvent('load'), tryAgain(page).click()]);
+    await page.waitForLoadState('networkidle');
+    if (EXPECT === 'today') {
+      // Pinned: the reload starts her page over at the kid's voice note (decision 3 fixes it).
+      await page.getByRole('button', { name: 'See Leo’s guess' }).waitFor({ timeout: 10000 });
+      await shot(page, 'reload');
+      check('today: the reload starts her over at the intro', (await page.getByRole('button', { name: 'See Leo’s guess' }).count()) === 1);
+      return page;
+    }
+    await page.getByText('2 of 3').waitFor({ timeout: 10000 });
+    check('fixed: the reload comes back to her question', (await page.getByText('2 of 3').count()) === 1);
+    await page.evaluate(() => ((window).__noReload = true));
+    await mic(page).click();
+    await page.getByText('Turn on the microphone for this page, then try again.').waitFor({ timeout: 5000 });
+    await tryAgain(page).click();
+    await page.getByText(/still off for this page/).waitFor({ timeout: 5000 });
+    await shot(page, 'reload');
+    check('fixed: a second refusal explains instead of reloading', await page.evaluate(() => (window).__noReload === true));
+    check('fixed: Skip still works', await skip(page).isEnabled());
+    return page;
+  },
+
   async hung() {
     const page = await momPage({ mic: 'hung' });
     await toQuestions(page, (await askUrl()).url);
@@ -196,6 +226,12 @@ const runs = {
         await page.getByText(/Send didn.t go through/).waitFor({ timeout: 15000 });
         await shot(page, 'finish');
         check('fixed: a failed Send says so, with Try again', (await tryAgain(page).count()) >= 1);
+        check('the server has no finished ask', !fake.cards.get(kidToken).finishedAt);
+        fake.setFailingFinish(false);
+        await tryAgain(page).click();
+        await page.getByText('Sent to Leo.').waitFor({ timeout: 60000 });
+        check('fixed: Try again sends it, and only then "Sent to Leo."', !!fake.cards.get(kidToken).finishedAt);
+        return page;
       }
       check('the server has no finished ask', !fake.cards.get(kidToken).finishedAt);
     } finally {
