@@ -453,11 +453,17 @@ export async function retryDeletion(deletionId: string, requestId?: string): Pro
   });
 }
 
-/** The deletions a person should look at: purging with no batch for an hour, or given up outside. The invariant sweep names the same (deletion_stalled). */
+/**
+ * Stopped: purging with no batch for an hour (a purge still batching after an hour hasn't), or given up outside. The one definition, for the team's list below and
+ * the invariant sweep's deletion_stalled, so the alarm and the tool always agree.
+ */
+export const STALLED = `(purged_at is null and coalesce(purge_run_at, requested_at) < now() - interval '1 hour') or external_gave_up_at is not null`;
+
+/** The deletions a person should look at (STALLED). */
 export async function stalledDeletions(limit = 100): Promise<(Pick<Deletion, "id" | "requested_at" | "purge_restarts" | "external_attempts" | "external_tried_at"> & { stage: Stage; external_error: string | null })[]> {
   const { rows } = await db().query(
     `select ${DELETION}, external_error from account_deletions
-      where (purged_at is null and coalesce(purge_run_at, requested_at) < now() - interval '1 hour') or external_gave_up_at is not null
+      where ${STALLED}
       order by requested_at limit $1`,
     [limit],
   );
