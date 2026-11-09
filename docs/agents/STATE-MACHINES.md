@@ -9,7 +9,7 @@ test merged), **retired** (code goes with the old stack).
 | # | Machine | Owner | Where | Status | Tier |
 |---|---|---|---|---|---|
 | 1 | Sheet hand-offs (BottomSheet, toasts, root sheets) | App screens | `app/src/lib/sheets/machine.ts` (the table, the root host's), `coordinator.ts` (afterClose, toasts), `components/ui/BottomSheet.tsx`; test `app/scripts/test-sheets.mjs` | explicit (#424); share.tsx's own open/present/crash flow is still implicit (1b) | 1 |
-| 2 | Job lifecycle, queue side (SQS receives vs attempts, pauses, sweep) | AWS backend | `pipeline/queue_worker.py`, `queue_db.py`, `api/src/modules/jobs/` | implicit | 1 |
+| 2 | Job lifecycle, queue side (SQS receives vs attempts, pauses, sweep) | AWS backend | `pipeline/queue_worker.py` (`_wake_later`, `_try_again`, `_sweep`), `queue_db.py` (`claim`, `wake_later`, `sweep`, `acknowledge_cancel`), `api/migrations/081_job_failures.sql`; tests `test_queue_worker.py` (`the_job_machines_guarded_transitions`, both stores), `api/test/jobsWorker.test.ts` | explicit (#429): the row is the machine, a message only wakes it; budget `jobs.failures` | 1 |
 | 3 | Memories opt-in at publish | AWS backend | `pipeline/queue_db.py` finish, `api/src/modules/recipes/writes.ts` | implicit | 1 |
 | 4 | Recording screen | App screens | `app/src/app/recording.tsx`, `lib/live/quietRecording.ts`, `components/record/filming.ts`, `useInAppCamera.ts` | implicit | 2 |
 | 5 | Send → upload → job → resend | App screens | `app/src/app/send.tsx`, `components/record/sendDraft.ts`, `lib/uploads.ts`, `lib/unsentRecordings.ts`, `useResendUnsent.ts` | implicit | 2 |
