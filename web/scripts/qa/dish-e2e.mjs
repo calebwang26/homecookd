@@ -24,6 +24,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startFake } from './dish-fake-server.mjs';
+import { micInit } from './synthetic-mic.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
 
@@ -37,6 +38,8 @@ const BASE = String(args.base ?? 'http://localhost:3105').replace(/\/+$/, '');
 const OUT = path.resolve(String(args.out ?? '/tmp/dish-e2e'));
 const CHROME = String(args.chrome ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 const PHONE = { width: Number(args.width ?? 390), height: 844 }; // --width 360 checks the narrow phones
+/** --mic synthetic (default: a tone from synthetic-mic.mjs) | device (Chrome's fake device; it never answers on some Macs). */
+const MIC = String(args.mic ?? 'synthetic');
 const UPLOADS = String(args.uploads ?? 'raw');
 const LINKS = UPLOADS === 'links';
 mkdirSync(OUT, { recursive: true });
@@ -62,6 +65,7 @@ const browser = await chromium.launch({
 
 async function phone(locale = 'en-US') {
   const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 2, locale, permissions: ['microphone', 'clipboard-read', 'clipboard-write'], hasTouch: false });
+  if (MIC !== 'device') await ctx.addInitScript(micInit(MIC)); // test-only: a synthetic mic (synthetic-mic.mjs)
   const page = await ctx.newPage();
   page.errors = [];
   page.on('console', (m) => m.type() === 'error' && !/preload|Failed to load resource/.test(m.text()) && page.errors.push(m.text()));

@@ -8,6 +8,7 @@
     "start": "npx --yes serve out",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --test 'src/**/*.test.ts'",
     "media": "node scripts/media.mjs",
     "swirls": "node scripts/swirls.mjs",
     "perf": "node scripts/perf-check.mjs"
