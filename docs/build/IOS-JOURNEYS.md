@@ -53,6 +53,17 @@ What these runs show:
 - Booting during the build slows `npm ci` and the build while it runs, so it saves 6–8 min, not the full 9.
 - Next for the native path: ccache through React Native's own `apple.ccacheEnabled`, and dwarf only (no dSYM).
 
+**ccache (the native path).**
+- It goes through React Native's own route: `USE_CCACHE=1` at `pod install` (the same switch as `apple.ccacheEnabled`).
+  That makes CC and CXX React Native's `ccache-clang` wrappers, with React Native's `ccache.conf`. It isn't a compiler
+  launcher, which clashed with Xcode's explicit modules in the spike.
+- ccache is pinned at 4.14.2, checked by sha256 and downloaded with the job's token.
+- Its folder is kept in the Actions cache: each native build saves a new copy and restores the newest.
+- The build is dwarf only (`DEBUG_INFORMATION_FORMAT=dwarf`): a simulator run never reads a dSYM.
+- The job summary's title gives ccache's hits and misses.
+- To time a native build when the app is already cached:
+  `gh workflow run ios-journeys.yml --ref <branch> -f native_build=true`.
+
 **Required check (Master Agent, Nov 9).** The workflow runs on every PR, because a required check has to report on all
 of them. Its jobs:
 - `scope` (ubuntu, seconds): skips the simulator when the PR changes neither `app/` nor the workflow. Its test is the
