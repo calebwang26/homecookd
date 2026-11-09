@@ -756,6 +756,15 @@ await test('store: her yes shows up in the ingredient list for everyone, stories
   R.showFamilyRecipes(null, null);
 });
 
+await test('a retired sample finds nothing (an old link or heart), unless the family has a dish of that id', async () => {
+  assert.equal(R.RETIRED_SAMPLES.size, 10);
+  assert.equal(R.isRetiredSample('weed-steak', []), true);
+  assert.equal(R.isRetiredSample('chicken-biryani', []), true);
+  assert.equal(R.isRetiredSample('chicken-biryani', ['chicken-biryani']), false, 'a family dish is never refused');
+  assert.equal(R.isRetiredSample('chili-abc123', []), false, 'any other id loads as before');
+  assert.equal(await R.fetchRecipe('weed-steak'), null, 'no fetch, no recipe');
+});
+
 await test('the app ships no recipes: bundled.ts is empty and requires nothing (Caleb, Nov 8)', () => {
   // Every family starts with none and nothing crosses between families, offline too. assets/data is test fixtures only.
   const src = readFileSync(join(root, 'src/lib/bundled.ts'), 'utf8');

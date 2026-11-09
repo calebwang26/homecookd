@@ -182,8 +182,32 @@ export function fetchRecipe(entryOrId: LibraryEntry | string): Promise<{ recipe:
   return p;
 }
 
+/**
+ * The ten sample dishes every phone used to share (Uncle Ray's steak, the Biryani, ...), retired on Nov 8: a
+ * family starts with none and nothing crosses between families. An old link or heart to one finds nothing,
+ * even while their files are still on the media host. A family's own dish is never refused, whatever its id.
+ */
+export const RETIRED_SAMPLES: ReadonlySet<string> = new Set([
+  'weed-steak',
+  'chicken-biryani',
+  'auntie-lin-scallion-pancakes',
+  'dad-ginger-scallion-fish',
+  'dad-sunday-chili',
+  'gordon-stir-fry',
+  'gordon-gnocchi',
+  'gordon-cheesecake',
+  'grandma-hand-pulled-noodle-soup',
+  'grandma-red-braised-pork',
+]);
+
+/** A retired sample that isn't one of the signed-in family's own dishes. */
+export function isRetiredSample(id: string, familyIds: Iterable<string> = family.entries.map((e) => e.id)): boolean {
+  return RETIRED_SAMPLES.has(id) && ![...familyIds].includes(id);
+}
+
 async function fetchRecipeUncached(entryOrId: LibraryEntry | string): Promise<{ recipe: Recipe; source: Source } | null> {
   const id = typeof entryOrId === 'string' ? entryOrId : entryOrId.id;
+  if (isRetiredSample(id)) return null;
   const entry = typeof entryOrId === 'string' ? entryCache.get(id) : entryOrId;
   // The entry's recipe_url first, then the conventional bucket path (covers a cold start on a
   // deep link, when only the bundled library is known).
