@@ -16,8 +16,11 @@ export type RecipeDetails = {
 };
 
 export interface Library {
-  /** library.json as id -> {title, cook_name, sample}. Empty when the host can't be reached. */
-  libraryIndex(): Promise<Map<string, RecipeInfo>>;
+  /**
+   * library.json as id -> {title, cook_name, sample}. Null when the host can't be reached or the file isn't a list; an empty Map when it reads fine and lists
+   * nothing (Caleb, Nov 9: people start with no sample recipes). Only null is an outage.
+   */
+  libraryIndex(): Promise<Map<string, RecipeInfo> | null>;
   /** One recipe.json, at `key` (recipeJsonKey: dishInfo finds it) or the library's own `<id>/recipe.json`. Null when it's missing or the host can't be reached. */
   recipeInfo(id: string, key?: string): Promise<RecipeDetails | null>;
   /** False only when the host says it isn't there (a 404, or S3's 403). Null when it can't say (unreachable, a 5xx): Supabase doesn't block a send on that. */
@@ -59,7 +62,7 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
     async libraryIndex() {
       if (index && clock() - index.at < ttl) return index.map;
       const got = await getJson(`${base}/library.json`);
-      if (!got.ok || !Array.isArray(got.body)) return new Map();
+      if (!got.ok || !Array.isArray(got.body)) return null;
       const map = new Map<string, RecipeInfo>();
       for (const e of got.body as Record<string, unknown>[]) {
         const id = str(e?.id);
@@ -110,7 +113,7 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
 }
 
 const unreachable: Library = {
-  libraryIndex: async () => new Map(),
+  libraryIndex: async () => null,
   recipeInfo: async () => null,
   exists: async () => null,
 };
@@ -144,9 +147,9 @@ export async function dishInfo(familyId: string, id: string): Promise<RecipeDeta
   return await library().recipeInfo(id, await recipeJsonKey(db(), familyId, id));
 }
 
-/** The ids of one person's dishes: entries whose cook_name is their name, case-insensitively (the app's cookProfile rule). Samples included. */
-export function dishesOf(index: ReadonlyMap<string, RecipeInfo>, name: string | null | undefined): string[] {
+/** The ids of one person's dishes: entries whose cook_name is their name, case-insensitively (the app's cookProfile rule). Samples included. None without a library. */
+export function dishesOf(index: ReadonlyMap<string, RecipeInfo> | null, name: string | null | undefined): string[] {
   const n = (name ?? "").trim().toLowerCase();
-  if (!n) return [];
+  if (!n || !index) return [];
   return [...index].filter(([, d]) => (d.cook_name ?? "").trim().toLowerCase() === n).map(([id]) => id);
 }

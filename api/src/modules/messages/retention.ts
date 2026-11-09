@@ -189,7 +189,7 @@ export async function nudgeFamily(familyId: string, now: Date): Promise<number> 
   for (const p of profiles) if (!p.removed_at && (await hasLivePhone(db(), p.id))) withTokens.add(p.id);
   const due = new Set(dueProfiles(profiles.filter((p) => withTokens.has(p.id)), now).nudge.map((p) => p.id));
   if (due.size === 0) return 0;
-  const index = await library().libraryIndex();
+  const index = (await library().libraryIndex()) ?? new Map<string, RecipeInfo>();
   const activity = await loadActivity(familyId, now, profiles, index);
   const pairs = familyPairs({ now, profiles, activity });
   let own: Set<string> | null = null;
@@ -380,8 +380,9 @@ export async function getRecap(signed: Signed, query: Record<string, unknown>, n
   const { month, live } = resolveMonth(raw || null, now, tz, first);
   if (!live) return { empty: true };
   const index = await library().libraryIndex();
-  // No library means no titles, cooks or sample flags: the month would come out smaller than the database says. A 503 lets the app say "try again" and keep the Home card.
-  if (index.size === 0) throw providerDown(503, "Can't reach the family recipes right now.");
+  // An unreachable library means no titles, cooks or sample flags: the month would come out smaller than the database says. A 503 lets the app say "try again" and
+  // keep the Home card. A library that reads fine and lists nothing is no outage: the month counts what the database has.
+  if (index === null) throw providerDown(503, "Can't reach the family recipes right now.");
   const scope: Scope = who.role === "cook" ? { kind: "cook", id: who.id, dishes: dishesOf(index, who.name) } : { kind: "learner", id: who.id };
   const rows = await loadMonth(signed.familyId, members, monthBounds(month, tz)!, scope);
   const recap = build(members, who, month, rows, index);
@@ -397,8 +398,8 @@ export async function recapFamily(familyId: string, now: Date, first = FIRST_MON
   const due = recapDue(withTokens, now).filter((p) => previousMonth(now, zoneOf(p.tz)) >= first);
   if (due.length === 0) return 0;
   const index = await library().libraryIndex();
-  // Nothing is sent or logged, and a later hour on the 1st tries again.
-  if (index.size === 0) throw new Error("recap: the library is unreachable");
+  // Nothing is sent or logged, and a later hour on the 1st tries again. An empty list isn't unreachable.
+  if (index === null) throw new Error("recap: the library is unreachable");
   const monthOf = new Map(due.map((p) => [p.id, previousMonth(now, zoneOf(p.tz))]));
   const spans = due.map((p) => monthBounds(monthOf.get(p.id)!, zoneOf(p.tz))!);
   const rows = await loadMonth(familyId, members, {

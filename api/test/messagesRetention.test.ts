@@ -540,6 +540,14 @@ test("GET /recap with the library unreachable is a 503, never a smaller month", 
   await assert.rejects(getRecap(signedAs(w.leo, w.family), { month: "2026-11" }, DEC1), (e: Error & { statusCode?: number; code?: string }) => e.statusCode === 503 && e.code === "provider_down");
 });
 
+test("GET /recap with a library that lists nothing (Caleb, Nov 9: no samples) answers the month the database has, no 503", { skip }, async () => {
+  const w = await world();
+  await quietNovember(w);
+  w.lib.index = new Map();
+  const r = (await getRecap(signedAs(w.leo, w.family), { month: "2026-11" }, DEC1)) as any;
+  assert.equal(r.slides.find((s: any) => s.type === "cooked").value, 2); // both rows carry cook_id: no library needed
+});
+
 test("GET /recap: past Supabase's 1000-row cap, 1300 clips all count", { skip }, async () => {
   const w = await world();
   await db().query(
@@ -626,6 +634,13 @@ test("cron: with the library unreachable nothing is sent or logged, the task fai
   assert.equal((await logOf(w.leo.id)).length, 0);
   w.lib.down = false;
   assert.equal(await recapFamily(w.family, new Date("2026-12-01T11:10:00-08:00")), 2);
+});
+
+test("cron: a library that lists nothing still sends the month the database has, never the outage's throw", { skip }, async () => {
+  const w = await world();
+  await quietNovember(w);
+  w.lib.index = new Map();
+  assert.equal(await recapFamily(w.family, NOV1), 2);
 });
 
 test("cron: a kid already sent an app-initiated push today is capped (logged as skipped), never a second try", { skip }, async () => {
