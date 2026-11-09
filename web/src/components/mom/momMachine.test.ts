@@ -1,4 +1,5 @@
 // Every stage × event of Mom's page, against the table written out below. Run: cd web && npm test
+// The machine names this file (state-machine-test), so CI fails a change to its table without a change here.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MOM_EVENTS, STAGES, momTransition, type MomEvent, type MomEventType, type Stage } from './momMachine.ts';
