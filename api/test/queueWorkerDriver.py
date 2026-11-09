@@ -62,7 +62,7 @@ def run(store, op: dict):
         keys = {"media_prefix": "recipe-x/", "recipe_json_key": "recipe-x/a1/recipe.json", "cover_key": "recipe-x/a1/poster.jpg"}
         return store.finish(op["claim"], queue_db.recipe_row(raw), keys, {"model": "claude-sonnet-5-5", "prompt_version": "MERGE_PROMPT:abc"}, op.get("requestId"))
     if kind == "sweep":
-        return store.sweep(op.get("leaseS", qw.LEASE_S), qw.MAX_RECEIVES, qw.MSG_FAILED)
+        return [r["id"] for r in store.sweep(op.get("leaseS", qw.LEASE_S), qw.MAX_FAILURES, qw.MSG_FAILED, op.get("strandedS", qw.STRANDED_S))]
     if kind == "recipeFolder":
         return qw.recipe_folder({"id": op["jobId"], "media_prefix": None})
     raise ValueError(kind)

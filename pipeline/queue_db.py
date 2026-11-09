@@ -196,12 +196,13 @@ class PostgresStore:
         def work(c):
             row = c.execute(
                 """update jobs set stage = 'preparing', progress = 0.02, error = null, attempts = attempts + 1,
+                          failures = failures + case when stage = 'queued' then 0 else 1 end,
                           claimed_at = now(), heartbeat_at = now(), updated_at = now()
                     where id = %s and cancelled_at is null
                       and (stage = 'queued' or (stage = any(%s) and
                            coalesce(heartbeat_at, claimed_at, updated_at) < now() - make_interval(secs => %s)))
-                    returning id, attempts, family_id, cook_id, recipe_id, recording_id, upload_key, title, language,
-                              video_gaps, cost_usd""",
+                    returning id, attempts, failures, created_at, family_id, cook_id, recipe_id, recording_id, upload_key, title,
+                              language, video_gaps, cost_usd""",
                 (job_id, RUNNING, lease_s)).fetchone()
             return dict(row) if row else None
         claim = self._do(work)
@@ -266,7 +267,8 @@ class PostgresStore:
     def heartbeat(self, claim: dict) -> str:
         """ok, or cancelled (the cook stopped it, or the row is gone with her account), or lost (another worker has it)."""
         def work(c):
-            row = c.execute("""update jobs set heartbeat_at = now() where id = %s and attempts = %s
+            # updated_at too: the app's live poll (api jobs/service.ts liveJobs) reads it as "this may still move".
+            row = c.execute("""update jobs set heartbeat_at = now(), updated_at = now() where id = %s and attempts = %s
                                   and cancelled_at is null and stage = any(%s) returning 1""",
                             (claim["id"], claim["attempts"], RUNNING)).fetchone()
             if row:
@@ -341,11 +343,32 @@ class PostgresStore:
                                  where daily_spend.alerted_at is null returning 1""", (SCOPE,)).fetchone() is not None
         return self._do(work)
 
-    def pause(self, job_id: str, message: str) -> None:
+    def wake_later(self, job_id: str, delay_s: int, request_id: str | None, claim: dict | None = None, failure: bool = False,
+                   error: str | None = None) -> bool:
+        """The job waits for a new wake-up `delay_s` from now: a 'jobs' row in the outbox, so the message that brought it can be deleted
+        and the wait spends none of SQS's receives (the row is the machine, a message only wakes it). With `claim`, its run is handed
+        back in the same transaction (RUNNING -> queued, fenced); without, it must already be queued. `failure` counts a try that
+        went wrong. False when the job isn't in the state this leaves: cancelled, gone, or another attempt's."""
         def work(c):
-            c.execute("""update jobs set error = %s, updated_at = now()
-                          where id = %s and stage = 'queued' and cancelled_at is null""", (message, job_id))
-        self._do(work)
+            with c.transaction():
+                if claim:
+                    row = c.execute(
+                        """update jobs set stage = 'queued', progress = 0, claimed_at = null, heartbeat_at = null, error = %s,
+                                  failures = failures + %s, updated_at = now()
+                            where id = %s and attempts = %s and cancelled_at is null and stage = any(%s) returning id""",
+                        (error, int(failure), claim["id"], claim["attempts"], RUNNING)).fetchone()
+                else:
+                    row = c.execute(
+                        """update jobs set error = coalesce(%s, error), failures = failures + %s, updated_at = now()
+                            where id = %s and stage = 'queued' and cancelled_at is null returning id""",
+                        (error, int(failure), job_id)).fetchone()
+                if row is None:
+                    return False
+                c.execute("""insert into outbox (queue, payload, request_id, send_after)
+                             values ('jobs', %s::jsonb, %s, now() + make_interval(secs => %s))""",
+                          (json.dumps({"jobId": job_id}), request_id, max(0, int(delay_s))))
+                return True
+        return self._do(work)
 
     def acknowledge_cancel(self, job_id: str, message: str) -> None:
         """The cook's stop is final, whatever the api wrote and whatever this worker was doing."""
@@ -354,7 +377,7 @@ class PostgresStore:
                 row = c.execute(
                     """update jobs set stage = 'failed', progress = 0, error = coalesce(error, %s),
                               finished_at = coalesce(finished_at, now()), updated_at = now()
-                        where id = %s and cancelled_at is not null returning recipe_id""", (message, job_id)).fetchone()
+                        where id = %s and cancelled_at is not null and stage <> 'done' returning recipe_id""", (message, job_id)).fetchone()
                 if row and row["recipe_id"]:
                     c.execute("update recipes set status = 'failed' where id = %s", (row["recipe_id"],))
         self._do(work)
@@ -407,21 +430,42 @@ class PostgresStore:
                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce({recording_answer}, false), %s, %s, 'ready') returning id""",
             (*fields, job["recording_id"], job["family_id"], job["cook_id"])).fetchone()["id"]
 
-    def sweep(self, lease_s: int, max_attempts: int, message: str) -> list[str]:
-        """A job whose worker died on its last try has no message left to re-run it, so it would spin forever in the app. These
-        fail visibly. Also any job silent for a day: the alarm has long fired. Uses jobs_unfinished."""
+    def sweep(self, lease_s: int, max_failures: int, message: str, stranded_s: int) -> list[dict]:
+        """Jobs nobody is moving, as [{id, stage, was}]. A running job whose lease lapsed (its worker died) counts a failure: woken
+        again through the outbox (-> queued), or failed visibly on the max_failures-th. A queued job with no wake-up owed for
+        `stranded_s` (its message reached the dead letters, or it waits behind a long backlog) is woken again and counts nothing:
+        a duplicate wake-up is harmless, the claim decides. Uses jobs_unfinished and jobs_queued."""
         def work(c):
-            rows = c.execute(
-                """with gone as (
-                     select id from jobs
-                      where stage = any(%s) and coalesce(heartbeat_at, claimed_at, updated_at) < now() - make_interval(secs => %s)
-                        and (attempts >= %s or coalesce(heartbeat_at, claimed_at, updated_at) < now() - interval '24 hours')
-                      limit 50 for update skip locked),
-                   failed as (
-                     update jobs set stage = 'failed', progress = 0, error = %s, finished_at = now(), updated_at = now()
-                      where id in (select id from gone) returning id, recipe_id),
-                   recipes_failed as (
-                     update recipes set status = 'failed' where id in (select recipe_id from failed where recipe_id is not null))
-                   select id from failed""", (RUNNING, lease_s, max_attempts, message)).fetchall()
-            return [r["id"] for r in rows]
+            with c.transaction():
+                rows = c.execute(
+                    """with lapsed as (
+                         select id, 'running' as was, 1 as cost from jobs
+                          where stage = any(%(running)s) and cancelled_at is null
+                            and coalesce(heartbeat_at, claimed_at, updated_at) < now() - make_interval(secs => %(lease)s)
+                          limit 50 for update skip locked),
+                       stranded as (
+                         select j.id, 'queued' as was, 0 as cost from jobs j
+                          where j.stage = 'queued' and j.cancelled_at is null and j.updated_at < now() - make_interval(secs => %(stranded)s)
+                            and not exists (select 1 from outbox o
+                                             where o.queue = 'jobs' and o.sent_at is null and o.payload->>'jobId' = j.id)
+                          limit 50 for update of j skip locked),
+                       found as (select * from lapsed union all select * from stranded),
+                       moved as (
+                         update jobs j set
+                                failures = j.failures + f.cost,
+                                stage = case when f.cost = 1 and j.failures + 1 >= %(max)s then 'failed' else 'queued' end,
+                                progress = 0, claimed_at = null, heartbeat_at = null,
+                                error = case when f.cost = 1 and j.failures + 1 >= %(max)s then %(message)s else j.error end,
+                                finished_at = case when f.cost = 1 and j.failures + 1 >= %(max)s then now() else j.finished_at end,
+                                updated_at = now()
+                           from found f where j.id = f.id
+                         returning j.id, j.stage, j.recipe_id, f.was),
+                       recipes_failed as (
+                         update recipes set status = 'failed'
+                          where id in (select recipe_id from moved where stage = 'failed' and recipe_id is not null)),
+                       woken as (
+                         insert into outbox (queue, payload) select 'jobs', jsonb_build_object('jobId', id) from moved where stage = 'queued')
+                       select id, stage, was from moved""",
+                    {"running": RUNNING, "lease": lease_s, "stranded": stranded_s, "max": max_failures, "message": message}).fetchall()
+                return [dict(r) for r in rows]
         return self._do(work)

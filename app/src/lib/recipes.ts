@@ -28,6 +28,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Profile } from './api';
 import { bundledLibrary, bundledRecipes } from './bundled';
 import { loadHiddenIds } from './deletes';
+import { FAMILY_WAIT_MS, familyChecked, libraryLoadMachine, type LibraryLoadEvent, type LibraryLoadState } from './libraryLoad';
 import {
   familyEntries,
   mergeLibrary,
@@ -241,7 +242,16 @@ async function fetchRecipeUncached(entryOrId: LibraryEntry | string): Promise<{ 
 // ---------------------------------------------------------------------------------------------
 // Hooks (one shared library store, so every screen sees the same list)
 
-type LibraryState = { entries: LibraryEntry[]; source: Source; loading: boolean; loaded: boolean };
+type LibraryState = {
+  entries: LibraryEntry[];
+  source: Source;
+  loading: boolean;
+  /** library.json answered (empty since Nov 8: it says nothing about the family's dishes). */
+  loaded: boolean;
+  /** Whose family rows the check below is for, and where it is (lib/libraryLoad.ts). */
+  loadKey: string | null;
+  loadState: LibraryLoadState;
+};
 
 /** library.json's entries (or the bundled copy's). */
 let base: LibraryEntry[] = bundledLibrary.filter(isEntry).map(normalizeEntry);
@@ -303,7 +313,38 @@ let libState: LibraryState = {
   source: 'bundled',
   loading: false,
   loaded: false,
+  loadKey: null,
+  loadState: 'signedOut',
 };
+
+// Have the signed-in family's own dishes been checked (lib/libraryLoad.ts)? Only then does an empty list
+// mean "No recipes yet" (Caleb's yes, Nov 8: decision 4).
+let loadTimer: unknown = null;
+/** Swapped by scripts/test-library.mjs for a fake clock. */
+export const libraryLoadClock = {
+  set: (fn: () => void, ms: number): unknown => setTimeout(fn, ms),
+  clear: (t: unknown) => clearTimeout(t as ReturnType<typeof setTimeout>),
+};
+
+function sendLoad(event: LibraryLoadEvent, key: string | null) {
+  const to = libraryLoadMachine.step(libState.loadState, event);
+  if (to === null) return;
+  if (loadTimer != null) libraryLoadClock.clear(loadTimer);
+  loadTimer = null;
+  if (to === 'waiting') {
+    loadTimer = libraryLoadClock.set(() => {
+      loadTimer = null;
+      if (libState.loadKey === key) sendLoad('timeout', key);
+    }, FAMILY_WAIT_MS);
+  }
+  setLib({ loadKey: key, loadState: to });
+}
+
+/** An empty list for `key` (libraryKey) really means none: the family's rows answered, or we stopped waiting. */
+export function libraryChecked(key: string | null, state: Pick<LibraryState, 'loadKey' | 'loadState'> = libState): boolean {
+  if (!key) return true;
+  return state.loadKey === key && familyChecked(state.loadState);
+}
 const libListeners = new Set<() => void>();
 let libPromise: Promise<void> | null = null;
 
@@ -357,6 +398,8 @@ export function reapplyHidden() {
  * public loads without its stories (storiesWithheld). Exported for scripts/test-library.mjs.
  */
 export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecipe[] | null, people: readonly Pick<Profile, 'name' | 'relation'>[] = []) {
+  if (key !== libState.loadKey) sendLoad(key ? 'signIn' : 'signOut', key);
+  if (key && rows && (libState.loadState === 'waiting' || libState.loadState === 'gaveUp')) sendLoad('rows', key);
   if (!rows && family.key === key) return;
   const mine = key && rows ? rows : [];
   const rowsFor = key && rows ? key : null;
@@ -423,15 +466,20 @@ function subscribeLib(l: () => void) {
 
 /**
  * The family library: the signed-in family's own dishes, plus library.json's (empty since Nov 8). Starts
- * empty, never with samples. `loaded` turns true after the first remote attempt.
+ * empty, never with samples. `familyChecked`: an empty list really means none (show "No recipes yet");
+ * until then show the loading state.
  */
-export function useLibrary(): LibraryState & { refresh: () => Promise<void> } {
+export function useLibrary(): LibraryState & { familyChecked: boolean; refresh: () => Promise<void> } {
   useFamilyLibrary();
+  const session = useSession();
+  const key = libraryKey(session);
   const state = useSyncExternalStore(subscribeLib, () => libState, () => libState);
   useEffect(() => {
     if (!libState.loaded && !libPromise) void refreshLibrary();
   }, []);
-  return { ...state, refresh: refreshLibrary };
+  // While the session is still loading, nobody is known yet: that isn't "signed out", so not checked either.
+  const familyChecked = session.status !== 'loading' && libraryChecked(key, state);
+  return { ...state, familyChecked, refresh: refreshLibrary };
 }
 
 /** One recipe by id. Shows the cached/bundled copy instantly, then the fresh one. */

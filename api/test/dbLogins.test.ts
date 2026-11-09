@@ -216,11 +216,18 @@ test("the logins, on real Postgres", { skip: !hasDatabase }, async (t) => {
               failed as (update jobs set stage = 'failed' where id in (select id from gone) returning id, recipe_id)
          update recipes set status = 'failed' where id in (select recipe_id from failed where recipe_id is not null)`,
       );
+      // wake_later and the sweep's stranded check: a wake-up owed through the outbox, which it reads by queue, payload and sent_at only
+      await c.query("update jobs set failures = failures + 1, updated_at = now() where id = $1 and stage = 'queued' returning id", [job]);
+      await c.query("insert into outbox (queue, payload, request_id, send_after) values ('jobs', $1::jsonb, null, now() + make_interval(secs => 60))", [
+        JSON.stringify({ jobId: job }),
+      ]);
+      await c.query("select 1 from outbox o where o.queue = 'jobs' and o.sent_at is null and o.payload->>'jobId' = $1", [job]);
 
       // Nothing outside its jobs: no sign-in, no messages, no deleting, no family or person changes.
-      for (const table of ["sessions", "devices", "identities", "messages", "threads", "families", "files", "outbox"]) {
+      for (const table of ["sessions", "devices", "identities", "messages", "threads", "families", "files"]) {
         await refused(c, `select count(*) from ${table}`);
       }
+      await refused(c, "select request_id, attempts from outbox");
       await refused(c, "select text from questions");
       await refused(c, "delete from jobs where id = $1", [job]);
       await refused(c, "delete from recipes where id = $1", [fresh]);

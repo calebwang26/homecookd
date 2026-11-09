@@ -50,7 +50,7 @@ globalThis.__session = null; // who useSession()/getSession() say is signed in
 
 const stub = (code) => 'data:text/javascript,' + encodeURIComponent(code);
 const stubs = {
-  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [typeof v === \'function\' ? v() : v, () => {}]; export const useSyncExternalStore = (_s, get) => get();'),
+  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [typeof v === \'function\' ? v() : v, () => {}]; export const useSyncExternalStore = (_s, get) => get(); export const useReducer = (r, a, init) => [init ? init(a) : a, () => {}];'),
   './bundled': stub('export const bundledLibrary = globalThis.__bundledLibrary; export const bundledRecipes = globalThis.__bundledRecipes;'),
   './deletes': stub('export const loadHiddenIds = () => globalThis.__hidden;'),
   './live/convex': stub('export const useLive = (_n, initial) => initial; export const invalidateConvexRecipes = () => { globalThis.__invalidations += 1; };'),
@@ -754,6 +754,64 @@ await test('store: her yes shows up in the ingredient list for everyone, stories
   R.showFamilyRecipes('family-F:leo', [row('jeera-dal', { addedIngredients: [{ ...CUMIN }] })], PEOPLE);
   assert.equal(R.getCachedRecipe('jeera-dal'), cached);
   R.showFamilyRecipes(null, null);
+});
+
+const LL = await import(pathToFileURL(join(root, 'src/lib/libraryLoad.ts')).href);
+
+await test('library load (decision 4): every state × event', () => {
+  const m = LL.libraryLoadMachine;
+  const expected = {
+    signedOut: { signIn: 'waiting' },
+    waiting: { rows: 'ready', timeout: 'gaveUp', signIn: 'waiting', signOut: 'signedOut' },
+    ready: { signIn: 'waiting', signOut: 'signedOut' },
+    gaveUp: { rows: 'ready', signIn: 'waiting', signOut: 'signedOut' },
+  };
+  assert.deepEqual([...m.states].sort(), Object.keys(expected).sort());
+  for (const st of m.states) for (const e of m.events) assert.equal(m.transition(st, e), expected[st][e] ?? null, `${st} --${e}-->`);
+  assert.deepEqual(m.states.map((st) => LL.familyChecked(st)), [true, false, true, true]);
+});
+
+await test('library load: "No recipes yet" only once the family rows answered, or after the wait', () => {
+  // A fake clock for the wait.
+  let pending = [];
+  R.libraryLoadClock.set = (fn, ms) => {
+    const t = { fn, ms };
+    pending.push(t);
+    return t;
+  };
+  R.libraryLoadClock.clear = (t) => {
+    pending = pending.filter((x) => x !== t);
+  };
+  const fire = () => {
+    const due = pending;
+    pending = [];
+    for (const t of due) t.fn();
+  };
+  R.showFamilyRecipes(null, null);
+  assert.equal(R.libraryChecked(null), true, 'nobody signed in: nothing to wait for');
+  R.showFamilyRecipes('fam:mei', null);
+  assert.equal(R.libraryChecked('fam:mei'), false, 'waiting for her rows');
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].ms, LL.FAMILY_WAIT_MS);
+  R.showFamilyRecipes('fam:mei', []);
+  assert.equal(R.libraryChecked('fam:mei'), true, 'the rows answered, even with no dishes');
+  assert.equal(pending.length, 0, 'the wait is over');
+  assert.equal(R.libraryChecked('fam:leo'), false, 'checked for her, not for someone else');
+
+  R.showFamilyRecipes('fam:leo', null);
+  assert.equal(R.libraryChecked('fam:leo'), false, 'a new person waits again');
+  fire();
+  assert.equal(R.libraryChecked('fam:leo'), true, 'the read never came: the empty state after FAMILY_WAIT_MS, as before');
+  R.showFamilyRecipes('fam:leo', [row('late-1')]);
+  assert.equal(R.libraryChecked('fam:leo'), true, 'rows arriving late still count');
+
+  R.showFamilyRecipes('fam:mei', null);
+  R.showFamilyRecipes('fam:leo', null);
+  fire();
+  assert.equal(R.libraryChecked('fam:mei'), false, "a stale wait for someone else doesn't count");
+  R.showFamilyRecipes(null, null);
+  assert.equal(R.libraryChecked(null), true);
+  assert.equal(pending.length, 0);
 });
 
 await test('a retired sample finds nothing (an old link or heart), unless the family has a dish of that id', async () => {
