@@ -8,10 +8,11 @@
 //   door.transition('shut', 'open')   // 'ajar'
 //   door.transition('ajar', 'open')   // null: nothing happens
 //   const [state, send] = useMachine(door, 'shut');
+//   const [state, send] = useMachineNow(door, 'shut');   if (!send('open')) return;   (a tap guard)
 //
 // Pure apart from useMachine (React), so scripts/test-*.mjs run a table under node and enumerate every
 // state × event pair against the expected one.
-import { useReducer } from 'react';
+import { useReducer, useState } from 'react';
 
 export type Table<S extends string, E extends string> = Readonly<Record<S, Readonly<Partial<Record<E, S>>>>>;
 
@@ -81,4 +82,29 @@ export function useMachine<S extends string, E extends string>(m: Machine<S, E>,
     undefined,
     () => (typeof initial === 'function' ? (initial as () => S)() : initial),
   );
+}
+
+/**
+ * A machine's state held outside React: `send(event)` moves it at once and says whether it moved, so a
+ * guard never reads a state one render old (two taps in one frame). `onChange` hears every move.
+ */
+export function holdMachine<S extends string, E extends string>(m: Machine<S, E>, initial: S, onChange?: (state: S) => void) {
+  let state = initial;
+  return {
+    now: () => state,
+    send(event: E): boolean {
+      const next = m.step(state, event);
+      if (next === null) return false;
+      state = next;
+      onChange?.(next);
+      return true;
+    },
+  };
+}
+
+/** useMachine for a tap guard: `send` moves the state before the next render and returns whether it moved. */
+export function useMachineNow<S extends string, E extends string>(m: Machine<S, E>, initial: S | (() => S)): [S, (event: E) => boolean] {
+  const [state, setState] = useState(initial);
+  const [held] = useState(() => holdMachine(m, state, setState));
+  return [state, held.send];
 }
