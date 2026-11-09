@@ -24,6 +24,9 @@
 //   a refused mic retry reloads once, back to the same question, then explains instead of looping;
 //   an answer refused twice in a row says so, instead of "Try again" forever;
 //   a failed Send says so, with Try again, instead of going on to "Sent".
+//
+// CI (scripts/check-machine-tests.mjs) fails a change to this file without one to its test:
+// state-machine-test: questionMachine.test.ts
 import type { WordKey } from '@/lib/dish/words';
 
 export type Note = 'short' | 'quiet' | 'failed' | 'refused' | null;
