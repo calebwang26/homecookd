@@ -247,10 +247,13 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 # web
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
+cd web && npm test                                                 # the site's state machines (Mom's page): every state × event (node --test, no dependency)
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
   # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
+node web/scripts/qa/mom-failures-e2e.mjs --base http://localhost:3105 --out /tmp/mom-failures [--expect today|fixed]   # Mom's page when the mic is denied or hangs, in an in-app browser, a refused answer, a failed Send (same site and fake as dish-e2e)
+  # dish-e2e, dish-api-e2e and mom-failures use a test-only synthetic mic (scripts/qa/synthetic-mic.mjs); --mic device for Chrome's fake device, which never answers on some Macs
 node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
 node scripts/frame-app-store-shots.mjs [file.png ...]                # caption and frame docs/app-store/screenshots/1.1/raw/ into 1.1/ (6.9") and 1.1/medium/ (1206 × 2622); needs web/node_modules, Chrome
 

@@ -13,6 +13,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { micInit } from './synthetic-mic.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
 
@@ -32,6 +33,8 @@ const API = trim(args.api);
 const OUT = path.resolve(String(args.out ?? path.join(tmpdir(), 'dish-api-e2e')));
 const CHROME = String(args.chrome ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 const PHONE = { width: Number(args.width ?? 390), height: 844 };
+/** --mic synthetic (default: a tone from synthetic-mic.mjs) | device (Chrome's fake device; it never answers on some Macs). */
+const MIC = String(args.mic ?? 'synthetic');
 const MERGE_MS = Number(args['merge-s'] ?? 120) * 1000;
 mkdirSync(OUT, { recursive: true });
 
@@ -87,6 +90,7 @@ const browser = await chromium.launch({
 
 async function phone(who, locale = 'en-US') {
   const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 2, locale, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] });
+  if (MIC !== 'device') await ctx.addInitScript(micInit(MIC)); // test-only: a synthetic mic (synthetic-mic.mjs)
   const page = await ctx.newPage();
   watch(page, who);
   return page;

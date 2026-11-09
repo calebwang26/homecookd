@@ -13,6 +13,8 @@
 //
 // Test hooks (not in the spec): POST /__fake/budget {spent: true|false} makes /dish/cards answer 429
 // `budget` as the spent daily budget does, POST /__fake/rate {on: true|false} answers 429 `rate` (a per-IP limit); GET /__fake/state returns every card; GET /files/<id> serves an upload.
+// Mom's failure states (mom-failures-e2e.mjs): POST /__fake/finish {fail: true|false} answers her Send with 503; POST /__fake/answer
+// {status: 415|null} answers every saved answer with that status (a lasting refusal). In-process: setFailingFinish(on), setAnswerStatus(code).
 // In-process: fake.addCraving({parentName, relation, message, uses}) makes a craving link (§8), returning its token; fake.cravings holds them (revokedAt to stop one).
 // Import it to run it in-process: `const fake = await startFake({ port, site })`.
 import { createServer } from 'node:http';
@@ -165,6 +167,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
   let budgetSpent = false;
   let rateLimited = false;
   let failingUploads = false;
+  let failingFinish = false; // Mom's Send answers 503
+  let answerStatus = null; // every saved answer answers with this status
   let slowTranslateMs = 0; // >0: the first Hindi peek gives up (translating: true) and the translation lands this long after
   let base = `http://localhost:${port}`;
   const byAsk = (t) => [...cards.values()].find((c) => c.askToken === t);
@@ -224,7 +228,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       res.writeHead(status, { ...cors, 'Content-Type': type });
       res.end(type === 'application/json' ? JSON.stringify(body) : body);
     };
-    const fail = (status, code, error) => send(status, { error, code });
+    // Each contract's own error shape: Convex's {error: <sentence>, code}; the new api's {error: <code>, message: <sentence>}.
+    const fail = (status, code, error) => send(status, links ? { error: code, message: error } : { error, code });
     const url = new URL(req.url, base);
     if (origin && !cors['Access-Control-Allow-Origin']) return fail(403, 'origin', 'This request came from another site.');
     if (req.method === 'OPTIONS') {
@@ -271,6 +276,12 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       case '/__fake/budget':
         budgetSpent = !!b.spent;
         return send(200, { budgetSpent });
+      case '/__fake/finish':
+        failingFinish = !!b.fail;
+        return send(200, { failingFinish });
+      case '/__fake/answer':
+        answerStatus = Number(b.status) || null;
+        return send(200, { answerStatus });
       case '/__fake/rate':
         rateLimited = !!b.on;
         return send(200, { rateLimited });
@@ -429,6 +440,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       return fail(404, 'not_found', 'No such route.');
     }
 
+    if (answerStatus && url.pathname === '/dish/ask/answer') return fail(answerStatus, 'bad_type', 'That recording type isn’t supported.');
     if (!links && url.pathname === '/dish/ask/answer') {
       const c = byAsk(req.headers['x-dish-token']);
       if (!c) return fail(404, 'not_found', 'This link doesn’t work anymore.');
@@ -479,6 +491,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           return send(200, { ask: { ...askOut(c, inLang), translating: false } });
         }
         case '/dish/ask/finish':
+          if (failingFinish) return fail(503, 'busy', 'Something went wrong. Try again.');
           if (!c.answers.size) return send(200, { ask: askOut(c) });
           if (!c.finishedAt) {
             c.finishedAt = Date.now();
@@ -509,6 +522,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     setBudget: (spent) => (budgetSpent = spent),
     setRate: (on) => (rateLimited = on),
     setFailingUploads: (on) => (failingUploads = on),
+    setFailingFinish: (on) => (failingFinish = on),
+    setAnswerStatus: (code) => (answerStatus = code),
     setBrokenFiles: (on) => (brokenFiles = on),
     expireLinks: () => (linkGeneration += 1),
     setSlowTranslate: (ms) => (slowTranslateMs = ms),

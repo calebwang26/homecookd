@@ -208,6 +208,9 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci && npm run build
         working-directory: web
+      # The site's state machines (Mom's page), every state × event (docs/agents/STATE-MACHINES.md).
+      - run: npm test
+        working-directory: web
       - run: node --test infra/modules/web/rewrite.test.mjs
       # No NEXT_PUBLIC_* on this build, as Vercel's main build has none until 1.1's release (CUTOVER.md, step 10): its bundle must stay today's site.
       - run: node scripts/check-merge-safe.mjs --bundle web/out
