@@ -1,0 +1,23 @@
+appId: ${APP_ID}
+name: Open a link from outside the app
+---
+# iOS asks "Open in homecookd?" before a link from outside opens the app. A tap on its Open can close the dialog without
+# handing the link over: spike runs 5 and 7 (Nov 9) tapped the same point, and only run 5's link reached the app. So the
+# whole step runs again until the screen the link leads to shows (EXPECT).
+#
+# A link that carries a key (the sign-in journeys) is echoed in Maestro's own logs: those journeys never upload them.
+- retry:
+    maxRetries: 2
+    commands:
+      - openLink: ${LINK}
+      - extendedWaitUntil:
+          visible: "Open in .*homecookd.*"
+          timeout: 10000
+          optional: true
+      - takeScreenshot: open-dialog
+      - tapOn:
+          text: "Open"
+          optional: true
+      - extendedWaitUntil:
+          visible: ${EXPECT}
+          timeout: 20000
