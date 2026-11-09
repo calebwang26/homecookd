@@ -393,6 +393,17 @@ function webProfilesFixture(): CachedFamily | null {
   };
 }
 
+// CI simulator journeys only: a device key handed over by app/+native-intent.tsx, adopted by the provider.
+let e2eKey: string | null = null;
+let e2eAdopt: ((key: string) => void) | null = null;
+
+/** Test builds (EXPO_PUBLIC_E2E=1) only: sign this simulator in with a staging test person's device key. */
+export function adoptDeviceKeyForE2E(key: string) {
+  if (process.env.EXPO_PUBLIC_E2E !== '1') return;
+  if (e2eAdopt) e2eAdopt(key);
+  else e2eKey = key;
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>('loading');
   const [cred, setCred] = useState<Cred>(NO_CRED);
@@ -732,6 +743,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     },
     [load, setCredential, setVia, rememberApple],
   );
+
+  // CI simulator journeys only (EXPO_PUBLIC_E2E, app/+native-intent.tsx): a test person's device key arrives
+  // from a link, maybe before this provider is up. Store builds fold the check away.
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_E2E !== '1') return;
+    e2eAdopt = (key) => void adopt(key);
+    if (e2eKey) {
+      const key = e2eKey;
+      e2eKey = null;
+      setTimeout(() => void adopt(key), 0);
+    }
+    return () => {
+      e2eAdopt = null;
+    };
+  }, [adopt]);
 
   /** In with a new key from Apple or Google (a move's receipt goes on to Convex). */
   const enter = useCallback(
