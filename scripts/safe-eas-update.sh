@@ -2,14 +2,24 @@
 # The only way to publish an EAS Update. It checks the export, then publishes exactly what it checked. Values are never printed.
 #   scripts/safe-eas-update.sh staging "what changed" [--check-only]
 #   scripts/safe-eas-update.sh aws-staging "what changed" [--check-only]
-#   scripts/safe-eas-update.sh production-aws "what changed" --check-only | --caleb-ok
+#   scripts/safe-eas-update.sh production-aws "what changed" --check-only | --caleb-ok [--canary-ok "<reason>"]
 # An update doesn't read eas.json's build env: the bundle is exported here, from this shell and app/.env. So the AWS
 # switch is set here for the aws-staging channel, and for production-aws exactly as that build profile bakes it, and
 # refused for every other one. Never the production channel: it reaches public 1.0 (build 6, the old backend).
 set -euo pipefail
 CHANNEL=${1:?usage: safe-eas-update.sh <channel> <message> [--check-only]}
 MESSAGE=${2:?usage: safe-eas-update.sh <channel> <message> [--check-only]}
-CHECK_ONLY=${3:-}
+shift 2
+CHECK_ONLY=""
+CANARY_OK=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check-only | --caleb-ok) CHECK_ONLY=$1 ;;
+    --canary-ok) CANARY_OK=${2:-}; [ -n "$CANARY_OK" ] || { echo "REFUSED: --canary-ok needs a reason in quotes." >&2; exit 1; }; shift ;;
+    *) echo "REFUSED: unknown argument $1" >&2; exit 1 ;;
+  esac
+  shift
+done
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 AWS_STAGING_URL=https://d2zh46br3dalyf.cloudfront.net
 AWS_STAGING_HOST=d2zh46br3dalyf.cloudfront.net
@@ -18,23 +28,54 @@ if [ "$CHANNEL" = "production" ]; then
   echo "REFUSED: no updates to the production channel: it reaches public 1.0 (build 6), on the old backend." >&2
   exit 1
 fi
-# 1.1 in the App Store (build 18, released Nov 8) listens on production-aws with runtime 1.1.0 (its Expo.plist). An
-# update there reaches every 1.1 phone on its next launch, so publishing needs --caleb-ok; --check-only is always fine.
-PRODUCTION_AWS_RUNTIME=1.1.0
+# production-aws has two runtimes listening (their Expo.plist), and an update reaches only phones on its own runtime:
+#   1.1.0  build 18, the App Store's 1.1 (released Nov 8): every 1.1 phone.
+#   1.1.1  build 21, TestFlight internal only so far (Caleb's phone); Apple closed the 1.1.0 train once it was approved
+#          (build 20 failed processing, 90062 and 90186), so new binaries are 1.1.1.
+# The runtime is app.json's version (runtimeVersion follows it), so each one is published from a checkout at that
+# version: 1.1.0 from a worktree on the 1.1.0 line (690bf30c3 and its fixes), 1.1.1 from main. Any other version is
+# refused: no build listens for it. An update reaches its phones on their next launch, so publishing needs --caleb-ok;
+# --check-only is always fine.
+# Undo (eas-cli 27.5.0), back to that build's own JS on a launch after the phones fetch it (RUNTIME = 1.1.0 or 1.1.1):
+#   cd app && npx eas-cli update:roll-back-to-embedded --channel production-aws --runtime-version RUNTIME --platform ios \
+#     --message "Back to the build's own JS" --non-interactive
+# or back to an earlier update group: npx eas-cli update:republish --group <id> --destination-branch production-aws -p ios
+# Canary order (Master Agent, Nov 9): a change goes to 1.1.1 first, and to 1.1.0 only once the newest 1.1.1 group is
+# CANARY_HOURS old (default 2) and carries the same app/src files (scripts/check-canary.mjs prints when it's allowed).
+# --canary-ok "<reason>" skips that wait, and the reason goes into the update's message.
+PRODUCTION_AWS_RUNTIMES="1.1.0 1.1.1"
 if [ "$CHANNEL" = "production-aws" ]; then
   if [ "$CHECK_ONLY" != "--check-only" ] && [ "$CHECK_ONLY" != "--caleb-ok" ]; then
     echo "REFUSED: production-aws reaches every 1.1 phone. Run with --check-only, or --caleb-ok once Caleb has said yes." >&2
     exit 1
   fi
   RUNTIME=$(node -p "require('$ROOT/app/app.json').expo.version")
-  if [ "$RUNTIME" != "$PRODUCTION_AWS_RUNTIME" ]; then
-    echo "REFUSED: app.json says $RUNTIME, but the production-aws build in the store runs $PRODUCTION_AWS_RUNTIME. An update for another runtime reaches nobody." >&2
-    exit 1
-  fi
+  case " $PRODUCTION_AWS_RUNTIMES " in
+    *" $RUNTIME "*) echo "production-aws runtime $RUNTIME (app.json)" ;;
+    *) echo "REFUSED: app.json says $RUNTIME, but production-aws builds run only $PRODUCTION_AWS_RUNTIMES. An update for another runtime reaches nobody. Publish from a checkout at one of those versions." >&2
+       exit 1 ;;
+  esac
   if env | grep -q '^EXPO_PUBLIC_'; then
     echo "REFUSED: an EXPO_PUBLIC_ value is set in this shell. production-aws takes exactly its build profile's values; unset them." >&2
     exit 1
   fi
+  if [ "$RUNTIME" = "1.1.0" ]; then
+    if node "$ROOT/scripts/check-canary.mjs"; then
+      :
+    elif [ -n "$CANARY_OK" ]; then
+      echo "Canary skipped: $CANARY_OK"
+      MESSAGE="$MESSAGE (canary skipped: $CANARY_OK)"
+    elif [ "$CHECK_ONLY" = "--check-only" ]; then
+      echo "(--check-only: the export is still checked, but publishing it to 1.1.0 would be refused until then.)"
+    else
+      echo "REFUSED: 1.1.0 reaches every App Store phone, so the change runs on 1.1.1 first (above). Wait, or pass --canary-ok \"<reason>\"." >&2
+      exit 1
+    fi
+  fi
+fi
+if [ -n "$CANARY_OK" ] && { [ "$CHANNEL" != "production-aws" ] || [ "${RUNTIME:-}" != "1.1.0" ]; }; then
+  echo "REFUSED: --canary-ok is only for production-aws at runtime 1.1.0." >&2
+  exit 1
 fi
 if [ -n "${EXPO_PUBLIC_FAMILY_CODE:-}" ]; then
   echo "REFUSED: EXPO_PUBLIC_FAMILY_CODE is set in this shell, and it would ship to every phone. Unset it." >&2
