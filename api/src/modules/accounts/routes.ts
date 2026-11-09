@@ -1,7 +1,7 @@
 // Sign-in, invites and account deletion (docs/build/ACCOUNTS-MIGRATION.md has the mapping from each old route). A route checks the input and who's asking; the files beside this hold the rules.
 //
 // Same paths, shapes, statuses and sentences as Supabase's `api`, proven by a device key or a family code (old builds; proofs.ts):
-//   GET  /family                       POST /profiles, /profiles/self, /profiles/:id/remove
+//   GET  /family                       POST /profiles, /profiles/self, /profiles/:id/remove, /profiles/:id/role
 //   POST /devices, /devices/revoke     POST /invites, /invites/peek, /invites/accept
 //   POST /join-links, /join-links/revoke
 //   POST /move-requests                GET /move-requests, /move-requests/mine     POST /move-requests/:id/approve, /decline
@@ -20,7 +20,7 @@ import { sendError } from "../../errors.js";
 import { webOrigin } from "../dish/values.js";
 import { appleKey, revokeWithApple } from "./appleRevoke.js";
 import { deleteMe } from "./deletion.js";
-import { addProfile, addSelf, familyView, leaveFamily, signOutPhone, swapCodeForKey } from "./family.js";
+import { addProfile, addSelf, familyView, leaveFamily, setRole, signOutPhone, swapCodeForKey } from "./family.js";
 import { acceptInvite, familyJoinLink, makeInvite, peek, revokeFamilyLinks } from "./invites.js";
 import { afterMove, claimCard, openLink } from "./links.js";
 import { approveMove, askToMove, declineMove, movesICanAnswer, myMove } from "./moves.js";
@@ -100,6 +100,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   on("POST", "/profiles", {}, (req) => addProfile(ctxOf(req), bodyOf(req)));
   on("POST", "/profiles/self", { ignoreMe: true }, (req) => addSelf(ctxOf(req), bodyOf(req)));
   on("POST", "/profiles/:id/remove", { tombstoneOk: true }, (req) => leaveFamily(ctxOf(req), (req.params as { id: string }).id));
+  on("POST", "/profiles/:id/role", {}, (req) => setRole(ctxOf(req), (req.params as { id: string }).id, bodyOf(req)));
   on("POST", "/devices", {}, (req) => swapCodeForKey(ctxOf(req), bodyOf(req)));
   on("POST", "/devices/revoke", { ignoreMe: true }, (req) => signOutPhone(ctxOf(req)));
 
