@@ -147,8 +147,9 @@ class Rewriter:
         return with_retries(fn, sleep=self.sleep)
 
     def _rows(self, t: Target) -> list:
-        """recipe.json files before library.json, so the library never names a recipe that still has old links."""
-        rows = [r for r in self.ledger.rows(t.gcs, "copied") if kind_of(r["key"])] if t.is_media else []
+        """recipe.json files before library.json, so the library never names a recipe that still has old links. An excluded key (S3's own
+        library.json, sync.py MEDIA_EXCLUDED_KEYS) is never rewritten from GCS's copy, even with an old `copied` row."""
+        rows = [r for r in self.ledger.rows(t.gcs, "copied") if kind_of(r["key"]) and not t.excluded(r["key"])] if t.is_media else []
         return sorted(rows, key=lambda r: r["key"] == "library.json")
 
     def run(self, targets: list[Target], write: bool) -> dict:

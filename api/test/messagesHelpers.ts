@@ -50,7 +50,7 @@ export function fakeLibrary(): FakeLibrary {
       [NOODLES, { title: "Noodle Soup", cook_name: "Grandma", sample: true, steps: [] }],
     ]),
     down: false,
-    libraryIndex: async () => (lib.down ? new Map() : lib.index),
+    libraryIndex: async () => (lib.down ? null : lib.index),
     recipeInfo: async (id) => {
       const r = lib.down ? undefined : lib.recipes.get(id);
       return r ? { id, ...r } : null;
