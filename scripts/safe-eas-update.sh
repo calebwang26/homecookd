@@ -20,6 +20,13 @@ if [ "$CHANNEL" = "production" ]; then
 fi
 # 1.1 in the App Store (build 18, released Nov 8) listens on production-aws with runtime 1.1.0 (its Expo.plist). An
 # update there reaches every 1.1 phone on its next launch, so publishing needs --caleb-ok; --check-only is always fine.
+# Apple closed the 1.1.0 train once 1.1.0 was approved (build 20 failed processing, 90062 and 90186): no new 1.1.0
+# binary can reach TestFlight, so a 1.1.0 update can't be tried on a 1.1.0 TestFlight build first. A 1.1.1 build is a
+# different runtime; publish 1.1.0 phones' update from a checkout whose app.json still says 1.1.0 (this check refuses
+# anything else).
+# Undo (eas-cli 27.5.0): the phones go back to build 18's own JS on a launch after they fetch it.
+#   cd app && npx eas-cli update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios \
+#     --message "Back to build 18's own JS" --non-interactive
 PRODUCTION_AWS_RUNTIME=1.1.0
 if [ "$CHANNEL" = "production-aws" ]; then
   if [ "$CHECK_ONLY" != "--check-only" ] && [ "$CHECK_ONLY" != "--caleb-ok" ]; then
