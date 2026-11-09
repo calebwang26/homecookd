@@ -13,7 +13,8 @@ half price, 5-minute clips, a spending cap per run, and reuse instead of re-runn
 
 **How to apply:**
 - `pipeline/eval_languages.py` needs `--only <langs>` (or `--all`); run only what your change touches.
-- Defaults: first 5 minutes of each clip, Batch API (`CLAUDE_BATCH=1`, set by the eval only, never the worker),
+- Defaults: first 5 minutes of each clip, Batch API (`CLAUDE_BATCH=1`: every call; since Nov 8 the worker batches only the
+  extraction and the writer, [[recipe-cost-target]]),
   `--max-usd 3`. A clip costs about $0.20 (was ~$0.40); all 13 about $2.60 (was ~$5) and an hour.
 - Reuse first: `--rescore` (no pipeline calls), `--rerun` (keeps Cartesia's transcript); `--fresh` only when
   transcription changed.
