@@ -87,9 +87,11 @@ class FakeQueue:
         self.holds: list[tuple[str, int]] = []
         self.crash_on_delete = False
         self.hold_error: Exception | None = None
+        self.sent = 0
 
     def send(self, job_id: str | None = None, body: str | None = None) -> str:
-        mid = f"m{len(self.rows) + len(self.dead) + 1}"
+        self.sent += 1
+        mid = f"m{self.sent}"  # never reused, though messages now come and go
         body = body or json.dumps({"outboxId": "7", "requestId": "req-1", "payload": {"jobId": job_id}})
         self.rows.append({"id": mid, "body": body, "count": 0, "visible": True, "delay": None})
         return mid
@@ -287,7 +289,7 @@ class FakeStore:
             if not (job["stage"] == "queued" or (job["stage"] in RUNNING and self._beat(job) < time.time() - lease_s)):
                 return None
             job.update(stage="preparing", progress=0.02, error=None, attempts=job["attempts"] + 1, claimed_at=time.time(),
-                       heartbeat_at=time.time(), updated_at=time.time())
+                       failures=job["failures"] + (0 if job["stage"] == "queued" else 1), heartbeat_at=time.time(), updated_at=time.time())
             recipe = self.recipes.get(job["recipe_id"]) or {}
             return {**job, "cook_name": "Aaji Pawar", "relation": "Aaji", "cook_language": "mr",
                     "media_prefix": recipe.get("media_prefix"), "homie_log": [], "memories_opt_in": None, "cover_key": None}
@@ -310,7 +312,7 @@ class FakeStore:
     def heartbeat(self, claim):
         job = self._owned(claim)
         if job:
-            job["heartbeat_at"] = time.time()
+            job.update(heartbeat_at=time.time(), updated_at=time.time())
             return "ok"
         now = self.jobs.get(claim["id"])
         return "cancelled" if now is None or now["cancelled_at"] else "lost"
@@ -355,17 +357,28 @@ class FakeStore:
         first, self.alerted = not self.alerted, True
         return first
 
-    def pause(self, job_id, message):
-        job = self.jobs.get(job_id)
-        if job and job["stage"] == "queued" and not job["cancelled_at"]:
-            job["error"] = message
+    def wake_later(self, job_id, delay_s, request_id, claim=None, failure=False, error=None):
+        if claim:
+            job = self._owned(claim)
+            if not job:
+                return False
+            job.update(stage="queued", progress=0, claimed_at=None, heartbeat_at=None, error=error)
+        else:
+            job = self.jobs.get(job_id)
+            if not job or job["stage"] != "queued" or job["cancelled_at"]:
+                return False
+            job["error"] = error or job["error"]
+        job.update(failures=job["failures"] + int(failure), updated_at=time.time())
+        self.outbox.append({"queue": "jobs", "payload": {"jobId": job_id}, "request_id": request_id,
+                            "send_after": time.time() + max(0, int(delay_s)), "sent": False})
+        return True
 
     def keeps_upload(self, job_id):
         return bool((self.jobs.get(job_id) or {}).get("keep_upload"))
 
     def acknowledge_cancel(self, job_id, message):
         job = self.jobs.get(job_id)
-        if job and job["cancelled_at"]:
+        if job and job["cancelled_at"] and job["stage"] != "done":
             job.update(stage="failed", progress=0, error=job["error"] or message, finished_at=job["finished_at"] or time.time())
 
     def finish(self, claim, row, keys, result, request_id):
@@ -386,16 +399,29 @@ class FakeStore:
                             "request_id": request_id})
         return True
 
-    def sweep(self, lease_s, max_attempts, message):
-        gone = []
+    def sweep(self, lease_s, max_failures, message, stranded_s):
+        out = []
+        owed = {o["payload"]["jobId"] for o in self.outbox if o["queue"] == "jobs" and not o["sent"]}
         for job in self.jobs.values():
-            beat = self._beat(job)
-            if job["stage"] in RUNNING and beat < time.time() - lease_s and (job["attempts"] >= max_attempts or beat < time.time() - 86400):
-                job.update(stage="failed", progress=0, error=message, finished_at=time.time())
+            if job["cancelled_at"]:
+                continue
+            if job["stage"] in RUNNING and self._beat(job) < time.time() - lease_s:
+                was, cost = "running", 1
+            elif job["stage"] == "queued" and job["updated_at"] < time.time() - stranded_s and job["id"] not in owed:
+                was, cost = "queued", 0
+            else:
+                continue
+            last = cost == 1 and job["failures"] + 1 >= max_failures
+            job.update(failures=job["failures"] + cost, progress=0, claimed_at=None, heartbeat_at=None, updated_at=time.time())
+            if last:
+                job.update(stage="failed", error=message, finished_at=time.time())
                 if job["recipe_id"] in self.recipes:
                     self.recipes[job["recipe_id"]]["status"] = "failed"
-                gone.append(job["id"])
-        return gone
+            else:
+                job["stage"] = "queued"
+                self.outbox.append({"queue": "jobs", "payload": {"jobId": job["id"]}, "request_id": None, "send_after": time.time(), "sent": False})
+            out.append({"id": job["id"], "stage": job["stage"], "was": was})
+        return out
 
 
 class FakeContext:
@@ -407,7 +433,7 @@ class FakeContext:
     def second_store(self):
         return self.store
 
-    def new_job(self, upload_key="up-1/", stage="queued", recipe=None, attempts=0, cost=None) -> str:
+    def new_job(self, upload_key="up-1/", stage="queued", recipe=None, attempts=0, cost=None, failures=0) -> str:
         job_id = str(uuid.uuid4())
         recipe_id = None
         if recipe:
@@ -418,8 +444,30 @@ class FakeContext:
             "claimed_at": time.time() if stage in RUNNING else None, "heartbeat_at": time.time() if stage in RUNNING else None,
             "updated_at": time.time(), "finished_at": None, "upload_finished_at": None, "error": None, "recipe_id": recipe_id,
             "cost_usd": cost, "language": "mr", "title": "Secret Masala", "result_model": None, "result_prompt_version": None,
-            "video_gaps": None, "recording_id": None}
+            "video_gaps": None, "recording_id": None, "failures": failures, "created_at": datetime.now(timezone.utc)}
         return job_id
+
+    def wakes(self, job_id) -> list[dict]:
+        """The wake-ups owed to a job: {delay_s, sent, request_id}."""
+        return [{"delay_s": round(o["send_after"] - time.time()), "sent": o["sent"], "request_id": o["request_id"]}
+                for o in self.store.outbox if o["queue"] == "jobs" and o["payload"]["jobId"] == job_id]
+
+    def relay(self, queue) -> int:
+        """The api's outbox sender, early: every owed wake-up becomes a message now."""
+        sent = 0
+        for o in self.store.outbox:
+            if o["queue"] == "jobs" and not o["sent"]:
+                queue.send(o["payload"]["jobId"])
+                o["sent"] = True
+                sent += 1
+        return sent
+
+    def age(self, job_id, created_s=0, updated_s=0):
+        job = self.store.jobs[job_id]
+        if created_s:
+            job["created_at"] = datetime.now(timezone.utc) - timedelta(seconds=created_s)
+        if updated_s:
+            job["updated_at"] = time.time() - updated_s
 
     def job(self, job_id) -> dict | None:
         return self.store.jobs.get(job_id)
@@ -447,7 +495,7 @@ class FakeContext:
         return len(self.store.questions)
 
     def outbox(self) -> list[dict]:
-        return self.store.outbox
+        return [o for o in self.store.outbox if o["queue"] != "jobs"]
 
     def calls(self, job_id) -> list[dict]:
         return [c for c in self.store.model_calls if c["job_id"] == job_id]
@@ -488,7 +536,7 @@ class PostgresContext:
     def second_store(self):
         return worker_store(self.url)
 
-    def new_job(self, upload_key="up-1/", stage="queued", recipe=None, attempts=0, cost=None) -> str:
+    def new_job(self, upload_key="up-1/", stage="queued", recipe=None, attempts=0, cost=None, failures=0) -> str:
         recipe_id = None
         if recipe:
             recipe_id = self.admin.execute(
@@ -496,9 +544,9 @@ class PostgresContext:
                 (self.family, self.cook, recipe.get("media_prefix"))).fetchone()["id"]
         running = stage in RUNNING
         return self.admin.execute(
-            """insert into jobs (family_id, cook_id, upload_key, source, title, language, stage, attempts, recipe_id, cost_usd, claimed_at, heartbeat_at)
-               values (%s, %s, %s, 'phone', 'Secret Masala', 'mr', %s, %s, %s, %s, %s, %s) returning id""",
-            (self.family, self.cook, upload_key, stage, attempts, recipe_id, cost,
+            """insert into jobs (family_id, cook_id, upload_key, source, title, language, stage, attempts, failures, recipe_id, cost_usd, claimed_at, heartbeat_at)
+               values (%s, %s, %s, 'phone', 'Secret Masala', 'mr', %s, %s, %s, %s, %s, %s, %s) returning id""",
+            (self.family, self.cook, upload_key, stage, attempts, failures, recipe_id, cost,
              datetime.now(timezone.utc) if running else None, datetime.now(timezone.utc) if running else None)).fetchone()["id"]
 
     def job(self, job_id) -> dict | None:
@@ -530,6 +578,25 @@ class PostgresContext:
     def outbox(self) -> list[dict]:
         rows = self.admin.execute("select * from outbox order by id").fetchall()
         return [r for r in rows if r["payload"].get("recipeId") in {x["id"] for x in self.recipes()}]
+
+    def wakes(self, job_id) -> list[dict]:
+        return self.admin.execute(
+            """select round(extract(epoch from send_after - now()))::int as delay_s, sent_at is not null as sent, request_id
+                 from outbox where queue = 'jobs' and payload->>'jobId' = %s order by id""", (job_id,)).fetchall()
+
+    def relay(self, queue) -> int:
+        rows = self.admin.execute(
+            """update outbox set sent_at = now() where queue = 'jobs' and sent_at is null
+                  and payload->>'jobId' in (select id from jobs where family_id = %s) returning payload""", (self.family,)).fetchall()
+        for r in rows:
+            queue.send(r["payload"]["jobId"])
+        return len(rows)
+
+    def age(self, job_id, created_s=0, updated_s=0):
+        if created_s:
+            self.admin.execute("update jobs set created_at = now() - make_interval(secs => %s) where id = %s", (created_s, job_id))
+        if updated_s:
+            self.admin.execute("update jobs set updated_at = now() - make_interval(secs => %s) where id = %s", (updated_s, job_id))
 
     def calls(self, job_id) -> list[dict]:
         return self.admin.execute("select * from model_calls where job_id = %s order by id", (job_id,)).fetchall()
@@ -563,6 +630,13 @@ class Box:
         self.s3.put("uploads", "up-1/00.mov", modified=datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc))
         self.s3.put("uploads", "up-1/01.mov", modified=datetime(2026, 10, 31, 12, 5, tzinfo=timezone.utc))
         return job_id
+
+    def relay(self) -> int:
+        return self.ctx.relay(self.queue)
+
+    def sweep(self, worker) -> None:
+        worker.swept_at = None
+        worker._sweep()
 
     def deliver(self, worker) -> Message | None:
         msg = self.queue.receive()
@@ -663,13 +737,16 @@ def a_crash_at_each_stage_reruns_safely(box: Box):
             pass
         assert ctx.job(job_id)["stage"] in RUNNING, where
         assert not ctx.outbox() or all(o["payload"]["jobId"] != job_id for o in ctx.outbox()), where
-        # Too soon: the lease is still live, so a redelivery waits rather than doubling up.
+        # Too soon: the lease is still live, so a redelivery is dropped rather than doubling up.
         box.queue.time_passes()
         idle = FakeRunner({})
         box.deliver(box.worker(idle))
-        assert not idle.specs, where
+        assert not idle.specs and box.queue.alive() == [], where
+        # Once the lease lapses, the sweep counts the dead worker's failure and wakes the job again.
         ctx.stale(job_id)
-        box.queue.time_passes()
+        box.sweep(box.worker(idle))
+        assert ctx.job(job_id)["stage"] == "queued" and ctx.job(job_id)["failures"] == 1, where
+        assert box.relay() == 1, where
         again = FakeRunner({"ticks": GOOD_TICKS})
         box.deliver(box.worker(again))
         assert again.specs[0]["attempt_prefix"].endswith("-a2/"), where  # a new folder: nothing half-written is reused
@@ -724,22 +801,35 @@ def a_crash_at_each_stage_reruns_safely(box: Box):
 
 @scenario
 def a_crash_on_the_last_try_tells_the_cook(box: Box):
+    """The sweep: a lapsed run counts a failure and is woken again, or fails on the third; a queued job with no wake-up owed is woken
+    again and counts nothing (its message reached the dead letters, or it waits behind a backlog)."""
     ctx = box.ctx
-    job_id = box.job_with_upload(stage="writing", attempts=3)
+    job_id = box.job_with_upload(stage="writing", attempts=3, failures=2)
     other = box.job_with_upload(stage="writing", attempts=1)
-    ancient = box.job_with_upload(stage="writing", attempts=1)
-    fresh = box.job_with_upload(stage="writing", attempts=3)
+    fresh = box.job_with_upload(stage="writing", attempts=3, failures=2)
+    stranded = box.job_with_upload()
+    owed = box.job_with_upload()
+    assert ctx.store.wake_later(owed, 3600, None)  # a pause: its wake-up is owed, so it isn't stranded
     ctx.stale(job_id)
     ctx.stale(other)
-    ctx.stale(ancient, 90000)
+    ctx.age(stranded, updated_s=qw.STRANDED_S + 60)
+    ctx.age(owed, updated_s=qw.STRANDED_S + 60)
     worker = box.worker(FakeRunner({}))
     worker.run(once=True)  # sweeps, finds no message, exits
     assert ctx.job(job_id)["stage"] == "failed" and ctx.job(job_id)["error"] == qw.MSG_FAILED
-    assert ctx.job(job_id)["finished_at"] is not None
-    assert ctx.job(ancient)["stage"] == "failed"
-    assert ctx.job(other)["stage"] == "writing"  # it still has tries left
-    assert ctx.job(fresh)["stage"] == "writing"  # its worker is alive
+    assert ctx.job(job_id)["finished_at"] is not None and ctx.job(job_id)["failures"] == 3
     assert ("JobAbandoned", job_id) in box.reports
+    assert ctx.job(other)["stage"] == "queued" and ctx.job(other)["failures"] == 1  # tries left: woken again, at once
+    assert [(w["delay_s"] <= 1, w["sent"]) for w in ctx.wakes(other)] == [(True, False)]
+    assert ctx.job(fresh)["stage"] == "writing" and ctx.job(fresh)["failures"] == 2  # its worker is alive
+    assert ctx.job(stranded)["stage"] == "queued" and ctx.job(stranded)["failures"] == 0 and len(ctx.wakes(stranded)) == 1
+    assert ("JobStranded", stranded) in box.reports
+    assert len(ctx.wakes(owed)) == 1 and ("JobStranded", owed) not in box.reports
+    # The woken jobs run from their new messages.
+    assert box.relay() == 3  # other, stranded and the owed pause (sent early here)
+    for _ in range(3):
+        box.deliver(box.worker(FakeRunner({"ticks": GOOD_TICKS})))
+    assert {ctx.job(j)["stage"] for j in (other, stranded, owed)} == {"done"}
 
 
 @scenario
@@ -762,7 +852,8 @@ def a_second_worker_cannot_take_a_running_job(box: Box):
         t.join()
     assert sum(w is not None for w in wins) == 1 and ctx.job(job_id)["attempts"] == 1
 
-    # The repeat message while another worker runs it: it waits, it doesn't start or delete anything.
+    # The repeat message while another worker runs it: dropped. The running worker holds its own message, and the sweep wakes the job
+    # if that worker dies.
     job_id = box.job_with_upload()
     box.queue.send(job_id)
     second_runner = FakeRunner({})
@@ -776,11 +867,7 @@ def a_second_worker_cannot_take_a_running_job(box: Box):
     box.deliver(first)
     assert not second_runner.specs
     assert ctx.job(job_id)["stage"] == "done" and ctx.job(job_id)["attempts"] == 1
-    assert len(box.queue.alive()) == 1  # the repeat stays until the job is over
-    assert any(h[1] == qw.DUPLICATE_HOLD_S for h in box.queue.holds)
-    box.queue.time_passes()
-    box.deliver(second)  # now it's over, and the repeat goes
-    assert box.queue.alive() == []
+    assert box.queue.alive() == []  # nothing left waiting on a hold
 
     # A worker that lost its lease and doesn't know it: every write it tries changes nothing.
     job_id = box.job_with_upload()
@@ -968,15 +1055,16 @@ def the_daily_spend_cap_makes_jobs_wait(box: Box):
     box.deliver(worker)
     assert not runner.specs
     job = ctx.job(job_id)
-    assert job["stage"] == "queued" and job["attempts"] == 0 and job["error"] == qw.MSG_PAUSED
-    held = [s for m, s in box.queue.holds if m == msg_id][-1]
-    assert held == min(qw.seconds_to_next_utc_day(), qw.MAX_HOLD_S) or abs(held - qw.seconds_to_next_utc_day()) < 5
-    assert held <= qw.MAX_HOLD_S < 12 * 3600 and msg_id in box.queue.alive()  # until the new UTC day, within what SQS allows
+    assert job["stage"] == "queued" and job["attempts"] == 0 and job["failures"] == 0 and job["error"] == qw.MSG_PAUSED
+    # The wait spends no receive: the message goes, and a wake-up is owed at the new UTC day, however far (no 12-hour cap).
+    assert msg_id not in box.queue.alive() and box.queue.alive() == [] and box.queue.dead == []
+    [wake] = ctx.wakes(job_id)
+    assert abs(wake["delay_s"] - qw.seconds_to_next_utc_day()) < 5 and not wake["sent"] and wake["request_id"] == "req-1"
     assert len([r for r in box.reports if r[0] == "DailySpendCapReached"]) == 1  # told once
 
     # The new day: it runs, and the words go.
     ctx.set_spent(0)
-    box.queue.time_passes()
+    box.relay()
     runner = FakeRunner({"ticks": GOOD_TICKS})
     box.deliver(box.worker(runner))
     assert runner.specs and ctx.job(job_id)["stage"] == "done" and ctx.job(job_id)["error"] is None
@@ -992,8 +1080,9 @@ def a_long_video_waits_when_it_would_pass_the_daily_cap(box: Box):
     box.deliver(box.worker(runner))
     assert runner.children[0].killed
     job = ctx.job(job_id)
-    assert job["stage"] == "queued" and job["error"] == qw.MSG_PAUSED and job["claimed_at"] is None
+    assert job["stage"] == "queued" and job["error"] == qw.MSG_PAUSED and job["claimed_at"] is None and job["failures"] == 0
     assert ctx.spent() == Decimal(29)
+    assert box.queue.alive() == [] and [abs(w["delay_s"] - qw.seconds_to_next_utc_day()) < 5 for w in ctx.wakes(job_id)] == [True]
 
 
 @scenario
@@ -1109,16 +1198,93 @@ def sigterm_stops_taking_work_and_hands_the_job_back(box: Box):
     assert worker.stopping and len(runner.specs) == 1 and runner.children[0].killed and runner.children[0].cleaned
     job = ctx.job(job_id)
     assert job["stage"] == "queued" and float(job["progress"]) == 0 and job["claimed_at"] is None and job["error"] is None
-    assert box.queue.holds[-1] == (msg_id, 0)  # back on the queue at once
-    assert set(box.queue.alive()) == {msg_id, other}
+    assert job["failures"] == 0  # a stop isn't the job's fault
+    assert [(w["delay_s"] <= 1, w["sent"]) for w in ctx.wakes(job_id)] == [(True, False)]  # woken again at once, a new message
+    assert set(box.queue.alive()) == {other}
+    box.relay()
     assert [r for r in box.queue.rows if r["id"] == other][0]["count"] == 0  # never taken
     assert box.now < 110  # inside Fargate's 120 seconds
 
-    # The next task picks it up from the raw upload, under a new attempt.
+    # The next task takes the other job's message first, then this one's new one: from the raw upload, under a new attempt.
+    box.deliver(box.worker(FakeRunner({"ticks": GOOD_TICKS})))
     next_runner = FakeRunner({"ticks": GOOD_TICKS})
     box.deliver(box.worker(next_runner))
     assert ctx.job(job_id)["stage"] == "done" and ctx.job(job_id)["attempts"] == 2
     assert next_runner.specs[0]["attempt_prefix"].endswith("-a2/")
+
+
+@scenario
+def the_job_machines_guarded_transitions(box: Box):
+    """Every edge of the job machine that a guard decides (docs/agents/STATE-MACHINES.md), on both stores."""
+    ctx, store = box.ctx, box.ctx.store
+    # wake_later without a claim leaves only `queued`: a cancelled or running job is refused, and no wake-up is owed for it.
+    cancelled = box.job_with_upload()
+    ctx.cancel(cancelled)
+    running = box.job_with_upload(stage="writing", attempts=1)
+    assert store.wake_later(cancelled, 0, None) is False and store.wake_later(running, 0, None) is False
+    assert ctx.wakes(cancelled) == [] and ctx.wakes(running) == []
+    # With a claim it leaves only that attempt's run: a stale claim is refused.
+    job_id = box.job_with_upload()
+    old = store.claim(job_id, qw.LEASE_S)
+    ctx.stale(job_id)
+    new = store.claim(job_id, qw.LEASE_S)
+    assert new["failures"] == 1  # taking over a lapsed run counts the dead worker's failure
+    assert store.wake_later(job_id, 0, None, claim=old) is False and ctx.job(job_id)["stage"] == "preparing"
+    assert store.wake_later(job_id, 60, "req-9", claim=new, failure=True) is True
+    job = ctx.job(job_id)
+    assert job["stage"] == "queued" and job["failures"] == 2 and job["claimed_at"] is None and job["heartbeat_at"] is None
+    assert [(abs(w["delay_s"] - 60) <= 1, w["request_id"]) for w in ctx.wakes(job_id)] == [(True, "req-9")]
+
+    # A heartbeat moves updated_at, so the app's live poll sees a long job as alive.
+    beat = box.job_with_upload()
+    claim = store.claim(beat, qw.LEASE_S)
+    ctx.age(beat, updated_s=7200)
+    assert store.heartbeat(claim) == "ok"
+    updated = ctx.job(beat)["updated_at"]
+    assert (updated if isinstance(updated, float) else updated.timestamp()) > time.time() - 60
+
+    # A late cancel never turns a published recipe into a failure.
+    done = box.job_with_upload()
+    box.queue.send(done)
+    box.deliver(box.worker(FakeRunner({"ticks": GOOD_TICKS})))
+    assert ctx.job(done)["stage"] == "done"
+    if isinstance(store, FakeStore):
+        store.jobs[done]["cancelled_at"] = time.time()
+    else:
+        ctx.admin.execute("update jobs set cancelled_at = now() where id = %s", (done,))
+    store.acknowledge_cancel(done, qw.MSG_CANCELLED)
+    assert ctx.job(done)["stage"] == "done"
+
+    # Taking over a lapsed run that was already its last: the cook is told, nothing runs.
+    last = box.job_with_upload(stage="writing", attempts=3, failures=2)
+    ctx.stale(last)
+    box.queue.send(last)
+    idle = FakeRunner({})
+    box.deliver(box.worker(idle))
+    assert not idle.specs and ctx.job(last)["stage"] == "failed" and ctx.job(last)["error"] == qw.MSG_FAILED
+    assert ctx.job(last)["failures"] == 3
+
+    # A crash between a wait's commit and its message's delete: two wake-ups for one job, and still one run.
+    ctx.set_spent(30)
+    twice = box.job_with_upload()
+    box.queue.send(twice)
+    box.queue.crash_on_delete = True
+    try:
+        box.deliver(box.worker(FakeRunner({})))
+        raise AssertionError("should have crashed")
+    except Crash:
+        pass
+    box.queue.time_passes()  # the old message comes back, and pauses it again
+    box.deliver(box.worker(FakeRunner({})))
+    assert len(ctx.wakes(twice)) == 2 and box.queue.alive() == []
+    ctx.set_spent(0)
+    assert box.relay() >= 2
+    runners = [FakeRunner({"ticks": GOOD_TICKS}) for _ in range(len(box.queue.alive()))]
+    for r in runners:
+        box.deliver(box.worker(r))
+    # The relay also sent job_id's 60-second wake-up from above: two jobs, two runs, and the duplicate ran nothing.
+    assert ctx.job(twice)["stage"] == "done" and ctx.job(twice)["attempts"] == 1 and ctx.job(job_id)["stage"] == "done"
+    assert sum(len(r.specs) for r in runners) == 2 and box.queue.alive() == []
 
 
 class FakeAgent:
@@ -1196,31 +1362,43 @@ def sigterm_during_a_long_poll_hands_the_message_back(box: Box):
 def a_failed_try_comes_back_then_tells_the_cook(box: Box):
     ctx = box.ctx
     job_id = box.job_with_upload()
-    msg_id = box.queue.send(job_id)
+    box.queue.send(job_id)
     outage = {"ok": False, "kind": "retry", "error_type": "APIConnectionError"}
-    for receive in (1, 2):
+    for failures in (1, 2):
         box.deliver(box.worker(FakeRunner({"result": outage})))
-        assert ctx.job(job_id)["stage"] == "queued" and box.queue.holds[-1] == (msg_id, qw.RETRY_HOLD_S * receive)
-        box.queue.time_passes()
+        job = ctx.job(job_id)
+        assert job["stage"] == "queued" and job["failures"] == failures and box.queue.alive() == []
+        assert abs(ctx.wakes(job_id)[-1]["delay_s"] - qw.RETRY_HOLD_S * failures) <= 1  # longer each time, owed in the row
+        box.relay()
     box.deliver(box.worker(FakeRunner({"result": None})))  # killed from outside this time: out of memory
     job = ctx.job(job_id)
     assert job["stage"] == "failed" and job["error"] == qw.MSG_FAILED and job["attempts"] == 3
     assert ("ChildDied", job_id) in box.reports
-    # Its last try: the cook knows, and the message goes to the dead letters, which alarm.
-    assert box.queue.holds[-1] == (msg_id, 0)
-    assert box.queue.receive() is None and [r["id"] for r in box.queue.dead] == [msg_id]
+    # Its last try: the cook knows, the report alarms, and no message is left anywhere.
+    assert box.queue.alive() == [] and box.queue.dead == []
+
+    # A job first run on its third receive (two crashed handlings before) still gets every try: the budget is the row's.
+    job_id = box.job_with_upload()
+    msg_id = box.queue.send(job_id)
+    [row] = [r for r in box.queue.rows if r["id"] == msg_id]
+    row["count"] = 2
+    box.deliver(box.worker(FakeRunner({"result": outage})))
+    assert ctx.job(job_id)["stage"] == "queued" and ctx.job(job_id)["failures"] == 1
 
 
 @scenario
 def a_missing_or_empty_upload(box: Box):
     ctx = box.ctx
     job_id = ctx.new_job(upload_key="missing/")
-    msg_id = box.queue.send(job_id)
+    box.queue.send(job_id)
     runner = FakeRunner({})
-    for _ in (1, 2):
+    for waits in (1, 2, 3):  # receives don't matter any more: each wait is a new message, and none counts a failure
         box.deliver(box.worker(runner))
-        assert ctx.job(job_id)["stage"] == "queued" and box.queue.holds[-1] == (msg_id, qw.UPLOAD_RETRY_S)
-        box.queue.time_passes()
+        job = ctx.job(job_id)
+        assert job["stage"] == "queued" and job["failures"] == 0 and box.queue.alive() == []
+        assert len(ctx.wakes(job_id)) == waits and abs(ctx.wakes(job_id)[-1]["delay_s"] - qw.UPLOAD_RETRY_S) <= 1
+        box.relay()
+    ctx.age(job_id, created_s=qw.NO_UPLOAD_GIVE_UP_S + 60)  # a day without its files: the cook is told
     box.deliver(box.worker(runner))
     assert ctx.job(job_id)["stage"] == "failed" and ctx.job(job_id)["error"] == qw.MSG_NO_UPLOAD
     assert not runner.specs and box.queue.alive() == []
@@ -1231,11 +1409,11 @@ def a_missing_or_empty_upload(box: Box):
     box.deliver(box.worker(runner))
     assert ctx.job(job_id)["error"] == qw.MSG_EMPTY and not runner.specs
 
-    # A job still uploading isn't ready for a message; it waits, and in the end alarms.
+    # A job still uploading has no message owed: the api sends one when the upload completes (jobs/data.ts queueJob). A stray one goes.
     job_id = ctx.new_job(upload_key="up-1/", stage="uploading")
-    msg_id = box.queue.send(job_id)
+    box.queue.send(job_id)
     box.deliver(box.worker(runner))
-    assert ctx.job(job_id)["stage"] == "uploading" and box.queue.holds[-1] == (msg_id, qw.UPLOAD_RETRY_S)
+    assert ctx.job(job_id)["stage"] == "uploading" and box.queue.alive() == [] and ctx.wakes(job_id) == []
 
 
 @scenario
@@ -1867,7 +2045,7 @@ worker = box.worker(Runner(command=[sys.executable, str(tmp / "helper.py")], wor
 worker.clock, worker.sleep = __import__("time").monotonic, __import__("time").sleep
 signal.signal(signal.SIGTERM, worker.stop)
 worker.run()
-print("RESULT " + json.dumps({{"stage": box.ctx.job(job_id)["stage"], "holds": box.queue.holds, "alive": box.queue.alive(),
+print("RESULT " + json.dumps({{"stage": box.ctx.job(job_id)["stage"], "alive": box.queue.alive(), "wakes": box.ctx.wakes(job_id),
                                "left": [str(p) for p in (tmp / "work").iterdir()]}}), flush=True)
 """)
         proc = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -1884,7 +2062,8 @@ print("RESULT " + json.dumps({{"stage": box.ctx.job(job_id)["stage"], "holds": b
         time.sleep(0.5)
         assert ticks.stat().st_size == size, "the grandchild outlived the stop"
         final = json.loads(next(line for line in out.splitlines() if line.startswith("RESULT "))[7:])
-        assert final["stage"] == "queued" and final["holds"][-1][1] == 0 and final["alive"] == final["holds"][-1][:1]
+        # Handed back, its message gone, and a new one owed at once.
+        assert final["stage"] == "queued" and final["alive"] == [] and [(w["delay_s"] <= 1, w["sent"]) for w in final["wakes"]] == [(True, False)]
         assert final["left"] == []  # the job's folder went with it
 
 
