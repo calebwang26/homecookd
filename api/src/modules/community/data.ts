@@ -244,8 +244,21 @@ export async function finishRetryKey(q: Queryable, personId: string, key: string
   await q.query(`update idempotency_keys set resource_id = $3, status_code = 201 where scope = $1 and key = $2`, [personId, key, dinnerId]);
 }
 
+/** open -> full, once its last seat is taken. */
 export async function setDinnerFull(q: Queryable, id: string): Promise<void> {
   await q.query(`update dinners set status = 'full' where id = $1 and status = 'open'`, [id]);
+}
+
+const ACCEPTED = (d: string) => `(select count(*) from dinner_requests r where r.dinner_id = ${d}.id and r.status = 'accepted')`;
+
+/** full -> open, for each of these dinners with a seat free again. How many reopened. */
+export async function reopenWithSeats(q: Queryable, dinnerIds: string[]): Promise<number> {
+  if (dinnerIds.length === 0) return 0;
+  const { rowCount } = await q.query(
+    `update dinners d set status = 'open' where d.id = any($1::text[]) and d.status = 'full' and ${ACCEPTED("d")} < d.seats`,
+    [[...new Set(dinnerIds)]],
+  );
+  return rowCount ?? 0;
 }
 
 /** A dinner's sealed invite token, held until the transaction ends, so two first asks for a link store one. */
@@ -258,9 +271,42 @@ export async function setInviteToken(q: Queryable, id: string, tokenHash: string
   await q.query(`update dinners set invite_token_hash = $2, invite_token_enc = $3 where id = $1`, [id, tokenHash, tokenEnc]);
 }
 
-export async function reviewDinner(q: Queryable, id: string, keep: boolean): Promise<void> {
-  if (keep) await q.query(`update dinners set hidden_at = null where id = $1`, [id]);
-  else await q.query(`update dinners set status = 'cancelled', hidden_at = coalesce(hidden_at, now()) where id = $1`, [id]);
+/**
+ * The team's review. remove: open or full -> cancelled and hidden, marked as the team's (taken_down_at); one already cancelled is only hidden, and keeps whatever
+ * called it off. keep: shown again; one the team took down comes back, open or full by its seats, while it can (undoTakedown). Says what changed.
+ */
+export async function reviewDinner(q: Queryable, id: string, keep: boolean): Promise<"hidden" | "shown" | "restored" | "unchanged"> {
+  if (!keep) {
+    const { rowCount } = await q.query(
+      `update dinners set taken_down_at = case when status <> 'cancelled' then now() else taken_down_at end, status = 'cancelled', hidden_at = coalesce(hidden_at, now())
+        where id = $1 and (status <> 'cancelled' or hidden_at is null)`,
+      [id],
+    );
+    return rowCount ? "hidden" : "unchanged";
+  }
+  if (await undoTakedown(q, id)) return "restored";
+  const { rowCount } = await q.query(`update dinners set hidden_at = null where id = $1 and hidden_at is not null and taken_down_at is null`, [id]);
+  return rowCount ? "shown" : "unchanged";
+}
+
+/** What a takedown's undo needs: it hasn't started, its host is still in the family that hosts it, and its dish is still on it. */
+const UNDOABLE = `d.status = 'cancelled' and d.taken_down_at is not null and d.starts_at > now() and d.recipe_id is not null
+  and exists (select 1 from people p where p.id = d.host_id and p.family_id = d.host_family_id and p.deleted_at is null and p.removed_at is null)`;
+
+/** cancelled (the team's takedown) -> open, or full when every seat is still taken. */
+async function undoTakedown(q: Queryable, id: string): Promise<boolean> {
+  const { rowCount } = await q.query(
+    `update dinners d set status = case when ${ACCEPTED("d")} >= d.seats then 'full' else 'open' end, hidden_at = null, taken_down_at = null
+      where d.id = $1 and ${UNDOABLE}`,
+    [id],
+  );
+  return rowCount === 1;
+}
+
+/** Whether the team took this dinner down, and if so whether its keep can still bring it back. */
+export async function takedownOf(q: Queryable, id: string): Promise<"none" | "undoable" | "too_late"> {
+  const { rows } = await q.query(`select taken_down_at is not null as taken, ${UNDOABLE} as undoable from dinners d where d.id = $1`, [id]);
+  return !rows[0]?.taken ? "none" : rows[0].undoable ? "undoable" : "too_late";
 }
 
 export type RequestRow = { id: string; dinner_id: string; guest_id: string; guest_family_id: string; status: "pending" | "accepted" | "declined" };
@@ -433,10 +479,25 @@ export async function detachDinnersFromRecipes(q: Queryable, recipeIds: string[]
   return rowCount ?? 0;
 }
 
-export async function deleteAsksOf(q: Queryable, personId: string, batch: number): Promise<number> {
-  const { rowCount } = await q.query(`delete from dinner_requests where id in (select id from dinner_requests where guest_id = $1 limit $2)`, [personId, batch]);
-  return rowCount ?? 0;
+/**
+ * Asks going, and a full dinner whose seat that frees open again. The dinners are locked first, in id order, as respondToJoin locks its dinner before the ask: a
+ * host's yes and a guest's purge on the same ask can't deadlock.
+ */
+async function dropAsks(q: Queryable, where: string, args: unknown[]): Promise<number> {
+  const { rows: found } = await q.query(`select id, dinner_id from dinner_requests where ${where}`, args);
+  if (found.length === 0) return 0;
+  await q.query(`select id from dinners where id = any($1::text[]) order by id for update`, [[...new Set(found.map((r) => r.dinner_id))]]);
+  const { rows } = await q.query(`delete from dinner_requests where id = any($1::text[]) returning dinner_id, status`, [found.map((r) => r.id)]);
+  await reopenWithSeats(q, rows.filter((r) => r.status === "accepted").map((r) => r.dinner_id));
+  return rows.length;
 }
+
+/** Their asks go, a batch at a time. */
+export const deleteAsksOf = (q: Queryable, personId: string, batch: number) => dropAsks(q, `guest_id = $1 limit $2`, [personId, batch]);
+
+/** Someone leaving a family: their asks on dinners that haven't started go, so a seat they held frees. One that has started keeps what happened. */
+export const dropUpcomingAsksOf = (q: Queryable, personId: string) =>
+  dropAsks(q, `guest_id = $1 and dinner_id in (select id from dinners where starts_at > now())`, [personId]);
 
 export async function deleteSwapsOf(q: Queryable, personId: string, recipeIds: string[], batch: number): Promise<number> {
   const { rowCount } = await q.query(

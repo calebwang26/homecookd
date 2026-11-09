@@ -2,13 +2,14 @@
 // (COMMUNITY-MIGRATION.md, "The team's reports"). No route, so nothing outside the team can reach it.
 //   node dist/reports.js open
 //   node dist/reports.js review <recipe|dinner|family> <targetId> <keep|remove>
+// keep on a dinner the team removed brings it back while it's still ahead (decision 5), with no open report needed.
 // Exit 0: done. 1: refused or failed, with the reason on the first line. 2: wrong arguments, and the database wasn't touched.
 // Everything printed lands in the task's CloudWatch log for 30 days, so it's ids, counts, reasons and times: never a dish, a family's name or who reported (SYSTEM-DESIGN, logs).
 import { fileURLToPath } from "node:url";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import type { ReportKind } from "./modules/community/data.js";
-import { hasOpenReport, openReports, reviewReport } from "./modules/community/reports.js";
+import { hasOpenReport, openReports, reviewReport, takedownOf, undoDinnerTakedown } from "./modules/community/reports.js";
 
 const KINDS: readonly string[] = ["recipe", "dinner", "family"] satisfies ReportKind[];
 // Convex's ids and Postgres's uuids. Nothing else is an id, and a stray quote or space never reaches the database or Convex's command below.
@@ -62,6 +63,21 @@ export async function run(args: string[], io: Io = { out: console.log, err: cons
       return 0;
     }
     const { kind, targetId, keep } = command;
+    // A dinner the team took down comes back with its keep, while it's still ahead and its host and dish are there (Caleb, Nov 8: decision 5).
+    const takedown = kind === "dinner" && keep && !(await hasOpenReport(kind, targetId)) ? await takedownOf(targetId) : "none";
+    if (takedown === "undoable") {
+      const status = await undoDinnerTakedown(targetId);
+      if (status) {
+        io.out(`Brought dinner ${targetId} back: it's ${status} again, and shows on Community as before.`);
+        log("info", "dinner takedown undone", { ...fields, status });
+        return 0;
+      }
+    }
+    if (takedown !== "none") {
+      io.err(`Refused: dinner ${targetId} was taken down and can't come back: it has started, or its host or its dish is gone. Nothing changed.`);
+      log("warn", "report review refused", { ...fields, code: "too_late" });
+      return 1;
+    }
     if (!(await hasOpenReport(kind, targetId))) {
       io.err(`Refused: ${kind} ${targetId} has no open report, so nothing changed. Check the kind and id against: node dist/reports.js open`);
       log("warn", "report review refused", { ...fields, code: "nothing_open" });

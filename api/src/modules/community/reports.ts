@@ -47,6 +47,17 @@ export async function openReports() {
 /** The team's script (src/reports.ts) reviews only an item with an open report, so a mistyped id changes nothing. */
 export const hasOpenReport = (kind: ReportKind, targetId: string) => data.hasOpenReport(db(), kind, targetId);
 
+/** Whether the team took a dinner down, and whether its keep can still bring it back (data.reviewDinner). */
+export const takedownOf = (dinnerId: string) => data.takedownOf(db(), dinnerId);
+
+/** The team's keep on a dinner it took down, once its reports are resolved: open again, or full by its seats. Null when it can't come back. */
+export async function undoDinnerTakedown(dinnerId: string): Promise<"open" | "full" | null> {
+  return await tx(async (c) => {
+    if (!(await data.dinnerById(c, dinnerId, true)) || (await data.reviewDinner(c, dinnerId, true)) !== "restored") return null;
+    return ((await data.dinnerById(c, dinnerId))?.status ?? null) as "open" | "full" | null;
+  });
+}
+
 /** How many reports it resolved. */
 export async function reviewReport(kind: ReportKind, targetId: string, keep: boolean): Promise<number> {
   return await tx(async (c) => {
