@@ -1,0 +1,121 @@
+# The app on an iOS simulator, driven by Maestro through the journeys in app/e2e/journeys (the spike: one launch journey;
+# docs/build/IOS-JOURNEYS.md). It builds the app for the simulator from this commit (no signing, no EAS), against AWS staging,
+# and times each phase into the job summary. Free on the public repo's macOS runners.
+#
+# Rules for a public repo: never pull_request_target (a fork's PR gets no secrets, and journeys that need them skip); the logs
+# never print a family link, a test id or a key (::add-mask:: before use); a seeded family is deleted in `if: always()`.
+name: ios-journeys
+
+on:
+  pull_request:
+    paths: ['app/**', '.github/workflows/ios-journeys.yml']
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/ios-journeys.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-journeys-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The aws-staging profile's values (app/eas.json), so the app talks to staging only.
+  EXPO_PUBLIC_BACKEND: aws
+  EXPO_PUBLIC_AWS_URL: https://d2zh46br3dalyf.cloudfront.net
+  EXPO_PUBLIC_BUCKET_URL: https://d1l67cvw778iu0.cloudfront.net
+  APP_ID: com.salik.homecookd
+  # Pinned, and over two weeks old when chosen; the zip's sha256 is checked before it runs.
+  MAESTRO_VERSION: cli-2.11.0
+  MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+
+jobs:
+  journeys:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Start the clock
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install the app's packages
+        working-directory: app
+        run: npm ci
+      - name: Prebuild iOS
+        working-directory: app
+        run: |
+          npx expo prebuild --platform ios --clean --no-install
+          # ccache for the native compile (the template Podfile reads this property).
+          brew install ccache
+          node -e "const f='ios/Podfile.properties.json';const p=require('./'+f);p['apple.ccacheEnabled']='true';require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+          echo "T_PREBUILD=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Restore Pods and ccache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/ccache
+          key: ios-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/app.config.ts', 'app/plugins/**') }}
+          restore-keys: ios-${{ runner.os }}-
+      - name: Pods
+        working-directory: app/ios
+        run: |
+          pod install
+          echo "T_PODS=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Build for the simulator (Release: the JS is bundled in, no Metro)
+        working-directory: app/ios
+        run: |
+          set -o pipefail
+          xcodebuild -workspace homecookd.xcworkspace -scheme homecookd -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO build | tail -40
+          ccache -s | head -8 || true
+          echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Boot a simulator and install the app
+        run: |
+          UDID=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices;const all=Object.entries(d).filter(([k])=>/iOS/.test(k)).flatMap(([,v])=>v);const p=all.find(x=>/^iPhone 16$/.test(x.name))||all.find(x=>/^iPhone/.test(x.name));console.log(p.udid)")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" app/ios/build/Build/Products/Release-iphonesimulator/homecookd.app
+          echo "T_BOOT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Install Maestro (pinned, checked)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/Maestro/releases/download/${MAESTRO_VERSION}/maestro.zip"
+          echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+      - name: Journeys
+        run: |
+          mkdir -p "$RUNNER_TEMP/maestro-out"
+          maestro --device "$UDID" test app/e2e/journeys --format junit --output "$RUNNER_TEMP/maestro-out/report.xml" \
+            --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID"
+          echo "T_JOURNEYS=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Times
+        if: always()
+        run: |
+          m() { if [ -n "$2" ] && [ -n "$1" ]; then echo "$(( ($2 - $1) / 60 ))m $(( ($2 - $1) % 60 ))s"; else echo "—"; fi; }
+          {
+            echo "### iOS journeys: times"
+            echo "| Phase | Time |"; echo "|---|---|"
+            echo "| npm ci + prebuild | $(m "$T0" "$T_PREBUILD") |"
+            echo "| Pods (with cache) | $(m "$T_PREBUILD" "$T_PODS") |"
+            echo "| xcodebuild Release (ccache) | $(m "$T_PODS" "$T_BUILD") |"
+            echo "| Simulator boot + install | $(m "$T_BUILD" "$T_BOOT") |"
+            echo "| Maestro journeys | $(m "$T_BOOT" "$T_JOURNEYS") |"
+            echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep Maestro's screenshots and report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: maestro-${{ github.run_id }}
+          path: ${{ runner.temp }}/maestro-out
+          retention-days: 7
+          if-no-files-found: ignore
