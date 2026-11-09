@@ -9,6 +9,11 @@ name is next to the file; a path with a slash is from the repo root. CI's `chang
 `scripts/check-machine-tests.mjs`, which fails a PR that changes a marked file without changing its test, or whose marker
 names a test that doesn't exist. Each owner adds the marker to their own machines.
 
+**History:** each machine's last 20 events (type, from, to, when; never what an event carries). The app keeps them in
+`app/src/lib/machine.ts` (`machineHistory()`, for a report). The site keeps them in `web/src/lib/machine.ts` in
+development builds only (`next dev`, which the QA scripts use): `mom-failures-e2e.mjs` and `dish-e2e.mjs` print them when
+a check fails. A production build has none, and the site never sends them anywhere (/privacy: no error reporting).
+
 Status: **implicit** (flags, timers, strings; the survey of Nov 8, 2026 found it), **explicit** (table + transition
 test merged), **retired** (code goes with the old stack).
 

@@ -24,6 +24,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startFake } from './dish-fake-server.mjs';
+import { printMachineHistory } from './machine-history.mjs';
 import { micInit } from './synthetic-mic.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
@@ -63,10 +64,12 @@ const browser = await chromium.launch({
   args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
 });
 
+const pages = [];
 async function phone(locale = 'en-US') {
   const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 2, locale, permissions: ['microphone', 'clipboard-read', 'clipboard-write'], hasTouch: false });
   if (MIC !== 'device') await ctx.addInitScript(micInit(MIC)); // test-only: a synthetic mic (synthetic-mic.mjs)
   const page = await ctx.newPage();
+  pages.push(page);
   page.errors = [];
   page.on('console', (m) => m.type() === 'error' && !/preload|Failed to load resource/.test(m.text()) && page.errors.push(m.text()));
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
@@ -701,6 +704,7 @@ try {
   console.log(`  ✗ crashed: ${e.message}`);
 } finally {
   writeFileSync(path.join(OUT, 'meta.json'), JSON.stringify({ base: BASE, checks, failures }, null, 2));
+  if (failures.length) await printMachineHistory(pages);
   await browser.close();
   await fake.close();
 }
