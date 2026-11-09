@@ -58,7 +58,9 @@ What these runs show:
   That makes CC and CXX React Native's `ccache-clang` wrappers, with React Native's `ccache.conf`. It isn't a compiler
   launcher, which clashed with Xcode's explicit modules in the spike.
 - ccache is pinned at 4.14.2, checked by sha256 and downloaded with the job's token.
-- Its folder is kept in the Actions cache: each native build saves a new copy and restores the newest.
+- Its folder is kept in the Actions cache: each native build saves a new copy and restores the newest. The folder is
+  ccache's own default, asked of ccache. Xcode runs compile tasks without the job's environment, so a `CCACHE_DIR` set in
+  the workflow never reaches them (the first timed run filled a folder nobody cached).
 - The build is dwarf only (`DEBUG_INFORMATION_FORMAT=dwarf`): a simulator run never reads a dSYM.
 - The job summary's title gives ccache's hits and misses.
 - To time a native build when the app is already cached:
