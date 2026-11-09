@@ -139,7 +139,7 @@ Every refusal is the same 404. The only retry that re-attaches is the same photo
 | Quiet hours | | A craving waits them out |
 | No phone | No log row | Logs `none`, which uses its key |
 
-Quote rotation reads `push_log.quote_key` for 15 days, leaving out pushes that weren't seen. One holder sends a push (`push_log.delivering_at`), and a holder that died is taken over after 4 minutes, under SQS's visibility. So a crash after Expo took a push can send it twice, which is the one duplicate I can't rule out. Expo can't dedupe.
+Quote rotation reads `push_log.quote_key` for 15 days, leaving out pushes that weren't seen. One holder sends a push (status `sending`, `delivering_at`; the machine is in `pushData.ts`), and a holder that died is taken over after 4 minutes, under SQS's visibility. So a crash after Expo took a push can send it twice, which is the one duplicate I can't rule out. Expo can't dedupe.
 
 **The hourly job** finds families with someone due and queues one message per family. One family's trouble can't hold up another, and a failed family is retried alone. A repeat is a no-op, through dedupe keys.
 
@@ -149,6 +149,7 @@ Quote rotation reads `push_log.quote_key` for 15 days, leaving out pushes that w
 |---|---|
 | `messages.push`, `messages.push_postcard` | One dedupe key per message and recipient. Does nothing if the message or its sender is gone |
 | `push.deliver` | A conditional claim, above |
+| `push.sweep` | Every 5 minutes. Each wake-up it sends again spends one of the push's 5, and the claim fences a second holder |
 | `push.receipts` | Clears its tickets, so a second run finds none |
 | `push.dish_answered`, `dish_requested`, `dish_filmed` | The same dedupe keys as Convex's |
 | `questions.translate` | Saves only where `text_for_cook` is empty |
@@ -226,7 +227,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 
 - **"Requests stay quick."** `POST /v1/messages/photo-note` waits on Claude in the request, because the app's contract returns the draft. No connection is held, and it has a timeout and a bounded retry. A send also waits up to 5 s for the library's "does this dish exist?", before its transaction and cached for 10 minutes, as Supabase does. An unreachable host doesn't hold up a send.
 - **"Bytes never pass through the api."** `questions.transcribe` reads a voice note from S3 to hand it to Ink, in a task, as dish's does.
-- **"Every outside call has a plan for when it fails."** A failed push is recorded on its row and not retried past the one try above, so a person-to-person push can be lost when Expo is down. The message itself isn't. Both old systems do the same. **Recommendation:** add an alarm on `failed` rate before launch.
+- **"Every outside call has a plan for when it fails."** Since decision 6 (Caleb, Nov 8; `docs/agents/STATE-MACHINES.md` row 10) a push Expo surely didn't take (a 429 or 5xx after the in-call retry, or a call that never connected) goes back to `queued` and is tried again 1, 5, 15 and 60 minutes on, five wake-ups in all, then `failed`. A timeout is still not tried again, because Expo may have taken it. `push.sweep` (every 5 minutes) wakes a push whose `push.deliver` went to the dead-letter queue or whose holder died, and the invariant sweep's `push_queued_stale` catches one it can't move.
 
 ## Disagreements between Convex and Supabase
 

@@ -30,6 +30,8 @@ env:
   # Pinned, and over two weeks old when chosen; the zip's sha256 is checked before it runs.
   MAESTRO_VERSION: cli-2.11.0
   MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+  # Maestro sends anonymous usage data unless this is set.
+  MAESTRO_CLI_NO_ANALYTICS: '1'
 
 jobs:
   journeys:
@@ -52,6 +54,13 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
           swift --version | head -1
+      # A new simulator spends about 7 minutes on "Data Migration" before it's usable (spike runs 42571326165: 7m21s), so it
+      # starts now and boots while the app builds. A later step waits for it.
+      - name: Start booting a simulator (it boots while the app builds)
+        run: |
+          UDID=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices;const all=Object.entries(d).filter(([k])=>/iOS/.test(k)).flatMap(([,v])=>v);const p=all.find(x=>/^iPhone 16$/.test(x.name))||all.find(x=>/^iPhone/.test(x.name));console.log(p.udid)")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          nohup xcrun simctl boot "$UDID" > "$RUNNER_TEMP/simctl-boot.log" 2>&1 &
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -60,25 +69,51 @@ jobs:
       - name: Install the app's packages
         working-directory: app
         run: npm ci
+      # The native app is built once per native fingerprint (@expo/fingerprint: native packages, plugins, the app config,
+      # the icon and splash; never app/src). A PR that changes only JS reuses it and gets a new JS bundle below, which is
+      # what an EAS Update does to a phone. The key also holds this file, so a change to how the app is built rebuilds it.
+      - name: Native fingerprint
+        id: fingerprint
+        working-directory: app
+        run: |
+          FP=$(node node_modules/@expo/fingerprint/bin/cli.js fingerprint:generate --platform ios | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).hash)")
+          echo "Native fingerprint: $FP"
+          echo "hash=$FP" >> "$GITHUB_OUTPUT"
+      - name: Restore the built app (same native fingerprint)
+        id: built
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/built
+          key: ios-app-${{ runner.arch }}-${{ steps.fingerprint.outputs.hash }}-${{ hashFiles('.github/workflows/ios-journeys.yml') }}
       - name: Prebuild iOS
+        if: steps.built.outputs.cache-hit != 'true'
         working-directory: app
         run: |
           npx expo prebuild --platform ios --clean --no-install
-          # No ccache yet: as a compiler launcher it clashes with Xcode's explicit modules and broke Expo's
-          # ExpoModulesJSI xcframework script on the first run. A passing build first, then speed.
+          # The journeys always run this commit's own JS, never a published update. (A build made without EAS sends no
+          # channel, and EAS answers 400 to that, but this makes it certain and skips the check at launch.) The app code
+          # doesn't call expo-updates.
+          plutil -replace EXUpdatesEnabled -bool NO ios/homecookd/Supporting/Expo.plist
+          # No ccache: as a compiler launcher it clashed with Xcode's explicit modules and broke Expo's ExpoModulesJSI
+          # xcframework script on the first spike run.
           echo "T_PREBUILD=$(date +%s)" >> "$GITHUB_ENV"
       - name: Restore Pods
+        if: steps.built.outputs.cache-hit != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app/ios/Pods
           key: ios-${{ runner.os }}-${{ hashFiles('app/package-lock.json', 'app/app.json', 'app/app.config.ts', 'app/plugins/**') }}
           restore-keys: ios-${{ runner.os }}-
       - name: Pods
+        if: steps.built.outputs.cache-hit != 'true'
         working-directory: app/ios
         run: |
           pod install
           echo "T_PODS=$(date +%s)" >> "$GITHUB_ENV"
+      # arm64 only: a Release build for the generic simulator builds every simulator architecture (x86_64 too), and the
+      # runner and its simulator are arm64.
       - name: "Build for the simulator (Release, so the JS is bundled in: no Metro)"
+        if: steps.built.outputs.cache-hit != 'true'
         working-directory: app/ios
         run: |
           LOG="$RUNNER_TEMP/maestro-out/xcodebuild.log"
@@ -86,7 +121,7 @@ jobs:
           set +e
           xcodebuild -workspace homecookd.xcworkspace -scheme homecookd -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO build > "$LOG" 2>&1
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO -showBuildTimingSummary build > "$LOG" 2>&1
           CODE=$?
           set -e
           tail -15 "$LOG"
@@ -96,18 +131,49 @@ jobs:
             echo "::group::Failing script phases"; grep -n -B60 "Command PhaseScriptExecution failed" "$LOG" | tail -120; echo "::endgroup::"
             exit $CODE
           fi
+          echo "::group::Where the build's time went"; sed -n '/Build Timing Summary/,$p' "$LOG" | head -40; echo "::endgroup::"
+          mkdir -p "$RUNNER_TEMP/built"
+          cp -R build/Build/Products/Release-iphonesimulator/homecookd.app "$RUNNER_TEMP/built/"
           echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Boot a simulator and install the app
+      - name: Keep the built app for the next run with this native fingerprint
+        if: steps.built.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/built
+          key: ${{ steps.built.outputs.cache-primary-key }}
+      # Only JS changed since that build: bundle this commit's JS into it exactly as Xcode's "Bundle React Native code and
+      # images" phase does (expo export:embed, then the same hermesc to bytecode), the way an EAS Update replaces a phone's JS.
+      - name: Bundle this commit's JS into the built app
+        if: steps.built.outputs.cache-hit == 'true'
+        working-directory: app
         run: |
-          UDID=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices;const all=Object.entries(d).filter(([k])=>/iOS/.test(k)).flatMap(([,v])=>v);const p=all.find(x=>/^iPhone 16$/.test(x.name))||all.find(x=>/^iPhone/.test(x.name));console.log(p.udid)")
-          echo "UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" app/ios/build/Build/Products/Release-iphonesimulator/homecookd.app
+          echo "T_PREBUILD=$(date +%s)" >> "$GITHUB_ENV"
+          echo "T_PODS=$(date +%s)" >> "$GITHUB_ENV"
+          APP="$RUNNER_TEMP/built/homecookd.app"
+          test -f "$APP/main.jsbundle"
+          ENTRY=$(node -e "require('expo/scripts/resolveAppEntry')" "$PWD" ios absolute)
+          HERMESC=$(node -p "require('path').join(require('path').dirname(require.resolve('hermes-compiler', { paths: [require.resolve('react-native/package.json')] })), 'hermesc', 'osx-bin', 'hermesc')")
+          npx expo export:embed --entry-file "$ENTRY" --platform ios --dev false --reset-cache --minify false \
+            --bundle-output "$RUNNER_TEMP/main.jsbundle" --assets-dest "$APP"
+          # hermesc warns about every browser global it can't see (Xcode's phase prints the same); the log is kept.
+          mkdir -p "$RUNNER_TEMP/maestro-out"
+          "$HERMESC" -emit-binary -O -out "$APP/main.jsbundle" "$RUNNER_TEMP/main.jsbundle" 2> "$RUNNER_TEMP/maestro-out/hermesc.log" \
+            || { tail -40 "$RUNNER_TEMP/maestro-out/hermesc.log"; exit 1; }
+          echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
+          echo "NATIVE=reused" >> "$GITHUB_ENV"
+      - name: Wait for the simulator and install the app
+        run: |
+          cat "$RUNNER_TEMP/simctl-boot.log" || true
+          xcrun simctl bootstatus "$UDID" -b > "$RUNNER_TEMP/bootstatus.log" 2>&1 || { tail -20 "$RUNNER_TEMP/bootstatus.log"; exit 1; }
+          tail -1 "$RUNNER_TEMP/bootstatus.log"
+          xcrun simctl install "$UDID" "$RUNNER_TEMP/built/homecookd.app"
           echo "T_BOOT=$(date +%s)" >> "$GITHUB_ENV"
+      # With the job's token: on Nov 9 GitHub answered anonymous release downloads with 504 for hours (#447).
       - name: Install Maestro (pinned, checked)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/Maestro/releases/download/${MAESTRO_VERSION}/maestro.zip"
+          gh release download "$MAESTRO_VERSION" --repo mobile-dev-inc/Maestro --pattern maestro.zip --output "$RUNNER_TEMP/maestro.zip"
           echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
@@ -122,12 +188,12 @@ jobs:
         run: |
           m() { if [ -n "$2" ] && [ -n "$1" ]; then echo "$(( ($2 - $1) / 60 ))m $(( ($2 - $1) % 60 ))s"; else echo "—"; fi; }
           {
-            echo "### iOS journeys: times"
+            echo "### iOS journeys: times (native app ${NATIVE:-built})"
             echo "| Phase | Time |"; echo "|---|---|"
             echo "| npm ci + prebuild | $(m "$T0" "$T_PREBUILD") |"
             echo "| Pods (with cache) | $(m "$T_PREBUILD" "$T_PODS") |"
-            echo "| xcodebuild Release | $(m "$T_PODS" "$T_BUILD") |"
-            echo "| Simulator boot + install | $(m "$T_BUILD" "$T_BOOT") |"
+            echo "| xcodebuild Release, or the JS bundle into the reused app | $(m "$T_PODS" "$T_BUILD") |"
+            echo "| Wait for the simulator (booting since the start) + install | $(m "$T_BUILD" "$T_BOOT") |"
             echo "| Maestro journeys | $(m "$T_BOOT" "$T_JOURNEYS") |"
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -135,7 +201,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: maestro-${{ github.run_id }}
+          name: maestro-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/maestro-out
           retention-days: 7
           if-no-files-found: ignore

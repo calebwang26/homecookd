@@ -45,11 +45,11 @@ async function world() {
       `insert into dish_asks (kid_token_hash, ask_token_hash, dish, relation, guess, message, status, merge_started_at, merged_at)
        values (${hex}, ${hex}, 'dal', 'mom', '{}'::jsonb, 'hi', 'answered', ${started}, ${merged}) returning id`,
     );
-  const deletion = async (purged: string, requested: string, attempts: number, external: string) => {
+  const deletion = async (purged: string, requested: string, attempts: number, external: string, gaveUp = "null") => {
     const who = await makePerson(f.id);
     return one(
-      `insert into account_deletions (family_id, person_id, purged_at, requested_at, external_attempts, external_purged_at)
-       values ($1, $2, ${purged}, ${requested}, $3, ${external}) returning id`,
+      `insert into account_deletions (family_id, person_id, purged_at, requested_at, external_attempts, external_purged_at, external_gave_up_at)
+       values ($1, $2, ${purged}, ${requested}, $3, ${external}, ${gaveUp}) returning id`,
       [f.id, who, attempts],
     );
   };
@@ -87,9 +87,13 @@ test("each invariant counts and names its violating rows, never the healthy row 
   bad.job_running_stale = [await w.job("writing", "heartbeat_at=now() - interval '20 minutes'")];
   await w.job("writing", "heartbeat_at=now() - interval '5 minutes'");
 
-  bad.push_queued_stale = [await one(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '2 hours') returning id`, [w.kid])];
+  bad.push_queued_stale = [
+    await one(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '2 hours') returning id`, [w.kid]),
+    await one(`insert into push_log (person_id, kind, status, attempts, delivering_at) values ($1, 'message', 'sending', 1, now() - interval '2 hours') returning id`, [w.kid]),
+  ];
   await db().query(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'queued', now() - interval '10 minutes')`, [w.kid]);
   await db().query(`insert into push_log (person_id, kind, status, send_at) values ($1, 'message', 'sent', now() - interval '2 hours')`, [w.kid]);
+  await db().query(`insert into push_log (person_id, kind, status, attempts, delivering_at, send_at) values ($1, 'message', 'sending', 1, now() - interval '5 minutes', now() - interval '2 hours')`, [w.kid]);
 
   bad.dish_merge_stuck = [await w.ask("now() - interval '20 minutes'", "null")];
   await w.ask("now() - interval '20 minutes'", "now() - interval '15 minutes'");
@@ -97,11 +101,12 @@ test("each invariant counts and names its violating rows, never the healthy row 
 
   bad.deletion_stalled = [
     await w.deletion("null", "now() - interval '2 hours'", 0, "null"),
-    await w.deletion("now()", "now() - interval '2 days'", 10, "null"),
+    await w.deletion("now()", "now() - interval '2 days'", 10, "null", "now()"),
   ];
   await w.deletion("null", "now() - interval '10 minutes'", 0, "null");
   await w.deletion("now()", "now() - interval '2 days'", 3, "null");
   await w.deletion("now()", "now() - interval '2 days'", 10, "now()");
+  await w.deletion("now()", "now() - interval '2 days'", 0, "null"); // the team's retry: a fresh count
 
   bad.outbox_stuck = [await w.outbox(5, "null")];
   await w.outbox(4, "null");
