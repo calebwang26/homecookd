@@ -28,7 +28,7 @@ test merged), **retired** (code goes with the old stack).
 | 7 | Claude batch calls (cancel, spend, fallback) | Pipeline & recipes | `pipeline/claude.py` (`BatchState`, `ALLOWED`, `BatchCall.advance`, `reap`), `process.py` (`reap_batches`), `batch_reap.py`, `queue_worker.py` (`ChildJob.reap`); tests `test_claude.py`, `test_queue_worker.py` | explicit | 1 |
 | 8 | Account deletion, outside purge | AWS backend | `api/src/modules/accounts/deletion.ts`, `pipeline/account_purge.py` | implicit | 2 |
 | 9 | Library loading (`loaded` vs family rows) | App screens | `app/src/lib/libraryLoad.ts` (the table), `lib/recipes.ts` (`familyChecked`), `app/kid/home.tsx`, `kid/recipes`, `parent/recipes.tsx`, `components/recipes/RecipeList.tsx`; test `app/scripts/test-library.mjs` | explicit (#432; decision 4) | 1 |
-| 10 | Pushes (`push_log`) | AWS backend | `api/src/modules/messages/push.ts`, `pushData.ts` | implicit | 2 |
+| 10 | Pushes (`push_log`) | AWS backend | `api/src/modules/messages/pushData.ts` (the table: `claimDelivery`, `finishDelivery`, `retryDelivery`, `sweepDeliveries`), `push.ts` (`deliver`, `sweep`), `expo.ts` (`UNAVAILABLE`), `api/migrations/083_push_retries.sql`; test `api/test/pushMachine.test.ts` | explicit, with decision 6: queued → sending → sent \| failed \| none; a push Expo didn't take goes back to queued and is tried again 1, 5, 15 and 60 min on (5 wake-ups in all); `push.sweep` (every 5 min) wakes one whose push.deliver went to the dead-letter queue or whose holder died. A timeout is never tried again (Expo may have taken it) | 2 |
 | 11 | Dinners, join requests, swaps, reports | AWS backend | `api/src/modules/community/` | implicit | 2 |
 | 12 | Spend ledger, queue side | Pipeline & recipes | `pipeline/queue_db.py` record_calls, `process.py` usage.json | implicit | 2 |
 | 13 | Session gate and held links | App screens | `app/src/lib/session.tsx`, `app/_layout.tsx`, `components/signin/handoff.ts` | implicit | 3 |
@@ -58,7 +58,7 @@ test merged), **retired** (code goes with the old stack).
 | 37 | Account & privacy: "Email the team a report" with `machineHistory()` and the device and app version (no Sentry in the app) | App screens | `app/src/app/index.tsx` Account sheet, `lib/machine.ts` | to build | 3 |
 
 **The invariant sweep (Nov 9).** Every 5 minutes `platform.invariants` (`api/src/modules/platform/invariants.ts`) counts the states that must never be
-true: a queued job with no wake-up owed for 3 h, a running job silent for 15 min, a push queued an hour past its time, a dish ask merging for 10 min, an
+true: a queued job with no wake-up owed for 3 h, a running job silent for 15 min, a push queued an hour past its time or sending for an hour, a dish ask merging for 10 min, an
 account deletion stalled for an hour or given up outside, an outbox row with 5 failed sends, a recipe shared or hidden while not ready, a full dinner
 with seats left. Each count is a CloudWatch metric (`infra/modules/env/invariants.tf`); production alarms on any of them, and on the sweep itself going
 quiet for 15 minutes. The violating rows' ids are in the api log as `INVARIANT <name>` lines, so a chat can act on them. A machine made explicit adds its

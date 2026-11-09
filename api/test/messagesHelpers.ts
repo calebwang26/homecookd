@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
 import type { ExpoMessage, ExpoTicket } from "../src/modules/messages/expo.js";
-import { usePushSender } from "../src/modules/messages/expo.js";
+import { UNAVAILABLE, usePushSender } from "../src/modules/messages/expo.js";
 import { type Library, makeLibrary, useLibrary } from "../src/modules/messages/library.js";
 import { models } from "../src/modules/messages/models.js";
 import { recipeEffects } from "../src/modules/messages/questions.js";
@@ -67,14 +67,18 @@ export type FakeExpo = {
   sent: ExpoMessage[][];
   dead: Set<string>;
   deadInReceipts: Set<string>;
+  /** Expo answers 503, as sendExpoPush reports it: tried again later. */
   down: boolean;
+  /** The call times out, so Expo may have taken it: never tried again. */
+  timeout: boolean;
 };
 
 export function fakeExpo(): FakeExpo {
-  const state: FakeExpo = { sent: [], dead: new Set(), deadInReceipts: new Set(), down: false };
+  const state: FakeExpo = { sent: [], dead: new Set(), deadInReceipts: new Set(), down: false, timeout: false };
   usePushSender({
     async send(messages) {
-      if (state.down) return { tickets: messages.map((): ExpoTicket => ({ status: "error", message: "HTTP 503" })), dead: [] };
+      if (state.down) return { tickets: messages.map((): ExpoTicket => ({ status: "error", message: "HTTP 503", details: { error: UNAVAILABLE } })), dead: [] };
+      if (state.timeout) return { tickets: messages.map((): ExpoTicket => ({ status: "error", message: "TimeoutError" })), dead: [] };
       state.sent.push(messages);
       const tickets = messages.map((m): ExpoTicket => (state.dead.has(m.to) ? { status: "error", message: "gone", details: { error: "DeviceNotRegistered" } } : { status: "ok", id: `ticket-${m.to}` }));
       return { tickets, dead: messages.filter((m) => state.dead.has(m.to)).map((m) => m.to) };
