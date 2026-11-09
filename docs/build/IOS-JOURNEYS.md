@@ -38,7 +38,30 @@ iOS's one-time "Data Migration"), and the journeys 2–4. So:
   published update. (A build made without EAS sends no channel, and EAS answers that with a 400; the app code doesn't
   call expo-updates.)
 
-The workflow reports on app/ PRs. It becomes a required check (the Master Agent's call) once three green runs come in under 25 minutes.
+After those changes (#446), all green:
+
+| Run | Path | Total | Build, or JS into the reused app | Boot wait + install | Journeys |
+|---|---|---|---|---|---|
+| 42582941443, attempt 1 (PR #446) | full native build | 34m43s | 21m01s | 19s | 2m19s |
+| 42582941443, attempt 2 | reused app, JS bundled in | 16m53s | 4m07s | 45s | 5m55s |
+| 42582941443, attempt 3 | reused app, JS bundled in | 12m53s | 1m17s | 1m36s | 3m42s |
+| 42583031923 (main, `b3593850e`) | full native build | 34m16s | 21m22s | 33s | 2m32s |
+
+What these runs show:
+- A JS-only change, which is nearly every PR, takes 13–17 min. A native change still takes about 35.
+- The build's timing summary is mostly C and Objective-C compiling: 693 tasks, 2241 s of CPU on 3 cores. Swift adds 653 s.
+- Booting during the build slows `npm ci` and the build while it runs, so it saves 6–8 min, not the full 9.
+- Next for the native path: ccache through React Native's own `apple.ccacheEnabled`, and dwarf only (no dSYM).
+
+**Required check (Master Agent, Nov 9).** The workflow runs on every PR, because a required check has to report on all
+of them. Its jobs:
+- `scope` (ubuntu, seconds): skips the simulator when the PR changes neither `app/` nor the workflow. Its test is the
+  same as `check-sim`'s: the merge commit's `app/` tree against its base's. It says so in one line in the summary.
+- `journeys`: the simulator run.
+- `ios-journeys`: the check main requires. It's green when the journeys passed or were skipped, and red when they failed
+  or were cancelled.
+
+Pushes to main still run only on `app/` or workflow changes, and a newer push still cancels an older run.
 
 Rules for the public repo: never `pull_request_target`, so a fork's PR gets no secrets and skips what needs them. The logs
 never print a family link, a test id or a key (`::add-mask::`). A seeded family (`app/scripts/aws-phone-run.mjs setup`) is

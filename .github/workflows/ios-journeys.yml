@@ -4,11 +4,14 @@
 #
 # Rules for a public repo: never pull_request_target (a fork's PR gets no secrets, and journeys that need them skip); the logs
 # never print a family link, a test id or a key (::add-mask:: before use); a seeded family is deleted in `if: always()`.
+#
+# The last job, "ios-journeys", is main's required check (Master Agent, Nov 9). A required check has to report on every PR,
+# so this runs on every PR: "scope" (ubuntu, seconds) skips the simulator when the PR changes neither app/ nor this file, and
+# "ios-journeys" is green when the journeys passed or were skipped, red when they failed or were cancelled.
 name: ios-journeys
 
 on:
   pull_request:
-    paths: ['app/**', '.github/workflows/ios-journeys.yml']
   push:
     branches: [main]
     paths: ['app/**', '.github/workflows/ios-journeys.yml']
@@ -34,7 +37,31 @@ env:
   MAESTRO_CLI_NO_ANALYTICS: '1'
 
 jobs:
+  # The same test as scripts/check-sim.mjs: the app/ tree against the base this PR was merged onto (HEAD^1 of GitHub's merge
+  # commit). Pushes to main and manual runs always go on.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+      - id: scope
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(git rev-parse HEAD:app)" != "$(git rev-parse HEAD^1:app)" ] || ! git diff --quiet HEAD^1 HEAD -- .github/workflows/ios-journeys.yml; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No app/ change in this PR (its app/ tree is the base's), so the simulator journeys don't run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   journeys:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -205,3 +232,17 @@ jobs:
           path: ${{ runner.temp }}/maestro-out
           retention-days: 7
           if-no-files-found: ignore
+
+  # The one to require on main: a skipped journeys job (no app/ change) passes, a failed or cancelled one doesn't.
+  result:
+    name: ios-journeys
+    if: always()
+    needs: [scope, journeys]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Journeys passed, or there was nothing to run
+        run: |
+          echo "scope: ${{ needs.scope.result }}, journeys: ${{ needs.journeys.result }}"
+          [ "${{ needs.scope.result }}" = "success" ] || exit 1
+          case "${{ needs.journeys.result }}" in success|skipped) exit 0 ;; *) exit 1 ;; esac
