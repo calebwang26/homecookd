@@ -51,7 +51,25 @@ What these runs show:
 - A JS-only change, which is nearly every PR, takes 13–17 min. A native change still takes about 35.
 - The build's timing summary is mostly C and Objective-C compiling: 693 tasks, 2241 s of CPU on 3 cores. Swift adds 653 s.
 - Booting during the build slows `npm ci` and the build while it runs, so it saves 6–8 min, not the full 9.
-- Next for the native path: ccache through React Native's own `apple.ccacheEnabled`, and dwarf only (no dSYM).
+- Next for the native path: ccache, and dwarf only (no dSYM).
+
+**ccache (the native path).**
+- It runs as Xcode's compiler launcher: `C_COMPILER_LAUNCHER=<ccache>` on the `xcodebuild` line, with
+  `CLANG_ENABLE_EXPLICIT_MODULES=NO` (one of the two choices Xcode's own note gives for a launcher). React Native's
+  `ccache.conf` (sloppiness for Clang modules, depend mode) is written into ccache's own config file, so the compiles
+  find it without any environment.
+- React Native's own route (`USE_CCACHE=1` at `pod install`, the same switch as `apple.ccacheEnabled`) did nothing here.
+  It sets CC and CXX to a wrapper that runs `$CCACHE_BINARY clang`, and Xcode 26 exports `CCACHE_BINARY` to script
+  phases but not to compile tasks. So the wrapper ran plain clang, and ccache saw no calls in three runs (42596435076,
+  42601059072, 42605096278: builds of 22m31s, 16m49s and 23m01s, all without the cache). Xcode also turned explicit
+  modules off for the wrapper, so those runs had the same build shape as this one.
+- ccache is pinned at 4.14.2, checked by sha256 and downloaded with the job's token.
+- Its folder, ccache's own default, is kept in the Actions cache: each native build saves a new copy and restores the
+  newest.
+- The build is dwarf only (`DEBUG_INFORMATION_FORMAT=dwarf`): a simulator run never reads a dSYM.
+- The job summary's title gives ccache's hits and misses; the build step's "ccache" group has the full stats.
+- To time a native build when the app is already cached:
+  `gh workflow run ios-journeys.yml --ref <branch> -f native_build=true`.
 
 **Required check (Master Agent, Nov 9).** The workflow runs on every PR, because a required check has to report on all
 of them. Its jobs:

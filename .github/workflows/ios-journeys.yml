@@ -16,6 +16,11 @@ on:
     branches: [main]
     paths: ['app/**', '.github/workflows/ios-journeys.yml']
   workflow_dispatch:
+    inputs:
+      native_build:
+        description: Build the native app even if one with this fingerprint is cached (to time a native build)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -105,13 +110,15 @@ jobs:
         run: |
           FP=$(node node_modules/@expo/fingerprint/bin/cli.js fingerprint:generate --platform ios | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).hash)")
           echo "Native fingerprint: $FP"
-          echo "hash=$FP" >> "$GITHUB_OUTPUT"
+          echo "key=ios-app-${{ runner.arch }}-$FP-${{ hashFiles('.github/workflows/ios-journeys.yml') }}" >> "$GITHUB_OUTPUT"
+      # A manual run with native_build skips this, so the native build below runs (and times) even when the app is cached.
       - name: Restore the built app (same native fingerprint)
         id: built
+        if: ${{ !inputs.native_build }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/built
-          key: ios-app-${{ runner.arch }}-${{ steps.fingerprint.outputs.hash }}-${{ hashFiles('.github/workflows/ios-journeys.yml') }}
+          key: ${{ steps.fingerprint.outputs.key }}
       - name: Prebuild iOS
         if: steps.built.outputs.cache-hit != 'true'
         working-directory: app
@@ -121,9 +128,38 @@ jobs:
           # channel, and EAS answers 400 to that, but this makes it certain and skips the check at launch.) The app code
           # doesn't call expo-updates.
           plutil -replace EXUpdatesEnabled -bool NO ios/homecookd/Supporting/Expo.plist
-          # No ccache: as a compiler launcher it clashed with Xcode's explicit modules and broke Expo's ExpoModulesJSI
-          # xcframework script on the first spike run.
           echo "T_PREBUILD=$(date +%s)" >> "$GITHUB_ENV"
+      # ccache as Xcode's compiler launcher (C_COMPILER_LAUNCHER on the xcodebuild line below), with React Native's
+      # ccache.conf written into ccache's own config file, so the compiles find it without any environment. Not React
+      # Native's USE_CCACHE route: its ccache-clang wrapper runs `$CCACHE_BINARY clang`, and Xcode 26 exports CCACHE_BINARY
+      # to script phases but not to compile tasks, so the wrapper ran plain clang and ccache saw no calls at all (runs
+      # 42596435076, 42601059072 and 42605096278). Pinned 4.14.2 (Oct 18), the darwin release's sha256, downloaded with the
+      # job's token (#447). Its folder, ccache's own default, is kept in the Actions cache: each native build saves a new
+      # copy and restores the newest.
+      - name: Install ccache (pinned, checked)
+        id: ccache
+        if: steps.built.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v4.14.2 --repo ccache/ccache --pattern ccache-4.14.2-darwin.tar.gz --output "$RUNNER_TEMP/ccache.tar.gz"
+          echo "cf240009630b605b775c7c5c7b7105a3b196c79f31af322c1557969aa28003fc  $RUNNER_TEMP/ccache.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/ccache.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/ccache-4.14.2-darwin" >> "$GITHUB_PATH"
+          C="$RUNNER_TEMP/ccache-4.14.2-darwin/ccache"
+          sed -n 's/^\([a-z_]*\) = \(.*\)$/\1=\2/p' app/node_modules/react-native/scripts/xcode/ccache.conf |
+            while read -r KV; do "$C" --set-config "$KV"; done
+          "$C" --version | head -1
+          "$C" --show-config | grep -E "\) (cache_dir|sloppiness|depend_mode|file_clone|inode_cache) = " || true
+          DIR=$("$C" --get-config cache_dir)
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+      - name: Restore ccache
+        if: steps.built.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.ccache.outputs.dir }}
+          key: ccache-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-${{ runner.arch }}-
       - name: Restore Pods
         if: steps.built.outputs.cache-hit != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -138,17 +174,23 @@ jobs:
           pod install
           echo "T_PODS=$(date +%s)" >> "$GITHUB_ENV"
       # arm64 only: a Release build for the generic simulator builds every simulator architecture (x86_64 too), and the
-      # runner and its simulator are arm64.
+      # runner and its simulator are arm64. dwarf only: no dSYM (about 25 s), which a simulator run never reads.
+      # Clang's explicit modules off, one of the two choices Xcode's own note gives for a compiler launcher: the plain
+      # module compiles are what React Native's ccache.conf is written for, and the three runs timed before this already
+      # built without them (Xcode turned them off for RN's wrapper) in about main's time.
       - name: "Build for the simulator (Release, so the JS is bundled in: no Metro)"
         if: steps.built.outputs.cache-hit != 'true'
         working-directory: app/ios
         run: |
           LOG="$RUNNER_TEMP/maestro-out/xcodebuild.log"
           mkdir -p "$RUNNER_TEMP/maestro-out"
+          ccache --zero-stats >/dev/null
           set +e
           xcodebuild -workspace homecookd.xcworkspace -scheme homecookd -configuration Release -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO -showBuildTimingSummary build > "$LOG" 2>&1
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf \
+            C_COMPILER_LAUNCHER="$(command -v ccache)" CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            -showBuildTimingSummary build > "$LOG" 2>&1
           CODE=$?
           set -e
           tail -15 "$LOG"
@@ -159,6 +201,8 @@ jobs:
             exit $CODE
           fi
           echo "::group::Where the build's time went"; sed -n '/Build Timing Summary/,$p' "$LOG" | head -40; echo "::endgroup::"
+          echo "::group::ccache"; ccache --show-stats --verbose; du -sh "$(ccache --get-config cache_dir)" 2>/dev/null || true; echo "::endgroup::"
+          echo "CCACHE_LINE=$(ccache --print-stats | awk -F'\t' '$1=="direct_cache_hit"||$1=="preprocessed_cache_hit"{h+=$2} $1=="cache_miss"{m=$2} END{printf "%d hits, %d misses", h, m}')" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/built"
           cp -R build/Build/Products/Release-iphonesimulator/homecookd.app "$RUNNER_TEMP/built/"
           echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
@@ -167,7 +211,13 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/built
-          key: ${{ steps.built.outputs.cache-primary-key }}
+          key: ${{ steps.fingerprint.outputs.key }}
+      - name: Keep ccache
+        if: steps.built.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.ccache.outputs.dir }}
+          key: ccache-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
       # Only JS changed since that build: bundle this commit's JS into it exactly as Xcode's "Bundle React Native code and
       # images" phase does (expo export:embed, then the same hermesc to bytecode), the way an EAS Update replaces a phone's JS.
       - name: Bundle this commit's JS into the built app
@@ -215,7 +265,7 @@ jobs:
         run: |
           m() { if [ -n "$2" ] && [ -n "$1" ]; then echo "$(( ($2 - $1) / 60 ))m $(( ($2 - $1) % 60 ))s"; else echo "—"; fi; }
           {
-            echo "### iOS journeys: times (native app ${NATIVE:-built})"
+            echo "### iOS journeys: times (native app ${NATIVE:-built}${CCACHE_LINE:+; ccache: $CCACHE_LINE})"
             echo "| Phase | Time |"; echo "|---|---|"
             echo "| npm ci + prebuild | $(m "$T0" "$T_PREBUILD") |"
             echo "| Pods (with cache) | $(m "$T_PREBUILD" "$T_PODS") |"
