@@ -33,17 +33,22 @@ env:
 
 jobs:
   journeys:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Start the clock
         run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
-      - name: Use Xcode 26 (Swift 6.2; Expo SDK 57's ExpoModulesJSI needs it, the image's default 16.4 has Swift 6.1)
+      # The same Xcode as EAS's builds (build 22: the iPhoneOS 26.5 SDK). Expo SDK 57's ExpoModulesJSI needs Swift 6.2, and its
+      # C++ headers fail on 26.3's compiler, so anything older than 26.5 stops here with a plain message.
+      - name: Use Xcode 26.5 or newer (what EAS builds with)
         run: |
           ls -d /Applications/Xcode_*.app
           XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$XCODE" ]; then echo "::error::No Xcode 26 on this runner image"; exit 1; fi
+          V=$(basename "$XCODE" .app | sed 's/Xcode_//')
+          if [ -z "$XCODE" ] || [ "$(printf '%s\n' 26.5 "$V" | sort -V | head -1)" != "26.5" ]; then
+            echo "::error::This runner image's newest Xcode is ${V:-none}; EAS builds with 26.5"; exit 1
+          fi
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
           swift --version | head -1
