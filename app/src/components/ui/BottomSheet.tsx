@@ -312,7 +312,7 @@ export function BottomSheet({
             ) : null}
           </Animated.View>
         </KeyboardAvoidingView>
-        <ToastViewport position="top" />
+        <ToastViewport position="top" inSheet />
       </GestureHandlerRootView>
     </Modal>
   );

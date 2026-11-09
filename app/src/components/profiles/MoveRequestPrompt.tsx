@@ -15,9 +15,8 @@
 // `openMoveRequest(id)` re-opens it from the updates card.
 import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ActionButton, Avatar, BottomSheet, PressableScale, SuccessBurst, Txt, useToast } from '@/components/ui';
+import { ActionButton, Appear, Avatar, BottomSheet, PressableScale, SuccessBurst, Txt, useToast } from '@/components/ui';
 import { timeAgo } from '@/lib/format';
 import { forgetMoveRequest, MoveError, moveApi, reloadMoveRequests, useMoveRequests, type MoveRequest } from '@/lib/moveRequests';
 import { useSession } from '@/lib/session';
@@ -112,7 +111,7 @@ export function MoveRequestPrompt() {
   return (
     <BottomSheet visible={open} onClose={settled ? done : close} accessibilityLabel={t('profiles.move.title', { name })}>
       {settled ? (
-        <Animated.View entering={FadeIn.duration(180)} style={styles.result}>
+        <Appear style={styles.result}>
           {answered.yes ? (
             <SuccessBurst
               title={t('profiles.move.in', { name })}
@@ -130,7 +129,7 @@ export function MoveRequestPrompt() {
             </View>
           )}
           <ActionButton label={t('profiles.sheet.done')} size="xl" onPress={done} style={styles.done} />
-        </Animated.View>
+        </Appear>
       ) : (
         <>
           <View style={styles.body}>

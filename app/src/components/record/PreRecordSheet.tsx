@@ -7,10 +7,9 @@
 // the stove).
 import { useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { ActionButton, Avatar, BottomSheet, Chip, PressableScale, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
+import { ActionButton, Appear, Avatar, BottomSheet, Chip, PressableScale, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
 import type { Profile } from '@/lib/api';
 import { HOMIE_ON } from '@/lib/homie/switch';
 import { activeLanguage } from '@/lib/languages';
@@ -94,16 +93,16 @@ export function PreRecordSheet({
   return (
     <BottomSheet visible={visible} onClose={close} accessibilityLabel={t('parent.preRecord.label')} maxHeightRatio={0.92}>
       {choosingLanguage ? (
-        <Animated.View key="language" entering={FadeIn.duration(180)} style={styles.col}>
+        <Appear key="language" style={styles.col}>
           <Txt variant="display" size={28} leading={1.1} accessibilityRole="header" style={styles.title}>
             {LANGUAGE_QUESTION}
           </Txt>
           <ScrollView style={styles.languages} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <LanguagePicker value={language ?? 'en'} onChange={pickLanguage} onSheet />
           </ScrollView>
-        </Animated.View>
+        </Appear>
       ) : (
-        <Animated.View key="main" entering={FadeIn.duration(180)} style={styles.col}>
+        <Appear key="main" style={styles.col}>
           <Txt variant="display" size={28} leading={1.1} accessibilityRole="header" style={styles.title}>
             {t('parent.preRecord.title')}
           </Txt>
@@ -205,7 +204,7 @@ export function PreRecordSheet({
               accessibilityHint={t(HOMIE_ON ? 'parent.preRecord.glassesHint' : 'parent.preRecord.glassesHintQuiet')}
             />
           </View>
-        </Animated.View>
+        </Appear>
       )}
     </BottomSheet>
   );
