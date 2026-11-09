@@ -137,7 +137,7 @@ Added Nov 5 (#366). Production starts fresh (CUTOVER.md, open question 2), so no
 | Reader | What it reads | Without it |
 |---|---|---|
 | App 1.1, `app/src/lib/recipes.ts` `fetchLibrary` and `fetchRecipe` (on `main`) | `<EXPO_PUBLIC_BUCKET_URL>/library.json`, then each entry's `recipe_url` | The bundled copy (`app/assets/data/library.json`), with GCS links. No error. Unset, `EXPO_PUBLIC_BUCKET_URL` is GCS, so 1.1's build sets it to `https://media.homecookd.app` (CUTOVER.md, step 8) |
-| The api, `api/src/modules/messages/library.ts` | `<MEDIA_BASE_URL>/library.json` and `<id>/recipe.json` | No library dish: `dish-stats` and `hearts/recent` empty, the recap 503, and a heart, event, favorite, send or share naming one is 404 `not_found` |
+| The api, `api/src/modules/messages/library.ts` | `<MEDIA_BASE_URL>/library.json` and `<id>/recipe.json` | No library dish: `dish-stats` and `hearts/recent` see only the family's own recipes, by `cook_id` (since Nov 9), the recap 503, and a heart, event, favorite, send or share naming one is 404 `not_found` |
 | The site's `/r` | A share's `recipeUrl` from `POST /v1/shares/open`: `<MEDIA_BASE_URL>/<id>/recipe.json` for a library dish | A shared sample doesn't open, once step 10 points the site at the api |
 
 `tools/media-copy/sample_library.py` writes it. A dry run by default, and the dry run never touches S3.

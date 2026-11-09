@@ -391,6 +391,26 @@ test("PR 4: Maya hearts & cooks Dad's chili -> Dad's /dish-stats & /hearts/recen
   assert.deepEqual(ok(await get(w.app, w.dad, "/v1/hearts/recent")), []);
 });
 
+test("a recipe made on AWS is its cook's by cook_id: with library.json empty, its hearts and cooks reach her /dish-stats and /hearts/recent, and nobody else's", { skip }, async () => {
+  const w = await world();
+  w.lib.index.clear(); // library.json lists nothing since Nov 8 (MEDIA-MIGRATION.md)
+  const dal = await awsRecipe(w.mom);
+  const dadsDish = await awsRecipe(w.dad);
+  ok(await heart(w, w.nia, dal.libraryId));
+  ok(await event(w, w.nia, { libraryId: dal.libraryId, kind: "cooked" }));
+  ok(await heart(w, w.leo, dadsDish.libraryId));
+
+  const stats = ok(await get(w.app, w.mom, `/v1/dish-stats?ids=${dal.libraryId},${dadsDish.libraryId}`));
+  assert.deepEqual(Object.keys(stats), [dal.libraryId], "only her own");
+  assert.deepEqual([stats[dal.libraryId].hearts.by.map((h: any) => h.personId), stats[dal.libraryId].cooked.count], [[w.nia.id], 1]);
+  assert.deepEqual(ok(await get(w.app, w.mom, "/v1/hearts/recent")).map((h: any) => [h.personId, h.libraryId]), [[w.nia.id, dal.libraryId]]);
+  assert.deepEqual(ok(await get(w.app, w.dad, "/v1/hearts/recent")).map((h: any) => [h.personId, h.libraryId]), [[w.leo.id, dadsDish.libraryId]]);
+  assert.deepEqual(ok(await get(w.app, w.nia, `/v1/dish-stats?ids=${dal.libraryId}`)), {}, "a kid who hearted it sees nothing of it");
+  // Her name changing changes nothing: it's hers by cook_id.
+  await db().query(`update people set name = 'Amma' where id = $1`, [w.mom.id]);
+  assert.deepEqual(Object.keys(ok(await get(w.app, w.mom, `/v1/dish-stats?ids=${dal.libraryId}`))), [dal.libraryId]);
+});
+
 test("GET /dish-stats: my family only, me excluded, the removed left out, counted per person, newest first", { skip }, async () => {
   const w = await world();
   const seed = async (who: Who, kind: string, daysAgo: number) =>
