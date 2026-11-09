@@ -187,6 +187,18 @@ Caleb picks one.
     Phones take it on a launch after they fetch it. Undo: `cd app && npx eas-cli
     update:roll-back-to-embedded --channel production-aws --runtime-version 1.1.0 --platform ios --message "…"
     --non-interactive`.
+  - **No sample recipes (Nov 8, 17:42 PT, #415):** on Caleb's instruction to the Master Agent ("work autonomously, fix both
+    solutions"), the Master Agent published it to both runtimes listening on `production-aws`. Production's
+    `library.json` is `[]` (AWS backend).
+    - Runtime 1.1.0 (build 18, the App Store's 1.1): group `b62f80fd-16ff-4064-94b5-aa1c5d159ae8`, from `89002fc40`
+      (`0149fe4be`, #402 and #410, plus #415's app commits).
+    - Runtime 1.1.1 (build 21, TestFlight): group `0781e03d-cb4f-4ebb-a282-f295f1230a2d`, from main `fa6442323`.
+    - The four changed app files are byte-identical in both. Native config is unchanged against each build.
+      `--check-only` and the app tests passed on each.
+    - Undo for 1.1.0, back to #402 and #410: `cd app && npx eas-cli update:republish --group
+      d8ea50c8-4969-4c25-9d84-74f32a4430a1 --destination-branch production-aws --platform ios --non-interactive`.
+    - Undo for 1.1.1, back to build 21's own JS: `update:roll-back-to-embedded --channel production-aws
+      --runtime-version 1.1.1 --platform ios`.
 
 ## What production has on at launch
 
