@@ -7,6 +7,8 @@
 //
 //   busy  a green arc spins round the circle
 //   done  a green check fades in at the bottom right and the label becomes `doneLabel` ("Sent")
+// The fades are Appear (an animated opacity), never `entering`: inside a sheet's Modal on iOS, the spinner
+// leaving mid-fade froze the screen (Copy link, Nov 8).
 //
 // No scale pops on the icons (the fuzzy-heart bug): the check fades in, the press is
 // PressableScale's.
@@ -14,7 +16,6 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
-  FadeIn,
   cancelAnimation,
   useAnimatedStyle,
   useReducedMotion,
@@ -24,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
-import { CheckIcon, PressableScale, Txt } from '@/components/ui';
+import { Appear, CheckIcon, PressableScale, Txt } from '@/components/ui';
 import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
@@ -152,17 +153,17 @@ export function RoundTarget({
         {children}
         {busy ? <SpinnerRing circle={c} /> : null}
         {done ? (
-          <Animated.View entering={FadeIn.duration(180)} style={styles.check}>
+          <Appear style={styles.check}>
             <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />
-          </Animated.View>
+          </Appear>
         ) : null}
       </View>
       {done ? (
-        <Animated.View key="done" entering={FadeIn.duration(180)}>
+        <Appear key="done">
           <Txt variant="label" size={m.label} weight={700} color={colors.yolkDeep} numberOfLines={1} align="center" style={labelBox}>
             {doneLabel ?? t('share.target.sent')}
           </Txt>
-        </Animated.View>
+        </Appear>
       ) : (
         <Txt
           variant="label"
@@ -193,14 +194,14 @@ function SpinnerRing({ circle }: { circle: number }) {
   const r = S / 2 - 2;
   const c = 2 * Math.PI * r;
   return (
-    <Animated.View entering={FadeIn.duration(160)} pointerEvents="none" style={styles.spinnerWrap}>
+    <Appear duration={160} pointerEvents="none" style={styles.spinnerWrap}>
       <View style={[styles.veil, { width: circle, height: circle, borderRadius: circle / 2 }]} />
       <Animated.View style={[{ width: S, height: S }, spin]}>
         <Svg width={S} height={S}>
           <Circle cx={S / 2} cy={S / 2} r={r} stroke={colors.yolk} strokeWidth={3} strokeLinecap="round" fill="none" strokeDasharray={`${c * 0.28} ${c}`} />
         </Svg>
       </Animated.View>
-    </Animated.View>
+    </Appear>
   );
 }
 

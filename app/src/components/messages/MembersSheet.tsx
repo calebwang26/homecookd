@@ -18,10 +18,9 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { AddFamilySheet } from '@/components/profiles';
-import { ActionButton, type ActionState, Avatar, BottomSheet, ListCard, ListRow, PlusIcon, PressableScale, Txt, useToast } from '@/components/ui';
+import { ActionButton, type ActionState, Appear, Avatar, BottomSheet, ListCard, ListRow, PlusIcon, PressableScale, Txt, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { openChatWith } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
@@ -174,7 +173,7 @@ function Members({
       title={mode === 'members' ? t('messages.family') : t('messages.inbox.newMessage')}
       accessibilityLabel={mode === 'members' ? t('messages.members.label') : t('messages.inbox.newMessage')}>
       {confirm ? (
-        <Animated.View entering={FadeIn.duration(180)} style={[styles.confirm, { minHeight: listH }]}>
+        <Appear style={[styles.confirm, { minHeight: listH }]}>
           <Avatar profile={confirm} size={72} />
           <View style={styles.confirmText}>
             <Txt variant="display" size={26} align="center" accessibilityRole="header">
@@ -213,7 +212,7 @@ function Members({
               style={styles.choice}
             />
           </View>
-        </Animated.View>
+        </Appear>
       ) : (
         <ScrollView
           onLayout={(e) => setListH(e.nativeEvent.layout.height)}

@@ -331,10 +331,10 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
       <BottomSheet visible={allOpen && items.length > 0} onClose={() => setAllOpen(false)} title={t('parent.updates.all')} accessibilityLabel={t('parent.updates.all')}>
         <ScrollHold value={sheetHold.set}>
           <ScrollView scrollEnabled={!sheetHold.held} style={styles.sheetScroll} contentContainerStyle={styles.sheetPad} showsVerticalScrollIndicator={false}>
+            {/* No exiting or layout animation in here: they run in the native layer, and inside the sheet's Modal on iOS
+                a view leaving mid-animation can freeze the screen (Appear.tsx). */}
             {items.map((u) => (
-              <Animated.View key={u.key} exiting={fadeOutFast} layout={LinearTransition.duration(220)}>
-                {row(u, () => setAllOpen(false))}
-              </Animated.View>
+              <View key={u.key}>{row(u, () => setAllOpen(false))}</View>
             ))}
           </ScrollView>
         </ScrollHold>
