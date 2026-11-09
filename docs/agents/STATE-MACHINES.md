@@ -8,7 +8,7 @@ test merged), **retired** (code goes with the old stack).
 
 | # | Machine | Owner | Where | Status | Tier |
 |---|---|---|---|---|---|
-| 1 | Sheet hand-offs (BottomSheet, toasts, root sheets) | App screens | `app/src/lib/sheets/machine.ts` (the table, the root host's), `coordinator.ts` (afterClose, toasts), `components/ui/BottomSheet.tsx`; test `app/scripts/test-sheets.mjs` | explicit (#PR); share.tsx's own open/present/crash flow is still implicit (1b) | 1 |
+| 1 | Sheet hand-offs (BottomSheet, toasts, root sheets) | App screens | `app/src/lib/sheets/machine.ts` (the table, the root host's), `coordinator.ts` (afterClose, toasts), `components/ui/BottomSheet.tsx`; test `app/scripts/test-sheets.mjs` | explicit (#424); share.tsx's own open/present/crash flow is still implicit (1b) | 1 |
 | 2 | Job lifecycle, queue side (SQS receives vs attempts, pauses, sweep) | AWS backend | `pipeline/queue_worker.py`, `queue_db.py`, `api/src/modules/jobs/` | implicit | 1 |
 | 3 | Memories opt-in at publish | AWS backend | `pipeline/queue_db.py` finish, `api/src/modules/recipes/writes.ts` | implicit | 1 |
 | 4 | Recording screen | App screens | `app/src/app/recording.tsx`, `lib/live/quietRecording.ts`, `components/record/filming.ts`, `useInAppCamera.ts` | implicit | 2 |
