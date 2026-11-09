@@ -17,10 +17,11 @@ export async function cancelDinnersOfPerson(c: Queryable, personId: string): Pro
 /**
  * At once, in the transaction that takes them out of a family (leaving, or a move to another): the dinners they host that haven't started are called off. Only the host
  * may answer an ask, and they can't act in that family again. Unlike a deletion, dinners around their recipes go on, since the recipes stay, and a dinner that has
- * started keeps what it was.
+ * started keeps what it was. Their asks on dinners ahead go too, so a seat they held is free again (Caleb, Nov 8: decision 5; dinners.ts).
  */
 export async function cancelDinnersOfLeaver(c: Queryable, personId: string): Promise<void> {
   await data.cancelDinnersAheadOf(c, personId);
+  await data.dropUpcomingAsksOf(c, personId);
 }
 
 /**
