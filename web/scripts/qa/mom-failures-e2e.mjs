@@ -17,6 +17,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { startFake } from './dish-fake-server.mjs';
+import { printMachineHistory } from './machine-history.mjs';
 import { micInit } from './synthetic-mic.mjs';
 
 const args = Object.fromEntries(
@@ -66,10 +67,12 @@ async function askUrl() {
   return { url: `${BASE}/a?t=${fake.cards.get(made.kidToken).askToken}`, kidToken: made.kidToken };
 }
 
+let lastPage = null; // the run's page, for its machine history when a check fails
 async function momPage({ mic, ua }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'en-US', ...(ua ? { userAgent: ua } : {}) });
   await ctx.addInitScript(micInit(mic));
   const page = await ctx.newPage();
+  lastPage = page;
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   return page;
@@ -244,13 +247,16 @@ const runs = {
 for (const [name, run] of Object.entries(runs)) {
   if (ONLY && !ONLY.includes(name)) continue;
   console.log(`${name} (${EXPECT})`);
+  const before = failures;
+  lastPage = null;
   try {
     const page = await run();
     check('no page errors', page.errors.length === 0, page.errors.join('; '));
-    await page.context().close();
   } catch (e) {
     check(`${name} ran`, false, e.message.split('\n')[0]);
   }
+  if (failures > before) await printMachineHistory([lastPage]);
+  await lastPage?.context().close();
 }
 
 await browser.close();

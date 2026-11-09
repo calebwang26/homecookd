@@ -11,6 +11,7 @@ import { canRecord as browserCanRecord } from '@/components/dish/useRecorder';
 import { EggMascot } from '@/components/primitives/EggMascot';
 import { DishError, finishAsk, isPlausibleToken, peekAsk, sendAnswer } from '@/lib/dish/api';
 import { askedItems, guessOf } from '@/lib/dish/text';
+import { record } from '@/lib/machine';
 import type { Ask, InLang } from '@/lib/dish/types';
 import { spokenLang } from '@/lib/dish/words';
 import { MomRecipe } from './MomRecipe';
@@ -43,8 +44,16 @@ function Mom() {
   const [token, setToken] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
-  /** Every change of screen goes through the table (momMachine.ts). */
-  const send = useCallback((e: MomEvent) => setStage((st) => momTransition(st, e) ?? st), []);
+  /** Every change of screen goes through the table (momMachine.ts), and into its history in development (lib/machine). */
+  const send = useCallback(
+    (e: MomEvent) =>
+      setStage((st) => {
+        const next = momTransition(st, e);
+        record('mom', e, st, next);
+        return next ?? st;
+      }),
+    [],
+  );
   const [failure, setFailure] = useState<Failure>('not-found');
   const [inLangs, setInLangs] = useState<Record<string, InLang | null>>({});
   const [retryLang, setRetryLang] = useState<string | null>(null); // the one language still translating after the first peek
