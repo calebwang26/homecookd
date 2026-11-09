@@ -53,23 +53,43 @@ const MAX_LINES = 5;
 /** Said where the mic can't record (instead of a greyed-out button): a key, read with t(). */
 export const NO_MIC_NOTE: WordKey = 'messages.composer.noMic';
 
-/**
- * The typed field, shared with the cook's AnswerPanel: grows with the words (and a wrapped
- * placeholder) up to 5 lines, then scrolls; Return adds a line. Sits inside a 56-tall field.
- */
-export function GrowingInput({
-  ref,
-  value,
-  onChangeText,
-  placeholder,
-  autoFocus,
-}: {
+type GrowingInputProps = {
   ref?: Ref<TextInput>;
   value: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   autoFocus?: boolean;
-}) {
+};
+
+/**
+ * The typed field, shared with the cook's AnswerPanel: grows with the words (and a wrapped
+ * placeholder) up to 5 lines, then scrolls, like iMessage; Return adds a line. Sits inside a 56-tall field.
+ * On a phone the text box sizes itself between one line and five (min/maxHeight). It used to take its
+ * height from onContentSizeChange, which iOS didn't report as the text wrapped: the box stayed one
+ * line and the words went on out of sight (Caleb, Nov 8). The web still needs that report.
+ */
+export const GrowingInput = Platform.OS === 'web' ? WebGrowingInput : PhoneGrowingInput;
+
+function PhoneGrowingInput({ ref, value, onChangeText, placeholder, autoFocus }: GrowingInputProps) {
+  return (
+    <TextInput
+      ref={ref}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors.muted}
+      accessibilityLabel={placeholder}
+      multiline
+      textAlignVertical="top"
+      style={[styles.input, styles.inputGrows]}
+      autoFocus={autoFocus}
+      maxLength={2000}
+    />
+  );
+}
+
+/** react-native-web's textarea doesn't grow by itself: its reported content height sets it. */
+function WebGrowingInput({ ref, value, onChangeText, placeholder, autoFocus }: GrowingInputProps) {
   const [h, setH] = useState(LINE);
   // Cleared after a send: back to one line (the web may not report the smaller size).
   const [prev, setPrev] = useState(value);
@@ -416,6 +436,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null),
   },
+  // A phone's text box: one line to five, then it scrolls (PhoneGrowingInput).
+  inputGrows: { minHeight: LINE, maxHeight: LINE * MAX_LINES },
   sendPill: { height: 56, paddingHorizontal: 16, borderRadius: 28, flexDirection: 'row', alignItems: 'center', gap: 6 },
   dim: { opacity: 0.45 },
   strip: { gap: 12, height: 56, paddingVertical: 0 },
