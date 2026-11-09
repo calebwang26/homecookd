@@ -5,6 +5,17 @@ with a new build number (15 since Nov 7), from main, talking only to `https://ap
 build CUTOVER step 9 submits, so nothing is rebuilt between this check and the submission. Unlike the staging run
 ([CHECKLIST.md](CHECKLIST.md)), this one uses real models, real pushes and the real alerts email.
 
+## 1.1.1: before it goes to App Review
+
+Fill this in as fixes land; the first `production-aws` build of 1.1.1 is checked on Caleb's phone before it's submitted.
+
+1. **No pot at launch** (#405, native, so only in a new build). Install the first 1.1.1 build from TestFlight **over**
+   the 1.1 already on the phone (build 18 or 20; don't delete it first, or the old snapshot goes with it and this
+   proves nothing). Fully close the app, then open it, three times. Each time the first thing on screen is the egg on
+   sage; the 1.0 cooking pot never flashes. 📸 or a screen recording of one launch.
+2. **New message → Add family** (#402; also goes out by OTA to 1.1). Messages → New message → Add family: the invite
+   sheet shows. Close it, then tap a chat: it opens.
+
 ## Build 15: the morning check (Nov 7)
 
 About 15 minutes, in this order. Build 15 is from main `df4337659` (13 and 14 were numbers spent on uploads that never finished): filming waits for your tap (#375), and recipes,
