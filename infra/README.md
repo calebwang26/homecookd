@@ -215,7 +215,9 @@ gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq '.object.type + " " + .objec
 ```
 
 Put that commit and the release on every line that uses the action, in every workflow. To bump gitleaks, change the version in
-its URL and the sha256 next to it, which is the `linux_x64` line of `gitleaks_<version>_checksums.txt` on that release:
+its `gh release download` line (the tag and the file name) and the sha256 next to it, which is the `linux_x64` line of
+`gitleaks_<version>_checksums.txt` on that release. Downloads use the job's token, never anonymous `curl`: on Nov 9 GitHub
+answered anonymous release downloads with 504 while authenticated ones worked.
 
 ```bash
 D=$(mktemp -d) && gh release download v<version> --repo gitleaks/gitleaks --pattern '*_checksums.txt' --dir "$D" && grep linux_x64 "$D"/*

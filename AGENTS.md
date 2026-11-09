@@ -228,6 +228,7 @@ node --test scripts/*.test.mjs                                     # the scripts
 cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1 on production AWS (api.homecookd.app): the App Store build (18, released Nov 8); its JS fixes go out with safe-eas-update.sh production-aws
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
+# iOS journeys run only in CI (no Xcode on this Mac): .github/workflows/ios-journeys.yml builds the app for the simulator and runs Maestro on app/e2e/journeys/*.yaml; gh workflow run ios-journeys.yml --ref <branch> (docs/build/IOS-JOURNEYS.md)
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
 cd app && node scripts/test-sheets.mjs                             # the sheet machine and coordinator (lib/machine.ts, lib/sheets/): every state × event, afterClose on a fake clock
 node scripts/check-e2e-stripped.mjs                                # the CI simulator hooks (EXPO_PUBLIC_E2E=1) never reach a store build: two cleared iOS exports (~3 min)
