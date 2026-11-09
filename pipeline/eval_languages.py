@@ -372,6 +372,7 @@ def main() -> None:
     batch = not args.no_batch
     if batch:
         os.environ["CLAUDE_BATCH"] = "1"
+        os.environ.setdefault("CLAUDE_BATCH_WAIT_S", "1800")  # a clip can wait: no hurry to pay full price
     for clip in clips:
         fetch(clip)
     if args.fetch_only:

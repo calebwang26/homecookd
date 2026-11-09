@@ -28,9 +28,12 @@ from pipeline.prep import ffmpeg
 from pipeline.prompts import SEEN_PROMPT
 from pipeline.schema import Ingredient, Recipe, RecipeQuestion
 
+# Haiku found 8 of 18 ingredients taken out of the steak, Biryani and gnocchi lists (Nov 8), Sonnet 16, so it stays.
 SEEN_MODEL = "claude-sonnet-5-5"
-# Poha (Oct 26): 4 frames a step found its curry leaves in 4 runs of 4; 8 found nothing in 2 of 2.
-FRAMES_PER_STEP, MAX_FRAMES, FRAME_PX = 4, 96, 512
+# Poha (Oct 26): 4 frames a step found its curry leaves in 4 runs of 4; 8 found nothing in 2 of 2. 384 px since
+# Nov 8 (was 512): a third cheaper ($0.015 on the steak, was $0.023), and it found 17 of the 18 (512 px: 16).
+# CLAUDE_SEEN_FRAME_PX=512 rolls it back.
+FRAMES_PER_STEP, MAX_FRAMES, FRAME_PX = 4, 96, 384
 MAX_ADD, MAX_ASK = 3, 2
 SAME_NAME = 0.8  # names this alike (difflib, lowercased) are the same ingredient
 
@@ -124,12 +127,13 @@ def grab(play: Path, recipe: Recipe) -> list[tuple[str, bytes]]:
     """("Step N: title. instruction" or "N.k", JPEG) in step order: the step's header goes on its first frame."""
     per = max(1, min(FRAMES_PER_STEP, MAX_FRAMES // max(1, len(recipe.steps))))
     jobs = [(s, k, t) for s in recipe.steps for k, t in enumerate(frame_times(s.start_s, s.end_s, per), 1)]
+    px = int(os.environ.get("CLAUDE_SEEN_FRAME_PX") or FRAME_PX)
     with tempfile.TemporaryDirectory() as tmp:
         def one(job):
             s, k, t = job
             out = Path(tmp) / f"{s.order:03d}_{k}.jpg"
             ffmpeg("-ss", f"{t:.2f}", "-i", str(play), "-frames:v", "1", "-vf",
-                   f"scale='min({FRAME_PX},iw)':'min({FRAME_PX},ih)':force_original_aspect_ratio=decrease",
+                   f"scale='min({px},iw)':'min({px},ih)':force_original_aspect_ratio=decrease",
                    "-q:v", "5", "-update", "1", str(out))
             head = f"Step {s.order}: {s.title}. {s.instruction}\n" if k == 1 else ""
             return f"{head}Frame {s.order}.{k}", out.read_bytes()

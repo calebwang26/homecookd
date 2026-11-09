@@ -9,9 +9,12 @@ process.response_text and process.Usage treat both the same. Claude's structured
 same pydantic schema Gemini gets; images go before the prompt, each after its label. Models other than Haiku opt
 into server-side fallbacks: a request the model declines is run again on Anthropic's recommended model.
 
-CLAUDE_BATCH=1 sends each call through the Message Batches API instead: half price, but an answer can take minutes,
-so only the language eval sets it (never the worker). A batch request can't carry server-side fallbacks, and one
-still waiting after CLAUDE_BATCH_WAIT_S is cancelled and sent the normal way.
+A call made with batch=True goes through the Message Batches API instead: half price, but each answer waits about
+2 minutes (125-147 s over 6 calls, Nov 8). Since Nov 8 (the cost cut to under $0.10 a recipe) the two big Sonnet calls
+batch, the extraction and the recipe writer (process.extract_model, writer.claude_writer); the small ones don't, so a
+10-minute recording adds about 4 minutes. CLAUDE_BATCH=1 batches every call (the language eval sets it), and
+CLAUDE_BATCH=0 none (the rollback). A batch request can't carry server-side fallbacks, and one still waiting after
+CLAUDE_BATCH_WAIT_S (default 5 min) is cancelled and sent the normal way.
 
 Env (.env): ANTHROPIC_API_KEY, TEXT_PROVIDER and COVER_PROVIDER (gemini | claude), CLAUDE_TEXT_MODEL (default
 claude-haiku-5-5).
@@ -31,7 +34,7 @@ from pydantic import BaseModel
 MODEL = "claude-haiku-5-5"
 MAX_TOKENS = 64_000  # streamed, so a long recipe's reply never hits an HTTP timeout
 RETRIES = 4  # the SDK backs off on 429 / 5xx; a burst of rate limits shouldn't end a recording's run
-BATCH_POLL_S, BATCH_WAIT_S = 10, 1800
+BATCH_POLL_S, BATCH_WAIT_S = 5, 300
 
 
 class ClaudeError(RuntimeError):
@@ -54,14 +57,15 @@ class ClaudeText:
     name = "claude"
 
     def __init__(self, model: str | None = None, effort: str = "medium", system: str | None = None,
-                 client: anthropic.Anthropic | None = None):
+                 client: anthropic.Anthropic | None = None, batch: bool = False):
         if client is None:
             key = os.environ.get("ANTHROPIC_API_KEY")
             if not key:
                 raise ClaudeError("ANTHROPIC_API_KEY is not set (add it to .env, or set TEXT_PROVIDER=gemini)")
             client = anthropic.Anthropic(api_key=key, max_retries=RETRIES)
         self.client, self.model, self.effort, self.system = client, model or text_model(), effort, system
-        self.batch = (os.environ.get("CLAUDE_BATCH") or "").strip() == "1"
+        want = (os.environ.get("CLAUDE_BATCH") or "").strip()
+        self.batch = want == "1" or (batch and want != "0")
 
     def generate(self, prompt: str, schema: type[BaseModel], temperature: float | None = None,
                  images: Sequence[tuple[str, bytes]] = ()) -> SimpleNamespace:
