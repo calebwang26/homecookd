@@ -27,6 +27,7 @@ jobs:
       api: ${{ steps.diff.outputs.api }}
       tools: ${{ steps.diff.outputs.tools }}
       web: ${{ steps.diff.outputs.web }}
+      app: ${{ steps.diff.outputs.app }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -37,6 +38,8 @@ jobs:
           for AREA in infra convex voice pipeline api web tools; do
             echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
           done
+          # app: the app, or the scripts its store-build check runs.
+          echo "$FILES" | grep -qE '^(app/|scripts/check-(e2e-stripped|app-export)\.mjs$)' && echo "app=true" >> "$GITHUB_OUTPUT" || echo "app=false" >> "$GITHUB_OUTPUT"
       # A state machine's table changed without its test (docs/agents/STATE-MACHINES.md): every section's PRs.
       - run: node scripts/check-machine-tests.mjs "origin/$GITHUB_BASE_REF"
       # The repo scripts' own tests (the canary order, safe-eas-update.sh's arguments, the marker check): fast, no network.
@@ -222,6 +225,25 @@ jobs:
       # No NEXT_PUBLIC_* on this build, as Vercel's main build has none until 1.1's release (CUTOVER.md, step 10): its bundle must stay today's site.
       - run: node scripts/check-merge-safe.mjs --bundle web/out
 
+  # The CI simulator journeys' hooks (EXPO_PUBLIC_E2E=1: the e2e/sign-in link, the stand-in camera) never reach a store build:
+  # two cleared iOS exports, production-aws exactly as its profile bakes it (none of the hooks) and the E2E one (all of them, so
+  # the first isn't passing only because they went missing). scripts/check-e2e-stripped.mjs; Metro only, so no Mac needed.
+  e2e-stripped:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: node scripts/check-e2e-stripped.mjs
+
   media-copy:
     needs: changes
     if: needs.changes.outputs.tools == 'true'
@@ -246,7 +268,7 @@ jobs:
 
   checks:
     if: always()
-    needs: [changes, secrets, infra, convex, voice, pipeline, api, web, media-copy]
+    needs: [changes, secrets, infra, convex, voice, pipeline, api, web, e2e-stripped, media-copy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

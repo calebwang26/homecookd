@@ -3,7 +3,8 @@
 //   1. production-aws, exactly as eas.json's profile bakes it (no app/.env): must hold none of MARKS;
 //      it then also goes through check-app-export.mjs, which refuses that mark itself.
 //   2. the same with EXPO_PUBLIC_E2E=1 (and a clip URL): must hold them all (so 1 isn't passing only because the hooks went missing).
-//   node scripts/check-e2e-stripped.mjs            about 3 minutes; needs app/node_modules
+//   node scripts/check-e2e-stripped.mjs            about 1–3 minutes; needs app/node_modules
+// CI runs it on every PR that changes app/ or this check's scripts (ci.yml, job e2e-stripped).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
