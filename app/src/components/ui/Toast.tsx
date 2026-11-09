@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, tabBar } from '@/theme/tokens';
 
+import { Appear } from './Appear';
 import { haptic } from './haptics';
 import { CheckIcon, CloseIcon } from './icons';
 import { Txt } from './Txt';
@@ -84,8 +85,12 @@ export function useToast(): Pick<Ctx, 'show' | 'hide'> {
   return ctx ? { show: ctx.show, hide: ctx.hide } : noop;
 }
 
-/** Where toasts render. Mount one inside any native overlay (BottomSheet does this for you). */
-export function ToastViewport({ bottom = 32, position = 'bottom' }: { bottom?: number; position?: 'top' | 'bottom' }) {
+/**
+ * Where toasts render. Mount one inside any native overlay (BottomSheet does this for you). `inSheet`: inside a
+ * sheet's native Modal the toast fades in with Appear and leaves without a fade: an `entering` or `exiting`
+ * animation cut short in there can freeze the screen on iOS (Appear.tsx).
+ */
+export function ToastViewport({ bottom = 32, position = 'bottom', inSheet = false }: { bottom?: number; position?: 'top' | 'bottom'; inSheet?: boolean }) {
   const ctx = useContext(ToastContext);
   const id = useId();
   const insets = useSafeAreaInsets();
@@ -94,26 +99,38 @@ export function ToastViewport({ bottom = 32, position = 'bottom' }: { bottom?: n
   useEffect(() => register?.(id), [register, id]);
   if (!ctx || ctx.activeViewport !== id || !ctx.current) return null;
   const t = ctx.current;
+  const place = [
+    styles.toast,
+    position === 'top' ? { marginTop: insets.top + 12 } : { marginBottom: bottom + Math.max(insets.bottom - 24, 0) },
+  ];
+  const content = (
+    <>
+      <View style={[styles.disc, t.tone === 'error' ? { backgroundColor: colors.danger } : null]}>
+        {t.icon ??
+          (t.tone === 'error' ? <CloseIcon size={14} strokeWidth={3.2} color={colors.card} /> : <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />)}
+      </View>
+      <Txt variant="label" size={15} weight={600} color={colors.card} numberOfLines={2} style={styles.msg}>
+        {t.message}
+      </Txt>
+    </>
+  );
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.layer, position === 'top' ? styles.layerTop : null]}>
-      <Animated.View
-        key={t.id}
-        entering={reduce ? FadeIn.duration(150) : Platform.OS === 'web' ? FadeInDown.duration(220) : customRise}
-        exiting={FadeOut.duration(180)}
-        accessibilityLiveRegion="polite"
-        accessibilityRole="alert"
-        style={[
-          styles.toast,
-          position === 'top' ? { marginTop: insets.top + 12 } : { marginBottom: bottom + Math.max(insets.bottom - 24, 0) },
-        ]}>
-        <View style={[styles.disc, t.tone === 'error' ? { backgroundColor: colors.danger } : null]}>
-          {t.icon ??
-            (t.tone === 'error' ? <CloseIcon size={14} strokeWidth={3.2} color={colors.card} /> : <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />)}
-        </View>
-        <Txt variant="label" size={15} weight={600} color={colors.card} numberOfLines={2} style={styles.msg}>
-          {t.message}
-        </Txt>
-      </Animated.View>
+      {inSheet ? (
+        <Appear key={t.id} duration={150} accessibilityLiveRegion="polite" accessibilityRole="alert" style={place}>
+          {content}
+        </Appear>
+      ) : (
+        <Animated.View
+          key={t.id}
+          entering={reduce ? FadeIn.duration(150) : Platform.OS === 'web' ? FadeInDown.duration(220) : customRise}
+          exiting={FadeOut.duration(180)}
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          style={place}>
+          {content}
+        </Animated.View>
+      )}
     </View>
   );
 }

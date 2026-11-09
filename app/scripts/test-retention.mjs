@@ -1030,6 +1030,32 @@ await test('sheets: a sheet created already open waits while another sheet is up
   assert.match(readFileSync(join(root, 'src/components/messages/MembersSheet.tsx'), 'utf8'), /props\.onClose\(\);\n\s+setInvite/);
 });
 
+await test('sheets: no entering/exiting/layout animation inside a sheet (iOS freeze, Copy link, Nov 8)', async () => {
+  // Reanimated's layout animations run in the native mounting layer. Inside a sheet's Modal on iOS, Copy link's
+  // spinner left mid-fade and the screen stopped redrawing while the app kept running. Sheets fade with Appear.
+  const read = (f) => readFileSync(join(root, f), 'utf8');
+  const layoutAnim = /\b(entering|exiting|layout)=\{/;
+  for (const f of [
+    'src/components/share/RoundTarget.tsx',
+    'src/components/share/ShareSheet.tsx',
+    'src/components/share/ExternalRow.tsx',
+    'src/components/profiles/AddFamilySheet.tsx',
+    'src/components/profiles/AddPhonelessSheet.tsx',
+    'src/components/profiles/MoveRequestPrompt.tsx',
+    'src/components/messages/MembersSheet.tsx',
+    'src/components/messages/AskSheet.tsx',
+    'src/components/record/PreRecordSheet.tsx',
+    'src/components/record/LanguagePicker.tsx',
+    'src/components/ui/BottomSheet.tsx',
+  ]) assert.doesNotMatch(read(f), layoutAnim, f);
+  const updates = read('src/components/parent/UpdatesCard.tsx');
+  const sheet = updates.slice(updates.indexOf('<BottomSheet'), updates.indexOf('</BottomSheet>'));
+  assert.ok(sheet.length > 0);
+  assert.doesNotMatch(sheet, layoutAnim, 'UpdatesCard: the all-updates sheet');
+  assert.match(read('src/components/ui/BottomSheet.tsx'), /<ToastViewport position="top" inSheet \/>/);
+  assert.match(read('src/components/ui/Toast.tsx'), /\{inSheet \? \(\n\s+<Appear key=\{t\.id\}/);
+});
+
 await test('push: a recording that sends itself from the done screen asks like Send does', async () => {
   // v2's phone recording never opens the Send screen (DoneView sends it), so the cook was never asked
   // (build 11 phone run, Nov 3; build 6 too).
