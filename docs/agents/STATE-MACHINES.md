@@ -1,0 +1,45 @@
+# State machines
+
+Every lifecycle in the codebase, explicit or still implicit, with its owner and its state. Rule and pattern:
+`docs/agents/memory/state-machines.md`. Add a row when you make one explicit; keep the file and test columns true.
+
+Status: **implicit** (flags, timers, strings; the survey of Nov 8, 2026 found it), **explicit** (table + transition
+test merged), **retired** (code goes with the old stack).
+
+| # | Machine | Owner | Where | Status | Tier |
+|---|---|---|---|---|---|
+| 1 | Sheet hand-offs (BottomSheet, share, toasts, root sheets) | App screens | `app/src/components/ui/BottomSheet.tsx` + ~20 callers | implicit | 1 |
+| 2 | Job lifecycle, queue side (SQS receives vs attempts, pauses, sweep) | AWS backend | `pipeline/queue_worker.py`, `queue_db.py`, `api/src/modules/jobs/` | implicit | 1 |
+| 3 | Memories opt-in at publish | AWS backend | `pipeline/queue_db.py` finish, `api/src/modules/recipes/writes.ts` | implicit | 1 |
+| 4 | Recording screen | App screens | `app/src/app/recording.tsx`, `lib/live/quietRecording.ts`, `components/record/filming.ts`, `useInAppCamera.ts` | implicit | 2 |
+| 5 | Send → upload → job → resend | App screens | `app/src/app/send.tsx`, `components/record/sendDraft.ts`, `lib/uploads.ts`, `lib/unsentRecordings.ts`, `useResendUnsent.ts` | implicit | 2 |
+| 6 | Mom's answer page (mic, upload, finish, fill) | App Store, web & builds | `web/src/components/mom/QuestionScreen.tsx`, `MomApp.tsx`, `dish/useRecorder.ts` | implicit | 1 |
+| 7 | Claude batch calls (cancel, spend, fallback) | Pipeline & recipes | `pipeline/claude.py`, `process.py`, `extract_claude.py` | implicit | 1 |
+| 8 | Account deletion, outside purge | AWS backend | `api/src/modules/accounts/deletion.ts`, `pipeline/account_purge.py` | implicit | 2 |
+| 9 | Library loading (`loaded` vs family rows) | App screens | `app/src/lib/recipes.ts`, `app/kid/home.tsx`, `app/parent/recipes.tsx` | implicit | 1 |
+| 10 | Pushes (`push_log`) | AWS backend | `api/src/modules/messages/push.ts`, `pushData.ts` | implicit | 2 |
+| 11 | Dinners, join requests, swaps, reports | AWS backend | `api/src/modules/community/` | implicit | 2 |
+| 12 | Spend ledger, queue side | Pipeline & recipes | `pipeline/queue_db.py` record_calls, `process.py` usage.json | implicit | 2 |
+| 13 | Session gate and held links | App screens | `app/src/lib/session.tsx`, `app/_layout.tsx`, `components/signin/handoff.ts` | implicit | 3 |
+| 14 | Kid's card creation and share | App Store, web & builds | `web/src/components/miss/MissApp.tsx`, `AskSheet.tsx`, `CardScreen.tsx` | implicit | 2 |
+| 15 | Dish ask (card → asked → answered → merged) | AWS backend | `api/src/modules/dish/` | implicit | 3 |
+| 16 | Questions and share asks | AWS backend | `api/src/modules/messages/questions.ts`, `shareAsks.ts` | implicit | 3 |
+| 17 | Invites, join links, move requests | AWS backend | `api/src/modules/accounts/invites.ts`, `moves.ts` | move requests explicit; invites implicit | 3 |
+| 18 | Sessions and devices | AWS backend | `api/src/auth.ts`, `accounts/data.ts` | implicit | 3 |
+| 19 | Outbox and scheduled queue | AWS backend | `api/src/outbox.ts` | implicit | 3 |
+| 20 | Pending sends, file ledger, recap schedule | AWS backend | `api/src/modules/messages/activity.ts`, `files`, `retention.ts` | implicit | 3 |
+| 21 | Record screen before filming | App screens | `app/src/app/record.tsx`, `components/record/usePickVideos.ts` | implicit | 3 |
+| 22 | Chat optimistic sends | App screens | `app/src/lib/messaging.ts` | implicit | 3 |
+| 23 | Push asks and registration | Notifications & linking | `app/src/lib/push.ts`, `components/push/PushAskSheet.tsx` | implicit | 3 |
+| 24 | Sign-in steps | App screens | `app/src/app/join.tsx` | implicit | 3 |
+| 25 | Hold-to-talk, voice request, stopped-early card | App screens | `app/src/components/postcard/HoldToTalk.tsx`, `app/request/voice.tsx` | implicit | 3 |
+| 26 | Kid cook mode controller | App screens | `app/src/lib/cookingLogic.ts` | explicit (tested with a fake clock) | — |
+| 27 | Shared media player | App screens | `app/src/lib/media.ts` | explicit phase + side flags | 3 |
+| 28 | homie live hook | Voice & homie | `app/src/lib/live/homie.ts`, `useWalkie.ts` | implicit, unused while homie is off | — |
+| 29 | Queue job attempt (child process, result kinds) | Pipeline & recipes | `pipeline/queue_job.py`, `ChildRunner` | explicit enough (fenced, tested) | — |
+| 30 | Disk caches and `recipe.json` as done marker | Pipeline & recipes | `pipeline/process.py`, `shorten.py`, `align.py` | implicit | 2 |
+| 31 | Clip-reorder swap | Pipeline & recipes | `pipeline/order.py` | explicit (two-phase, restore) | — |
+| 32 | Convex-mode worker and GCS legacy mode | — | `pipeline/worker.py` | retired with the old stack | — |
+| 33 | Kid's dish box (voice note, dictation) | App Store, web & builds | `web/src/components/miss/AskScreen.tsx` | implicit | 3 |
+| 34 | Card page polling and edits | App Store, web & builds | `web/src/components/miss/CardScreen.tsx` | implicit | 3 |
+| 35 | Dinner invite, invite page, shared recipe, clip playback | App Store, web & builds | `web/src/components/dinner-invite/`, `invite/`, `recipe-web/`, `dish/parts.tsx` | implicit | 3 |

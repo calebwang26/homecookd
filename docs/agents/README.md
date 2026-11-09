@@ -92,3 +92,4 @@ Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "
 | iOS Simulator tool | `xcrun simctl` (`openurl` for Expo Go deep links) |
 | `humanizer` skill | `cp -R ~/.claude/skills/humanizer ~/.codex/skills/` |
 - `repo-public.md`: Nov 8: the repo is public for unlimited Actions minutes; history scanned clean; nothing private may be committed, gitignored secrets stay untracked.
+- `state-machines.md`: Nov 8, 2026: every lifecycle made explicit, one machine per PR, with a transition table and a real test; the list is `docs/agents/STATE-MACHINES.md`.
