@@ -28,7 +28,7 @@ const TITLE = 'Our family table';
 
 export default function KidRecipes() {
   const { me, cooks, profiles, isLearner } = useSession();
-  const { entries } = useLibrary();
+  const { entries, familyChecked } = useLibrary();
   const fav = useFavorites();
   const stats = useRecipeStats();
   const ids = useMemo(() => entries.map((e) => e.id), [entries]);
@@ -113,6 +113,7 @@ export default function KidRecipes() {
               filter={filter}
               onFilter={onFilter}
               onOpen={onOpen}
+              checked={familyChecked}
               kitchens={counts}
               profiles={profiles}
               meId={me?.id}

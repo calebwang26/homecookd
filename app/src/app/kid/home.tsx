@@ -14,7 +14,7 @@ import { RecipeDeck } from '@/components/kid-home/RecipeDeck';
 import { AskSheet } from '@/components/messages';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { cookOrder } from '@/components/recipes/RecipeList';
-import { ActionButton, EmptyState, LargeHeader, listEnter, ScreenWash, StickyHeader, useScrollY } from '@/components/ui';
+import { ActionButton, EmptyState, LargeHeader, listEnter, ScreenWash, Skeleton, StickyHeader, useScrollY } from '@/components/ui';
 import { openRecipe } from '@/lib/navigation';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -27,7 +27,7 @@ const DECK_MIN = 260;
 
 export default function KidHome() {
   const { status, me, cooks } = useSession();
-  const { entries } = useLibrary();
+  const { entries, familyChecked } = useLibrary();
   const dishes = useMemo(() => cookOrder(entries, cooks).flatMap((g) => g.entries), [entries, cooks]);
   const { scrollY, onScroll } = useScrollY();
   const [asking, setAsking] = useState(false);
@@ -73,6 +73,11 @@ export default function KidHome() {
               />
             </Animated.View>
           </>
+        ) : !familyChecked ? (
+          // The family's own dishes haven't answered yet: never "No recipes yet" before they could (lib/libraryLoad).
+          <View accessible accessibilityLabel="Loading recipes" style={[styles.gutter, styles.deck]}>
+            <Skeleton height={DECK_MIN} radius={28} />
+          </View>
         ) : (
           <EmptyState
             title="No recipes yet"

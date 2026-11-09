@@ -42,7 +42,7 @@ function matches(title: string, words: string[]): boolean {
 export default function ParentRecipes() {
   const { me, cooks, profiles } = useSession();
   const { t } = useWords();
-  const { entries, loaded } = useLibrary();
+  const { entries, loaded, familyChecked } = useLibrary();
   const fav = useFavorites();
   const stats = useRecipeStats();
   const [filter, setFilter] = useState<RecipeFilter>(EVERYONE);
@@ -140,7 +140,7 @@ export default function ParentRecipes() {
               )}
             </View>
           </>
-        ) : loaded ? (
+        ) : loaded && familyChecked ? (
           <Animated.View entering={listEnter(0)} style={styles.col}>
             <RecordFirstRow />
             {sendable.dishes.length ? <SendRecipeButton dishes={sendable.dishes} mine={sendable.mine} /> : null}
