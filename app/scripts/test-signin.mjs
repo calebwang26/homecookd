@@ -58,6 +58,8 @@ const FAKES = {
 registerHooks({
   resolve(spec, ctx, next) {
     if (FAKES[spec]) return { url: FAKES[spec], shortCircuit: true };
+    // '@/lib/api' and the like (components/signin/invite.ts): src/<path>.ts.
+    if (spec.startsWith('@/') && existsSync(join(root, 'src', `${spec.slice(2)}.ts`))) return next(pathToFileURL(join(root, 'src', `${spec.slice(2)}.ts`)).href, ctx);
     if (spec.startsWith('.') && ctx.parentURL?.includes('/src/lib/') && !/\.[a-z]+$/.test(spec)) {
       return next(pathToFileURL(join(dirname(fileURLToPath(ctx.parentURL)), `${spec}.ts`)).href, ctx);
     }
@@ -438,6 +440,23 @@ await test('every Apple step is the system button; Google shows on Android only'
   for (const f of ['components/signin/JoinCard.tsx', 'components/signin/MoveCard.tsx']) assert.match(src(f), /<ProviderButtons /, f);
   // "Join <B>" is a plain button; the sign-in shows only once they tapped it.
   assert.match(src('components/signin/MoveCard.tsx'), /confirmed \? \(\s*<ProviderButtons[\s\S]*?\) : \(\s*<ActionButton/);
+});
+
+// A family link that doesn't exist (the CI simulator journey, Nov 9): 1.1's client puts the app's own words for the
+// api's code in `message` ("That isn't here anymore."), so the code decides, and the card says the link doesn't work.
+const INV = await import(pathToFileURL(join(root, 'src/components/signin/invite.ts')).href);
+await test('invite peek: a missing link is "doesn\'t work" by its code, never "our side"', () => {
+  const missing = { state: 'missing', sentence: 'That invite link doesn’t work.' };
+  const aws404 = new A.ApiError('That isn’t here anymore.', 404, 'http', { error: 'not_found', code: 'not_found', requestId: 'r1' });
+  assert.deepEqual(INV.peekFailed(aws404), missing, '1.1: 404 not_found');
+  const old404 = new A.ApiError("That invite link doesn't work.", 404, 'http', { error: "That invite link doesn't work." });
+  assert.deepEqual(INV.peekFailed(old404), missing, "1.0: the server's own sentence");
+  assert.equal(INV.peekFailed(new A.ApiError('Gone.', 404, 'http', { code: 'other' })).state, 'unreachable', 'another 404 is not a missing link');
+  const offline = INV.peekFailed(new A.ApiError('', 0, 'network'));
+  assert.equal(offline.state, 'unreachable');
+  assert.notEqual(offline.sentence, INV.peekFailed(new Error('boom')).sentence, 'offline says so, not "our side"');
+  assert.equal(INV.peekFailed(new A.ApiError('Too many.', 429, 'http', { code: 'rate_limited' })).state, 'unreachable');
+  assert.equal(INV.peekFailed(new Error('boom')).state, 'unreachable', 'not an ApiError: our side');
 });
 
 console.log(`\n${passed} passed`);
