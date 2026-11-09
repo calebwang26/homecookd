@@ -1,6 +1,6 @@
 // Fresh Hearts & kitchen data for the cook's screens (RETENTION-HANDOFF 3.5 + 3.6, PR 4).
 //
-//   const { stats } = useDishStats(myIds);   // parent/recipes.tsx, my-recipe/[id].tsx (ids: recipesByCook(entries, me.name))
+//   const { stats } = useDishStats(myIds);   // parent/recipes.tsx, my-recipe/[id].tsx (ids: recipesByCook(entries, me))
 //   const { hearts } = useHeartsRecent({ enabled: isCook });   // the updates card on the cook's Home
 //
 // One small module store per (person, ids), shared by every screen, like components/recipes/stats.ts,

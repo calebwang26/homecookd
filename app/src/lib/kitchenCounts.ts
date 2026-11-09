@@ -3,15 +3,16 @@
 // imports) so scripts/test-retention.mjs runs them under Node.
 //
 //   kitchenCounts(entries, profiles, stats.byId, me.id)  // kid: [{cookId, cookName, total, cooked, complete, …}]
-//   cookMirror(recipesByCook(entries, me.name), dishStats, profiles, me.id)  // dishStats: GET /dish-stats
+//   cookMirror(recipesByCook(entries, me), dishStats, profiles, me.id)  // dishStats: GET /dish-stats
 //   mirrorLine(mirror)                                   // "Leo can cook 4 of your 7. Maya, 2."
 //   madeItMilestone({ entries, profiles, meId, before: stats.byId, recipeId })  // before the refresh
 //   madeItTitle(milestone, res.eventSaved, 'You made it')  // the SuccessBurst title, once cooked() answers
 //
 // What counts: a family cook's real recordings. Sample dishes (synthetic words) and YouTube dishes
 // (a stranger's kitchen) never count, and neither do my own dishes. A dish's cook is the family
-// profile whose name matches its cook_name, case-insensitively: the same rule as cookProfile() and
-// recipesByCook() in lib/recipes.ts (repeated here so this file stays importable under Node).
+// profile whose name matches its cook_name, case-insensitively: the same rule as cookProfile() in
+// lib/recipes.ts (repeated here so this file stays importable under Node). The cook's own dishes
+// (cookMirror's) come from recipesByCook(), which goes by the dish's cook id first (cookedBy).
 // Counts are shown only to the two people they are about: never compared across cooks or kids.
 import type { Profile, RecipeStat } from './api';
 import type { LibraryEntry } from './types';
@@ -106,7 +107,7 @@ export type MirrorPerson = { profileId: string; name: string; cooked: number };
 export type CookMirror = { total: number; people: MirrorPerson[] };
 
 /**
- * From my own dishes (recipesByCook(entries, me.name)) and GET /dish-stats: how many of my counted
+ * From my own dishes (recipesByCook(entries, me)) and GET /dish-stats: how many of my counted
  * dishes each other family member has cooked. Kids (learners) first, then most cooked; nobody at 0.
  * A remembered (memorial) person is never in it: "Grandma, 2." would speak of them as present
  * (guardrail 2).

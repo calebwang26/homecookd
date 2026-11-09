@@ -4,7 +4,7 @@
 //   fetchHeartsRecent(since?)  GET /hearts/recent        new hearts on my dishes, newest first
 //
 // The server answers only for dishes whose cook is the acting person (counts go only to the dish's
-// cook), so pass my own recipe ids (recipesByCook(entries, me.name)); anything else just comes back
+// cook), so pass my own recipe ids (recipesByCook(entries, me)); anything else just comes back
 // missing. Every dish of mine that was asked for comes back, zeros included; the UI hides zero parts.
 //
 // The calls go through their own small fetch so lib/api.ts stays as it is (the same pattern as

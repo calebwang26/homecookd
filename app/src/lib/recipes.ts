@@ -17,7 +17,7 @@
 //   const { entries, loading } = useLibrary();
 //   const { recipe, loading } = useRecipe(id);
 //   useStoriesWithheld(id)    true when the dish's stories and tips are kept from whoever is signed in
-//   recipesByCook(entries, 'Dad'), stepIngredients(recipe, step), stepClip(step), firstQuote(recipe),
+//   recipesByCook(entries, me), stepIngredients(recipe, step), stepClip(step), firstQuote(recipe),
 //   cookProfile(recipe, profiles)
 //
 // Results are cached in memory for the session, so moving between screens never refetches or
@@ -30,6 +30,7 @@ import { bundledLibrary, bundledRecipes } from './bundled';
 import { loadHiddenIds } from './deletes';
 import { FAMILY_WAIT_MS, familyChecked, libraryLoadMachine, type LibraryLoadEvent, type LibraryLoadState } from './libraryLoad';
 import {
+  cookedBy,
   familyEntries,
   mergeLibrary,
   sharedAdded,
@@ -397,7 +398,7 @@ export function reapplyHidden() {
  * unless they were someone else's, which clears them, and until rows come for `key` a dish that isn't
  * public loads without its stories (storiesWithheld). Exported for scripts/test-library.mjs.
  */
-export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecipe[] | null, people: readonly Pick<Profile, 'name' | 'relation'>[] = []) {
+export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecipe[] | null, people: readonly Pick<Profile, 'id' | 'name' | 'relation'>[] = []) {
   if (key !== libState.loadKey) sendLoad(key ? 'signIn' : 'signOut', key);
   if (key && rows && (libState.loadState === 'waiting' || libState.loadState === 'gaveUp')) sendLoad('rows', key);
   if (!rows && family.key === key) return;
@@ -604,10 +605,9 @@ export function useRecipes(ids: string[]): Record<string, Recipe> {
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
-/** Library entries cooked by `name` (case-insensitive), in library order. */
-export function recipesByCook(entries: LibraryEntry[], name: string | null | undefined): LibraryEntry[] {
-  const n = norm(name);
-  return n ? entries.filter((e) => norm(e.cook_name) === n) : [];
+/** The library entries `cook` cooked, in library order: by cook id where the dish has one, else by name (cookedBy). */
+export function recipesByCook(entries: LibraryEntry[], cook: Pick<Profile, 'id' | 'name'> | null | undefined): LibraryEntry[] {
+  return cook ? entries.filter((e) => cookedBy(e, cook)) : [];
 }
 
 /** Library entries grouped by cook, in first-seen order: [{cook, relation, entries}]. */
