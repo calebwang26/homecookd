@@ -8,13 +8,15 @@
 //   Not now              nothing is sent; the action doesn't start (closing the sheet is the same)
 // Mounted once in app/_layout (AiConsentHost), above every screen. On a small phone the words scroll
 // under the two buttons, which always stay on screen.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { ActionButton, BottomSheet, ChevronDownIcon, ChevronUpIcon, PressableScale, Txt } from '@/components/ui';
+import { ActionButton, BottomSheet, ChevronDownIcon, ChevronUpIcon, PressableScale, Txt, useSheetsUp } from '@/components/ui';
 import { answerAiConsent, useAiConsentAsking } from '@/lib/aiConsent';
 import { AWS_ON } from '@/lib/aws/config';
 import { openPage, PRIVACY_URL } from '@/lib/links';
+import { useMachine } from '@/lib/machine';
+import { rootHostMachine } from '@/lib/sheets/machine';
 import { useWords } from '@/lib/words/useWords';
 import type { WordKey } from '@/lib/words/words';
 import { colors, radii } from '@/theme/tokens';
@@ -37,7 +39,14 @@ export const AI_COMPANIES: { name: string; job: WordKey }[] = [
 
 export function AiConsentHost() {
   const asking = useAiConsentAsking();
-  return <AiConsentSheet visible={asking} onYes={() => void answerAiConsent(true)} onNotNow={() => void answerAiConsent(false)} />;
+  // Rendered at the root: it waits until no other sheet's Modal is up, as the push ask does (rootHostMachine).
+  const sheetsUp = useSheetsUp();
+  const [state, send] = useMachine(rootHostMachine, 'idle');
+  useEffect(() => send(asking ? 'want' : 'drop'), [asking, send]);
+  useEffect(() => {
+    if (state === 'waiting' && sheetsUp === 0) send('clear');
+  }, [state, sheetsUp, send]);
+  return <AiConsentSheet visible={state === 'showing'} onYes={() => void answerAiConsent(true)} onNotNow={() => void answerAiConsent(false)} />;
 }
 
 export function AiConsentSheet({ visible, onYes, onNotNow }: { visible: boolean; onYes: () => void; onNotNow: () => void }) {
