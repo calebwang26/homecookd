@@ -2283,6 +2283,41 @@ def test_postgres_the_final_save_is_all_or_nothing():
     assert ctx.job(job_id)["recipe_id"] is None and not ctx.outbox()
 
 
+def test_postgres_the_cooks_latest_memories_answer_wins():
+    """Decision 2 (docs/agents/STATE-MACHINES.md #3): her answer on the recipe itself always stands at publish; without one, the
+    recording's answer applies, read at publish rather than at the claim; with neither, the card keeps what it had (no)."""
+    ctx = _postgres()
+    keys = {"media_prefix": "z/", "recipe_json_key": "z/recipe.json", "cover_key": "z/poster.jpg"}
+
+    def recording(answer):
+        return ctx.admin.execute("""insert into recordings (family_id, cook_id, source, status, memories_opt_in)
+                                    values (%s, %s, 'phone', 'ended', %s) returning id""", (ctx.family, ctx.cook, answer)).fetchone()["id"]
+
+    def publish(recording_answer, recipe_answer, later_recording_answer="same", card=True):
+        rec = recording(recording_answer)
+        job_id = ctx.new_job(recipe={"media_prefix": None} if card else None)
+        ctx.admin.execute("update jobs set recording_id = %s where id = %s", (rec, job_id))
+        recipe_id = ctx.job(job_id)["recipe_id"]
+        if recipe_answer is not None:  # POST /v1/recipes/:id/memories-opt-in, while it processed
+            ctx.admin.execute("update recipes set memories_opt_in = %s, memories_opt_in_at = now() where id = %s", (recipe_answer, recipe_id))
+        claim = ctx.store.claim(job_id, qw.LEASE_S)
+        if later_recording_answer != "same":
+            ctx.admin.execute("update recordings set memories_opt_in = %s where id = %s", (later_recording_answer, rec))
+        assert ctx.store.finish(claim, queue_db.recipe_row(recipe_json()), keys, {}, None)
+        recipe_id = ctx.job(job_id)["recipe_id"]
+        return ctx.admin.execute("select memories_opt_in from recipes where id = %s", (recipe_id,)).fetchone()["memories_opt_in"]
+
+    assert publish(True, False) is False  # she said no on the recipe after yes while filming: no
+    assert publish(False, True) is True
+    assert publish(True, None) is True  # only the recording's answer
+    assert publish(False, None) is False
+    assert publish(None, None) is False  # never asked: the card's default
+    assert publish(None, None, later_recording_answer=True) is True  # read at publish, not at the claim
+    assert publish(True, False, later_recording_answer=True) is False  # her recipe answer still stands
+    assert publish(True, None, card=False) is True  # no card yet: the new row takes the recording's answer
+    assert publish(None, None, card=False) is False
+
+
 def test_postgres_refuses_a_url_where_a_key_goes():
     ctx = _postgres()
     job_id = ctx.new_job()
