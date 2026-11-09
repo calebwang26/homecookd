@@ -98,7 +98,20 @@ It deletes nothing still in use: a folder or file that a job, recipe, recording 
 
 After a delete, S3's versioning keeps the bytes 28 days, inside `/privacy`'s 30, and the CDN can serve a cached copy for up to a day (the media cache policy's default; the worker's files say an hour). **Nothing here reaches GCS:** while Convex is the source, `account_purge.py` deletes there. After the switch GCS's copies still have to go for as long as GCS exists (MEDIA-MIGRATION.md), and how AWS reaches Google is Caleb's call, so a deletion holding GCS links stays open until that's built.
 
-It tries again with waits doubling from 10 minutes to a day, and after 10 tries raises `AccountOutsidePurgeGaveUp`. A person restarts it with `retryOutside`. **This must be built before real data or the switch**, and `/privacy` promises depend on it.
+It tries again with waits doubling from 10 minutes to a day, and after 10 tries stops, writes `external_gave_up_at` and raises `AccountOutsidePurgeGaveUp`. The invariant sweep's `deletion_stalled` names it every 5 minutes until someone restarts it (below). **This must be built before real data or the switch**, and `/privacy` promises depend on it.
+
+### A deletion that stopped
+
+A deletion's stage is read from its row (`stageOf` in `deletion.ts`; Caleb, Nov 8, decision 7; `docs/agents/STATE-MACHINES.md` row 8): **purging** (`purged_at` null), **outside** (purged inside, the outside purge trying), **gave_up** (`external_gave_up_at`) and **done** (`external_purged_at`). `084_deletion_stages.sql`'s CHECK refuses the ones that can't be: done outside before inside, given up and done, the lists cleared before done. The purge inside the database is never given up: the hourly `accounts.sweep` restarts one with no batch for 30 minutes, every time.
+
+After fixing why it stopped (a Cartesia key, an S3 permission, a folder still in use), the team restarts it with a one-off task, as `reports.js` runs (COMMUNITY-MIGRATION.md, "Running it", with `RUN` below):
+
+```bash
+RUN='["node","dist/deletions.js","stalled"]'                 # purging with no batch for an hour, or given up outside: id, stage, attempts, the reason
+# RUN='["node","dist/deletions.js","retry","<deletionId>"]'  # starts it again now
+```
+
+`retry` sends a purge still inside the database a new message now. An outside purge, given up or still waiting, starts again with a fresh count of attempts, now, and `accounts.sweep` carries on from there. One that's done is left alone. It's safe to run twice. Exit codes are as `reports.js`'s: 0 done, 1 refused or failed (the reason is the first line), 2 wrong arguments (nothing ran). The task's log holds ids, stages, counts, times and the purge's short reason, never a name.
 
 **Also not reached, and on `account_purge.py` today:** Supabase's rows and buckets while they exist, GCS, `trash/` copies, the signer's `jobs/<id>.json`, the `library.json` rebuild, and copies on a worker's disk. **Moss:** `families.moss_sync_again` is set, and nothing reads it yet; Convex still tells Moss itself. **Dish's anonymous files** are swept whatever the deletion's status, so they aren't counted in it.
 

@@ -29,11 +29,13 @@ export type Deletion = {
   external_purged_at: Date | null;
   external_attempts: number;
   external_tried_at: Date | null;
+  external_gave_up_at: Date | null;
 };
 
 // The driver can't read an array of a domain, so the keys come back as plain text[].
 export const DELETION = `id, family_id, person_id, recipe_ids, job_ids, upload_keys::text[] as upload_keys, media_keys::text[] as media_keys, media_prefixes::text[] as media_prefixes,
-  media_urls_legacy, voice_clone_id, purged_at, purge_run_at, purge_restarts, requested_at, external_purged_at, external_attempts, external_tried_at`;
+  media_urls_legacy, voice_clone_id, purged_at, purge_run_at, purge_restarts, requested_at, external_purged_at, external_attempts, external_tried_at,
+  external_gave_up_at`;
 
 export type Step = { name: string } & (
   /** Rows changed, at most `max`, in a transaction of the purge's own. */

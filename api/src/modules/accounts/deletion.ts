@@ -1,6 +1,23 @@
 // "Delete my account" (App Store guideline 5.1.1(v); convex/account.ts, pipeline/account_purge.py). It refuses no one who can prove who they are, and once it's begun it can't be
 // undone by a failure: a blank tombstone and every way in end together in one transaction, the rest follows in batches, a schedule starts a purge that stopped, and the outside
 // purge reports on the same row. Every batch is safe to stop and repeat. Nothing here ever claims a file is gone when the sweep can't reach it (ACCOUNTS-MIGRATION.md).
+//
+// The account_deletions row is the machine (Caleb, Nov 8: decision 7; docs/agents/STATE-MACHINES.md row 8). Its stage is read from its columns (stageOf), and
+// 084_deletion_stages.sql's CHECK refuses the combinations that can't be.
+// state-machine-test: api/test/deletionMachine.test.ts
+//
+//   stage     purging -> outside -> done                 outside -> gave_up (the last attempt failed) -> outside (the team's retry)
+//   events    start (startDeletion)         -> purging, once per person: a repeat finds its row
+//             pass (runPurge)               purging -> outside, once a whole pass finds nothing left (and the sync holds none of her recipes)
+//             restart (restartPurges)       purging, no batch for PURGE_STUCK_MS -> purging, purge_restarts + 1, a new accounts.purge
+//             attempt (purgeOutside)        outside -> done | outside (external_attempts + 1, the next try later) | gave_up at MAX_OUTSIDE_ATTEMPTS;
+//                                           one run at a time (external_claimed_until). A stray message for one given up still finishes it
+//             due (accounts.sweep)          outside, its wait over -> a new accounts.outside
+//             retry (retryDeletion; the team runs node dist/deletions.js retry <id>)
+//                                           purging -> a new accounts.purge now; outside or gave_up -> outside, attempts 0, a new accounts.outside now
+//             clear (clearOldLists)         done, 60 days on -> its lists of ids and keys cleared (C5); the row stays as proof
+//   guards    every update names the stage it leaves; done is final; nothing gives up on the purge inside the database
+//   invariant a deletion is never purging for an hour, nor given up outside (platform/invariants.ts deletion_stalled)
 import * as Sentry from "@sentry/node";
 import { db, tx, type Queryable } from "../../db.js";
 import { enqueue } from "../../outbox.js";
@@ -26,6 +43,12 @@ const OUTSIDE_RETRY_MS = 10 * 60_000; // after a failure; doubles each time, up 
 export const LISTS_KEPT_DAYS = 60; // C5
 
 export const outsideWait = (attempts: number) => Math.min(OUTSIDE_RETRY_MS * 2 ** Math.max(0, attempts - 1), 24 * 3_600_000);
+
+export type Stage = "purging" | "outside" | "gave_up" | "done";
+
+/** The one reading of a deletion's columns as a stage. */
+export const stageOf = (d: Pick<Deletion, "purged_at" | "external_purged_at" | "external_gave_up_at">): Stage =>
+  d.external_purged_at ? "done" : !d.purged_at ? "purging" : d.external_gave_up_at ? "gave_up" : "outside";
 
 const alert = (name: string, tags: Record<string, string>) => {
   Sentry.captureException(Object.assign(new Error(name), { name }), { tags }); // named, because Sentry gets the type and never the text (sentry.ts)
@@ -230,7 +253,7 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
       // someone hears if it keeps stopping.
       const { rows: held } = await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [d.person_id]);
       if (held.length) return false;
-      await c.query(`update account_deletions set purged_at = now() where id = $1`, [deletionId]);
+      await c.query(`update account_deletions set purged_at = now() where id = $1 and purged_at is null`, [deletionId]);
       if (d.recipe_ids.length) await requestMossSync(c, d.family_id); // again at the end, for a recipe a worker published after the start
       await enqueue(c, { queue: "scheduled", payload: { task: "accounts.outside", deletionId }, requestId: trace.requestId });
       return true;
@@ -367,13 +390,24 @@ async function outsideOnce(d: Deletion & { purged_at: Date }, budgetMs: number):
   return tx(async (c) => {
     const current = await lockedDeletion(c, d.id);
     if (!current || current.external_purged_at) return "done" as const;
+    // outside (or gave_up, from a stray message) -> done
     if (!problems.length) {
-      await c.query(`update account_deletions set external_purged_at = now(), external_tried_at = now(), external_error = null where id = $1`, [d.id]);
+      await c.query(
+        `update account_deletions set external_purged_at = now(), external_tried_at = now(), external_error = null, external_gave_up_at = null
+          where id = $1 and purged_at is not null and external_purged_at is null`,
+        [d.id],
+      );
       return "done" as const;
     }
-    const attempts = current.external_attempts + 1;
-    await c.query(`update account_deletions set external_attempts = $2, external_tried_at = now(), external_error = $3 where id = $1`, [d.id, attempts, problems.join("; ").slice(0, 500)]);
-    if (attempts < MAX_OUTSIDE_ATTEMPTS) return "retry" as const;
+    // outside -> outside, or gave_up at the last attempt
+    const { rows } = await c.query(
+      `update account_deletions set external_attempts = external_attempts + 1, external_tried_at = now(), external_error = $2,
+              external_gave_up_at = case when external_attempts + 1 >= $3 then now() end
+        where id = $1 and purged_at is not null and external_purged_at is null
+        returning external_gave_up_at`,
+      [d.id, problems.join("; ").slice(0, 500), MAX_OUTSIDE_ATTEMPTS],
+    );
+    if (!rows[0]?.external_gave_up_at) return "retry" as const;
     alert("AccountOutsidePurgeGaveUp", { deletion_id: d.id });
     return "gave_up" as const;
   });
@@ -392,22 +426,58 @@ async function addCounts(deletionId: string, counts: Record<string, number>): Pr
   );
 }
 
-/** After fixing why it failed: tried on the schedule's next pass, with a fresh count. One already finished is left alone. A person runs this. */
-export async function retryOutside(deletionId: string): Promise<"queued" | "done" | "missing"> {
-  const { rows } = await db().query(`select external_purged_at from account_deletions where id = $1`, [deletionId]);
-  if (!rows[0]) return "missing";
-  if (rows[0].external_purged_at) return "done";
-  await db().query(`update account_deletions set external_attempts = 0, external_tried_at = null where id = $1 and external_purged_at is null`, [deletionId]);
-  return "queued";
+/**
+ * The team's retry, after fixing why it stopped (Caleb, Nov 8: decision 7). A purge inside the database gets a new message now; an outside purge, given up
+ * or still waiting, starts again with a fresh count, now. One that's done is left alone. Safe to run twice: each purge is. The team runs it as a one-off task:
+ * node dist/deletions.js retry <id> (api/src/deletions.ts).
+ */
+export async function retryDeletion(deletionId: string, requestId?: string): Promise<Stage | "missing"> {
+  return tx(async (c) => {
+    const d: Deletion | null = await lockedDeletion(c, deletionId);
+    if (!d) return "missing";
+    const stage = stageOf(d);
+    if (stage === "done") return stage;
+    if (stage === "purging") {
+      await c.query(`update account_deletions set purge_run_at = now() where id = $1 and purged_at is null`, [deletionId]);
+      await enqueue(c, { queue: "scheduled", payload: { task: "accounts.purge", deletionId }, requestId });
+      return stage;
+    }
+    // gave_up or outside -> outside, due now
+    await c.query(
+      `update account_deletions set external_attempts = 0, external_tried_at = null, external_gave_up_at = null
+        where id = $1 and purged_at is not null and external_purged_at is null`,
+      [deletionId],
+    );
+    await enqueue(c, { queue: "scheduled", payload: { task: "accounts.outside", deletionId }, requestId });
+    return "outside";
+  });
+}
+
+/** The deletions a person should look at: purging with no batch for an hour, or given up outside. The invariant sweep names the same (deletion_stalled). */
+export async function stalledDeletions(limit = 100): Promise<(Pick<Deletion, "id" | "requested_at" | "purge_restarts" | "external_attempts" | "external_tried_at"> & { stage: Stage; external_error: string | null })[]> {
+  const { rows } = await db().query(
+    `select ${DELETION}, external_error from account_deletions
+      where (purged_at is null and coalesce(purge_run_at, requested_at) < now() - interval '1 hour') or external_gave_up_at is not null
+      order by requested_at limit $1`,
+    [limit],
+  );
+  return rows.map((d: Deletion & { external_error: string | null }) => ({
+    id: d.id,
+    stage: stageOf(d),
+    requested_at: d.requested_at,
+    purge_restarts: d.purge_restarts,
+    external_attempts: d.external_attempts,
+    external_tried_at: d.external_tried_at,
+    external_error: d.external_error,
+  }));
 }
 
 /** The ones due another try. */
 export async function dueOutside(limit = 20): Promise<string[]> {
   const { rows } = await db().query(
     `select id, external_attempts, external_tried_at from account_deletions
-      where external_purged_at is null and purged_at is not null and external_attempts < $1
+      where external_purged_at is null and purged_at is not null and external_gave_up_at is null
       order by requested_at limit 200`,
-    [MAX_OUTSIDE_ATTEMPTS],
   );
   const now = Date.now();
   return rows
