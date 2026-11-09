@@ -1,5 +1,5 @@
 """Tests for a family recipe's public recipe.json (publish.without_memories, publish_recipe(family=True)),
-for keeping family recipes out of library.json and the app's bundle (rebuild_library), and for
+for keeping family recipes out of library.json (rebuild_library), and for
 scrub_family.py, which strips the ones published before.
 
     .venv/bin/python pipeline/test_publish.py        # plain runner (pytest is not in the venv)
@@ -154,25 +154,24 @@ def test_republished_elsewhere_it_stays_a_family_recipe():
         assert (folder / publish.FAMILY_MARK).exists()
 
 
-def test_family_recipes_stay_out_of_library_and_bundle():
+def test_family_recipes_stay_out_of_library_and_the_app_is_never_touched():
+    """Nov 8: the app ships no sample recipes, so rebuilding library.json (publish.py, the account purge) leaves
+    app/src/lib/bundled.ts and the tests' fixtures in app/assets/data as they are."""
     bucket = FakeBucket({"weed-steak/recipe.json": recipe_json("weed-steak"),
                          "soup-123456/recipe.json": recipe_json("soup-123456"),  # the worker's, before the mark
                          "trash/weed-cake/recipe.json": recipe_json("weed-cake")})
-    with out_folder("chili-abc123"), tempfile.TemporaryDirectory() as app:
+    data = publish.ROOT / "app" / "assets" / "data"
+    app = [publish.ROOT / "app" / "src" / "lib" / "bundled.ts", data / "library.json",
+           *sorted((data / "recipes").glob("*.json"))]
+    before = {f: f.read_bytes() for f in app}
+    with out_folder("chili-abc123"):
         publish.publish_recipe("chili-abc123", bucket=bucket, family=True)
         (publish.OUT / "soup-123456").mkdir()
         (publish.OUT / "soup-123456" / publish.FAMILY_MARK).touch()  # only on the machine that ran the worker
-        data = Path(app) / "data"
-        (data / "recipes").mkdir(parents=True)
-        (data / "recipes" / "chili-abc123.json").write_text(recipe_json("chili-abc123"))  # bundled before
-        with patched(publish, APP_DATA=data, BUNDLED_TS=Path(app) / "bundled.ts"):
-            entries = publish.rebuild_library(bucket)
-        assert [e.id for e in entries] == ["weed-steak"]
-        assert [e["id"] for e in json.loads(bucket.uploaded["library.json"])] == ["weed-steak"]
-        assert [e["id"] for e in json.loads((data / "library.json").read_text())] == ["weed-steak"]
-        assert [p.stem for p in (data / "recipes").glob("*.json")] == ["weed-steak"]
-        bundled = (Path(app) / "bundled.ts").read_text()
-        assert "'weed-steak'" in bundled and "chili" not in bundled and "soup" not in bundled
+        entries = publish.rebuild_library(bucket)
+    assert [e.id for e in entries] == ["weed-steak"]
+    assert [e["id"] for e in json.loads(bucket.uploaded["library.json"])] == ["weed-steak"]
+    assert {f: f.read_bytes() for f in app} == before
 
 
 def scrub_bucket() -> FakeBucket:
