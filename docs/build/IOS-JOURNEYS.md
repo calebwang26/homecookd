@@ -262,11 +262,19 @@ signed in to that family.
   open-link.yaml's retry never runs. 0 certificate FAILs. Seen in #473's run 42847823481: attempt 1 journey 2, attempt
   2 journeys 2 and 0. SpringBoard logged the request within 30 ms, then took 19.3, 1.8 and 4.0 s to start the open,
   and the app got the link 53, 15.8 and 21.5 s later and showed the right screen. So the link lands late, and only
-  simctl's 10 s timeout fails the journey. **Lead (the Master Agent, unproven):** both attempts' trust gate had
-  restarted trustd ("Safari answered on try 2 of 4, trustd restarted 1 times", free after 188 and 191 s); about nine
-  runs without a restart had 0 failed opens out of 22. Time since launch doesn't explain it (failing opens came 22–49
-  s after launch, passing ones 13–15 s). Checking whether a trustd restart leaves SpringBoard slow, and reporting an
-  `openLink` that throws while the link lands, are queued as CI work after journey 4.
+  simctl's 10 s timeout fails the journey. 42851642925 (journey 4: the app got it at +16.4 s) had a clean gate with 0
+  trustd restarts, so a restart isn't needed for it (the Master Agent withdrew that lead). All the failed opens fell
+  between 15:58 and 16:26 UTC on Nov 10, while GitHub said macOS arm64 runners were under capacity pressure: a guess at
+  most. An `openLink` that throws while the link lands is queued as its own CI PR (`claude/openlink-lands`).
+- **"Copied" lasts 2 s, and an iOS tap waits for a still screen first** (Nov 10, not a simulator fault: a race in
+  journey 3's check). ExternalRow shows "Copied" (label "Link copied") for `COPIED_MS` = 2000 ms. On iOS, Maestro's
+  settle wait after every tap is a fixed 3 s check that the screen has stopped changing (`waitUntilScreenIsStatic`,
+  IOSDriver.kt:505 and :694, Maestro 2.11). A flow's `waitToSettleTimeoutMs` applies only after that, so it can't
+  shorten the first look (#477 tried, and was closed). The button's own animations keep the screen moving about 1.5 s,
+  so the first look after the copy comes at about +1.5–2 s: +1.62, 1.68, 1.82, 1.84 and 1.61 s in passing runs, and
+  2.03 s in 42856745720, which failed with the copy done (pasteboard write completed). The fix is a longer `COPIED_MS`
+  (App screens & recording), which keeps the journey on the motion path phones run and still proves the copy. Until it
+  merges, a red journey 3 at "Copied" is this race: check the first look's offset in its kept log.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
