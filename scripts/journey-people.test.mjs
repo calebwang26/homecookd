@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { appLink, DELETE_STEP, GH_WAITS_MS, gh, idsFor, leftovers, remove, SEED_STEP, setup, signIn } from './journey-people.mjs';
+import { appLink, DELETE_STEP, GH_WAITS_MS, gh, idsFor, leftovers, remove, SEED2_STEP, SEED_STEP, setup, signIn } from './journey-people.mjs';
 
 const dir = mkdtempSync(join(process.cwd(), '.journey-people-test-'));
 const json = (status, body) => ({ status, text: async () => JSON.stringify(body) });
@@ -25,6 +25,9 @@ function staging(answers) {
 test('ids come from the run alone, so a sweep can find them', () => {
   assert.deepEqual(idsFor(42664613421, 2), { cook: 'j42664613421-2-cook', kid: 'j42664613421-2-kid' });
   assert.match(idsFor(42664613421, 2).cook, /^[a-z0-9-]{1,40}$/); // staging's test_id rule
+  // The second set, for the journeys' second attempt: other people, found again the same way.
+  assert.deepEqual(idsFor(42664613421, 2, 2), { cook: 'j42664613421-2-r2-cook', kid: 'j42664613421-2-r2-kid' });
+  assert.match(idsFor(42664613421, 2, 2).cook, /^[a-z0-9-]{1,40}$/);
 });
 
 test("a family link becomes the app's own form", () => {
@@ -93,6 +96,10 @@ test('delete signs each in again and deletes, kid first, and never throws', asyn
   await remove('k', idsFor(9, 1), failing.f, (l) => warned.push(l));
   assert.equal(warned.length, 2);
   assert.match(warned[0], /^::warning .*could not delete Leo \(test\)/);
+
+  const second = [];
+  await remove('k', idsFor(9, 1, 2), f, (l) => second.push(l), ' (second attempt)');
+  assert.deepEqual(second, ['deleted Leo (test) (second attempt)', 'deleted Asha (test) (second attempt)']);
 });
 
 test('the sweep finds runs that seeded and never finished deleting', () => {
@@ -107,6 +114,17 @@ test('the sweep finds runs that seeded and never finished deleting', () => {
     run(6, []), // the journeys job didn't run (no app/ change)
   ]);
   assert.deepEqual(found, [idsFor(2, 1), idsFor(3, 1), idsFor(5, 1)]);
+});
+
+test("the sweep finds a second attempt's people too, once its seed started, and only then", () => {
+  const step = (name, status, conclusion) => ({ name, status, conclusion });
+  const run = (runId, steps) => ({ runId, attempt: 1, jobs: [{ name: 'journeys', steps }] });
+  const found = leftovers([
+    run(7, [step(SEED_STEP, 'completed', 'success'), step(SEED2_STEP, 'in_progress', null)]), // died mid re-seed
+    run(8, [step(SEED_STEP, 'completed', 'success'), step(SEED2_STEP, 'completed', 'skipped'), step(DELETE_STEP, 'queued', null)]), // no second attempt
+    run(9, [step(SEED_STEP, 'completed', 'success'), step(SEED2_STEP, 'completed', 'success'), step(DELETE_STEP, 'completed', 'success')]), // all deleted
+  ]);
+  assert.deepEqual(found, [idsFor(7, 1), { ...idsFor(7, 1, 2), round: 2 }, idsFor(8, 1)]);
 });
 
 test.after(async () => {
