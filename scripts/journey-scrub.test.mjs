@@ -35,6 +35,23 @@ test('X-Amz values outside a URL (a header, an encoded query) go too', () => {
   assert.equal(leftover(out), null);
 });
 
+test('a percent-encoded presigned URL (one URL logged inside another) loses its X-Amz values too', () => {
+  const enc = 'u=https%3A%2F%2Fb.s3.amazonaws.com%2Fk%3FX-Amz-Credential%3DASIAEXAMPLE%252F20261110%26X-Amz-Security-Token%3DIQoJsecret%26x-id%3DPutObject end';
+  assert.equal(leftover(enc), 'it still held an X-Amz value');
+  const out = scrub(enc);
+  assert.equal(out, 'u=https%3A%2F%2Fb.s3.amazonaws.com%2Fk%3FX-Amz-Credential%3D***%26X-Amz-Security-Token%3D***%26x-id%3DPutObject end');
+  assert.equal(leftover(out), null);
+  assert.equal(scrub('header x-amz-date%3A20261110T162914Z;'), 'header x-amz-date%3A***;');
+});
+
+test('leftover names what a text still holds, and passes a masked one', () => {
+  assert.equal(leftover(`key=${KEY}`, [KEY]), 'it still held a key or a link');
+  assert.equal(leftover('k?X-Amz-Date=1'), 'it still held an X-Amz value');
+  assert.equal(leftover('x-amz-security-token: IQoJ'), 'it still held an X-Amz value');
+  assert.equal(leftover('k%3FX-Amz-Credential%3DASIA'), 'it still held an X-Amz value');
+  assert.equal(leftover('key=*** X-Amz-Date=*** x-amz-security-token: *** X-Amz-Credential%3D***', [KEY]), null);
+});
+
 test('the exact values (keys, the link token, test ids) become ***, wherever they are', () => {
   const out = scrub(`Opening URL (homecookd://e2e/sign-in?key=${KEY}) and homecookd://i?t=${TOKEN} for j1-1-kid`, [KEY, TOKEN, 'j1-1-kid']);
   assert.equal(out, 'Opening URL (homecookd://e2e/sign-in?key=***) and homecookd://i?t=*** for ***');
@@ -58,6 +75,14 @@ test('scrubFile rewrites the log in place and says nothing', () => {
   assert.equal(scrubFile(f, [KEY]), null);
   const text = readFileSync(f, 'utf8');
   assert.doesNotMatch(text, new RegExp(`${KEY}|ASIA|IQoJ`));
+});
+
+test('a log that still holds a value after the scrub is deleted, not kept, and says why', () => {
+  // A value the mask itself contains: "*" becomes "***", which still holds "*". No real key looks like this, but it is
+  // the one way the masks can leave a value behind, so it proves the check after them deletes the file.
+  const f = log('a*b\n');
+  assert.equal(scrubFile(f, ['*']), 'dropped Record, film, send/device-simulator.log: it still held a key or a link');
+  assert.equal(existsSync(f), false);
 });
 
 test("it fails closed: a log it can't read is deleted, and says which", () => {

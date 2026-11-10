@@ -529,7 +529,7 @@ jobs:
               echo "::warning title=Journey files::dropped $(basename "$f"): it held a key or a link"; rm -f "$f"
             done
           done
-          { grep -rlIiE 'x-amz-[a-z0-9-]+(=|: *)[^*&[:space:]]' "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
+          { grep -rlIiE 'x-amz-[a-z0-9-]+(=|: *|%3[da])[^*&[:space:]]' "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
             echo "::warning title=Journey files::dropped $(basename "$f"): it held an X-Amz value"; rm -f "$f"
           done
       - name: Keep Maestro's screenshots and report

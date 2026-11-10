@@ -244,7 +244,8 @@ signed in to that family.
   journey keeps its files: its made-up link is no secret. Then any file still holding a device key or the token goes,
   with a warning.
 - **It fails closed (Master Agent, Nov 10).** `scripts/journey-scrub.mjs` (tested) masks each kept log in place: the
-  exact values, everything after "?" on any amazonaws.com address, and any X-Amz value. A presigned upload URL carries a
+  exact values, everything after "?" on any amazonaws.com address, and any X-Amz value, percent-encoded ones too
+  (`X-Amz-Credential%3D…`, a URL logged inside another). A presigned upload URL carries a
   temporary key id and session token. Run 42852281034 logged one in a failed PUT's error, cut short by iOS, and the
   mask must not depend on that. A log it can't read and rewrite, or that still holds a value afterwards, is deleted with
   a warning. Then a last check drops any file in the output still holding a key, the token or an unmasked X-Amz value.
