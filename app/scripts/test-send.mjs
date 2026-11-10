@@ -678,4 +678,37 @@ await test('Send again: the row uses it (PendingRecipes), through the launch\'s 
   assert.match(resend, /if \(inFlight\.has\(noteId\)\) return 'busy';/, 'and her tap one a launch is sending');
 });
 
+await test('a resend keeps its note sendable: the note\'s job is cleared between stopping the old job and the send; a by-hand failure goes back to the next pass; queued says On its way', () => {
+  const src = readFileSync(join(root, 'src/components/record/useResendUnsent.ts'), 'utf8');
+  const at = (s) => {
+    const i = src.indexOf(s);
+    assert.ok(i > 0, s);
+    return i;
+  };
+  const stop = at('if (job && !(await cancelLiveJob(job.id, cook.id))) {');
+  const clear = at('if (job) markUnsentJob(u.recordingId, null);');
+  const rows = at('for (const r of rowsOf(u)) {\n    cancelJobUploads(r.job_id);');
+  const send = at('await sendDraft({');
+  assert.ok(stop < clear && clear < rows && rows < send, 'stop the old job, clear the note\'s job, drop the rows, then send');
+  assert.match(src, /catch \(e\) \{\s*looked\.delete\(noteId\);[^\n]*\n\s*throw e;/, 'a failed tap is the next pass\'s to send');
+  assert.match(src, /if \(step === 'wait'\) return 'waiting';/);
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  assert.match(home, /if \(r === 'waiting' \|\| r === 'busy'\) toast\.show\(t\('parent\.send\.onItsWay'\)\);/, 'not a quiet tap');
+});
+
+await test('the give-up keeps a note a row of it shows (before it would drop it); a failed resend flags its note for its own row, and still fails', () => {
+  const src = readFileSync(join(root, 'src/components/record/useResendUnsent.ts'), 'utf8');
+  const at = src.indexOf("if (step === 'give-up') {");
+  assert.ok(at > 0, 'the give-up');
+  const giveUp = src.slice(at, src.indexOf('return step;\n  }', src.indexOf('dropUnsent(u.recordingId);', at)));
+  const keep = giveUp.indexOf('if (keepAfterGiveUp(u, rowsOf(u).length)) return step;');
+  assert.ok(keep > 0 && keep < giveUp.indexOf('dropUnsent(u.recordingId);'), 'kept while a row shows it, before it would go');
+  const tryAt = src.indexOf('  try {\n    await sendDraft({');
+  assert.ok(tryAt > 0, 'the send is in the try');
+  assert.match(src.slice(tryAt), /^ {2}try \{\n {4}await sendDraft\(\{[\s\S]*?\n {4}\}\);\n {2}\} catch \(e\) \{\n(\s*\/\/[^\n]*\n)*\s*markUnsentDidntSend\(u\.recordingId\);\n\s*throw e;\n {2}\}/, 'a failed send flags the note and still fails');
+  const recs = readFileSync(join(root, 'src/lib/unsentRecordings.ts'), 'utf8');
+  assert.match(recs, /save\(patchUnsent\(list, recordingId, jobPatch\(jobId\)\)\)/, 'a job made clears the flag');
+  assert.match(recs, /u\.recordingId === recordingId && !u\.jobId\)\) save\(patchUnsent\(list, recordingId, \{ didntSend: true \}\)\)/, 'flagged only with no job');
+});
+
 console.log(`\n${passed} passed`);

@@ -20,16 +20,26 @@ name: A fresh install, signed out, on the first screen
 - extendedWaitUntil:
     visible: ".*(Cook your family.s food|would like to paste).*"
     timeout: 60000
-# The pickup asks a moment after the screen is up.
-- extendedWaitUntil:
-    visible: ".*would like to paste.*"
-    timeout: 3000
-    optional: true
-- runFlow:
-    when:
-      visible: ".*would like to paste.*"
+# The pickup asks a while after the screen is up, sometimes long after: #483's run 42908446753 had the prompt 8 s after
+# the launch, past a single 3 s look, and it covered the first screen until the journey failed. So it's answered in
+# rounds: each waits up to 10 s for the prompt and answers it; a round with no prompt ends it (3 rounds at most).
+- evalScript: ${output.pasteQuiet = false}
+- repeat:
+    times: 3
+    while:
+      true: ${output.pasteQuiet !== true}
     commands:
-      - tapOn: ".*Don.t Allow Paste.*"
+      - evalScript: ${output.pasteQuiet = true}
+      - extendedWaitUntil:
+          visible: ".*would like to paste.*"
+          timeout: 10000
+          optional: true
+      - runFlow:
+          when:
+            visible: ".*would like to paste.*"
+          commands:
+            - evalScript: ${output.pasteQuiet = false}
+            - tapOn: ".*Don.t Allow Paste.*"
 - extendedWaitUntil:
     visible: ".*Cook your family.s food.*"
     timeout: 20000

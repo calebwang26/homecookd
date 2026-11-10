@@ -22,8 +22,19 @@ import type { Profile } from '@/lib/api';
 import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { clipFile, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
-import { cleanOrphanCopies, clipsHere, countResend, dropUnsent, loadUnsent, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
+import { clipFile, keepAfterGiveUp, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
+import {
+  cleanOrphanCopies,
+  clipsHere,
+  countResend,
+  dropUnsent,
+  loadUnsent,
+  markUnsentDidntSend,
+  markUnsentJob,
+  savedHere,
+  stillUnsent,
+  unsentUri,
+} from '@/lib/unsentRecordings';
 import { cancelJobUploads, loadJobs, removeJob, uploadsSupportedHere } from '@/lib/uploads';
 
 import { chunkClip } from './cameraLogic';
@@ -80,8 +91,10 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
     return step;
   }
   if (step === 'give-up') {
-    // Never by hand: her Send again on Home is a fresh first try (its videos stay in documents/recordings/).
-    console.warn('[unsent] gave up sending', u.recordingId);
+    // Never by hand: her Send again on Home is a fresh first try. Not sent by itself any more; while a row of it is
+    // on Home the note stays, so that row's Send again still works, and it goes when she clears the row.
+    if (keepAfterGiveUp(u, rowsOf(u).length)) return step;
+    console.warn('[unsent] gave up sending', u.recordingId); // no row shows it (its in-app videos stay in documents/recordings/)
     dropUnsent(u.recordingId);
     return step;
   }
@@ -103,49 +116,69 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
     dropUnsent(u.recordingId); // it finished meanwhile
     return 'done';
   }
+  // That job is stopped now, by us, to send again: the note no longer points at it. Else a send that fails below
+  // before its new upload exists leaves the note on a job that reads "Cancelled.", which the next look takes for
+  // her own stop ('done') and drops the note: the recording never sent, and no row for it (it happened at launch).
+  if (job) markUnsentJob(u.recordingId, null);
   for (const r of rowsOf(u)) {
     cancelJobUploads(r.job_id);
     removeJob(r.job_id);
   }
   if (!stillUnsent(u.recordingId)) return 'done';
-  await sendDraft({
-    me: cook,
-    draft: { glasses: !!u.glasses, language: u.language, recordingId },
-    clips: keptClips(here),
-    kids: to.picked,
-    recipients: to.recipients,
-    toLabel: to.label,
-    dish: title,
-    hello: u.hello ?? null,
-    note: u.recordingId,
-    onStarted,
-  });
+  try {
+    await sendDraft({
+      me: cook,
+      draft: { glasses: !!u.glasses, language: u.language, recordingId },
+      clips: keptClips(here),
+      kids: to.picked,
+      recipients: to.recipients,
+      toLabel: to.label,
+      dish: title,
+      hello: u.hello ?? null,
+      note: u.recordingId,
+      onStarted,
+    });
+  } catch (e) {
+    // Its upload rows went above and no new one was made: Home shows the note's own failed row (Send again) until a
+    // send of it makes a job. (Only with no job: once one exists, its upload row is on Home.)
+    markUnsentDidntSend(u.recordingId);
+    throw e;
+  }
   return step;
 }
 
 /**
  * Her "Send again" on Home: that note now, as its cook, the way a launch would (by hand: no give-up). 'sent': a
  * new send started, or nothing was left to do (the server has the files, or it was stopped); 'busy': it's being
- * sent from here already; 'unreachable': the server couldn't say what exists (never a second copy on a guess);
- * 'gone': its note or its videos aren't on this phone.
+ * sent from here already; 'waiting': its job is queued or being claimed, so it's on its way without a send;
+ * 'unreachable': the server couldn't say what exists (never a second copy on a guess); 'gone': its note or its
+ * videos aren't on this phone. A send that throws leaves the note for the next pass (and says why to her).
  */
 export async function sendNoteAgain(
   noteId: string,
   profiles: Profile[],
   learners: Profile[],
   onStarted?: () => void,
-): Promise<'sent' | 'busy' | 'unreachable' | 'gone'> {
+): Promise<'sent' | 'busy' | 'waiting' | 'unreachable' | 'gone'> {
   if (inFlight.has(noteId)) return 'busy';
   const u = loadUnsent().find((x) => x.recordingId === noteId);
   if (!u || !clipsHere(u).length) return 'gone';
   const cook = profiles.find((p) => p.id === u.cookId);
   if (!cook) return 'unreachable'; // the family isn't loaded (her own row is hers)
   looked.add(noteId); // a launch's pass in this run leaves it to this
-  const step = await resendOne(u, cook, profiles, learners, true, onStarted);
+  let step: ResendStep | 'unreachable';
+  try {
+    step = await resendOne(u, cook, profiles, learners, true, onStarted);
+  } catch (e) {
+    looked.delete(noteId); // didn't send: the next pass (the app back to the front) sends it by itself
+    throw e;
+  }
   if (step === 'unreachable') {
     looked.delete(noteId);
     return 'unreachable';
   }
+  // Queued or being claimed: the server has it already (nothing sent from here).
+  if (step === 'wait') return 'waiting';
   return step === 'gone' ? 'gone' : 'sent';
 }
 

@@ -726,6 +726,20 @@ test('Send again by hand (Caleb, Nov 10): a fresh first try, never a give-up, an
   assert.equal(U.resendStep(note('r'), at(null, { clipsHere: 0 })), 'gone');
 });
 
+test('a resend that stopped its own old job: with the note\'s job cleared the next look sends it; left on the stopped job it was dropped', () => {
+  const stopped = [{ _id: 'j1', uploadPath: 'family-recipe-1/', stage: 'failed', error: U.CANCELLED }];
+  const at = (convexJob) => ({ convexJob, upload: null, clipsHere: 2, now: NOW });
+  // The bug (in the launch's resend before this): the send failed before its new upload existed, the note still
+  // named the old upload, and its "Cancelled." read as her own stop: 'done', the note dropped, never sent.
+  const stale = U.jobForUpload(stopped, 'family-recipe-1', false);
+  assert.deepEqual(stale, { id: 'j1', stage: 'failed', error: U.CANCELLED });
+  assert.equal(U.resendStep(note('r', { jobId: 'family-recipe-1' }), at(stale)), 'done');
+  // Cleared once we stopped it ourselves: no job, so the next look (or her Send again) sends it.
+  assert.equal(U.jobForUpload(stopped, null, false), null);
+  assert.equal(U.resendStep(note('r', { jobId: null }), at(U.jobForUpload(stopped, null, false))), 'send');
+  assert.equal(U.resendStep(note('r', { jobId: null }), { ...at(null), byHand: true }), 'send');
+});
+
 test('Send again: the row\'s note is found as Stop finds it; the button only when its videos are still here', () => {
   const list = [note('r1', { jobId: 'family-recipe-1' }), note('r2'), note('local-3')];
   assert.equal(U.noteForRow(list, { job_id: 'family-recipe-1' })?.recordingId, 'r1', 'by its job');
@@ -739,6 +753,52 @@ test('Send again: the row\'s note is found as Stop finds it; the button only whe
   for (const row of [{ job_id: 'family-recipe-1' }, { job_id: 'x', recording_id: 'r2' }, { job_id: 'x', unsent_id: 'local-3' }]) {
     assert.ok(!U.withoutUnsentFor(list, row).includes(U.noteForRow(list, row)));
   }
+});
+
+test('the give-up keeps the note while a row of it is on Home, so its Send again still works; with no row it goes', () => {
+  // Three tries (her Send again counts too), or a week: not sent by itself any more.
+  const worn = note('r', { resends: U.MAX_RESENDS, jobId: 'family-recipe-1' });
+  const failedUpload = { convexJob: { stage: 'uploading' }, upload: 'failed', clipsHere: 1, now: NOW };
+  assert.equal(U.resendStep(worn, failedUpload), 'give-up');
+  assert.equal(U.keepAfterGiveUp(worn, 1), true, 'its failed upload row is on Home');
+  assert.equal(U.keepAfterGiveUp(note('r', { didntSend: true }), 0), true, 'its own failed row is on Home');
+  assert.equal(U.keepAfterGiveUp(note('r'), 0), false, 'nothing shows it');
+  assert.equal(U.keepAfterGiveUp(note('r', { didntSend: false }), 0), false);
+  // Kept, its row still offers Send again, and by hand that's a fresh try.
+  assert.equal(U.sendAgainOffer(worn, 1), 'send');
+  assert.equal(U.resendStep(worn, { ...failedUpload, byHand: true }), 'redo');
+});
+
+test('a resend that failed with no upload row left gets its own failed row: never one an upload row covers, nor not hers', () => {
+  const at = { cookId: 'cook-1', familyId: 'fam-1', rows: [] };
+  const failed = note('r1', { didntSend: true });
+  assert.deepEqual(U.failedNotes([failed], at).map((u) => u.recordingId), ['r1']);
+  assert.deepEqual(U.failedNotes([note('r2')], at), [], 'not one that never failed (being sent, or a launch still to send it)');
+  assert.deepEqual(U.failedNotes([note('r3', { didntSend: true, jobId: 'family-recipe-3' })], at), [], 'one with a job: its upload row shows it');
+  assert.deepEqual(U.failedNotes([failed], { ...at, rows: [{ job_id: 'family-recipe-9', recording_id: 'r1' }] }), [], 'a new upload row of it already shows');
+  const local = note('send-1', { didntSend: true, local: true });
+  assert.deepEqual(U.failedNotes([local], at).length, 1);
+  assert.deepEqual(U.failedNotes([local], { ...at, rows: [{ job_id: 'x', unsent_id: 'send-1' }] }), [], 'a Send-screen note, found as Stop finds it');
+  assert.deepEqual(U.failedNotes([note('r4', { didntSend: true, state: 'filming' })], at), [], 'one she is still to be asked about');
+  assert.deepEqual(U.failedNotes([failed], { ...at, cookId: 'cook-2' }), [], 'another cook');
+  assert.deepEqual(U.failedNotes([failed], { ...at, familyId: 'fam-2' }), [], 'another family');
+  assert.deepEqual(U.failedNotes([failed], { ...at, cookId: null }), []);
+  // A job made clears it (its upload row is on Home now); clearing the job doesn't set it.
+  assert.deepEqual(U.jobPatch('family-recipe-5'), { jobId: 'family-recipe-5', didntSend: undefined });
+  assert.deepEqual(U.jobPatch(null), { jobId: null });
+  const sent = U.patchUnsent([failed], 'r1', U.jobPatch('family-recipe-5'))[0];
+  assert.equal(sent.didntSend, undefined);
+  assert.equal('didntSend' in JSON.parse(JSON.stringify(sent)), false, 'gone from the saved note');
+  assert.deepEqual(U.failedNotes([sent], at), []);
+  assert.equal(U.patchUnsent([failed], 'r1', U.jobPatch(null))[0].didntSend, true);
+});
+
+test('the failed row\'s line comes from whether its videos are here, never from why its note went', () => {
+  assert.equal(U.sendAgainOffer(note('r1'), 1), 'send');
+  assert.equal(U.sendAgainOffer(note('r1'), 0), 'gone', 'its note is here and its videos are not');
+  assert.equal(U.sendAgainOffer(undefined, 0, true), 'kept', 'no note, but the recording\'s own files are still in documents/recordings/');
+  assert.equal(U.sendAgainOffer(undefined, 0, false), 'gone');
+  assert.equal(U.sendAgainOffer(undefined, 0), 'gone');
 });
 
 test('stopped early: each saved file updates the recording’s filming note; never over one being sent', () => {
