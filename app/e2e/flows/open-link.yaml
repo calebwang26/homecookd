@@ -39,10 +39,19 @@ name: Open a link from outside the app
             - evalScript: ${output.tryAgainTaps = (output.tryAgainTaps || 0) + 1}
             - takeScreenshot: try-again-kitchen-${output.tryAgainTaps}
             - tapOn: "Try again"
+      # Opening the link again (no card to tap: the link didn't land, or the app sat on the screen it was on) is a
+      # retry too: each one saves an open-again-N screenshot, taken before the link opens, so it shows the screen the
+      # app was stuck on and never the link, and the job summary warns about it like a Try again (journey-retries.mjs).
       - runFlow:
           when:
             true: ${output.tappedTryAgain !== true}
           commands:
+            - runFlow:
+                when:
+                  true: ${output.openedLink === true}
+                commands:
+                  - evalScript: ${output.reopens = (output.reopens || 0) + 1}
+                  - takeScreenshot: open-again-${output.reopens}
             - openLink: ${LINK}
             - evalScript: ${output.openedLink = true}
             - extendedWaitUntil:

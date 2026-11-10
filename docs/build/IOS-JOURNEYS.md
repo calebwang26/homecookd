@@ -105,7 +105,12 @@ subflow's retries didn't help. Now:
   that card up, on a link this subflow opened, and the card still up after the last attempt fails the journey (Master
   Agent, Nov 9).
 - Each tap saves a screenshot naming its card: `try-again-N` on "We can't reach homecookd.", `try-again-kitchen-N` on
-  "We can't reach your kitchen.". A journey that passed only after a tap gets a warning and a line in the job summary
+  "We can't reach your kitchen.". Opening the link again with no card to tap (the link didn't land, or the app sat on
+  the screen it was on) is a retry too: `open-again-N`, taken before the link opens, so it shows the stuck screen and
+  never the link, and the summary warns "passed after N re-opens of the link: the link didn't land or the app stalled
+  (the kept simulator log says which)", titled "Journey retry" like the taps. Without it a run passed silently:
+  #467's own run 42811383192 re-opened the sign-in link once in journeys 2 and 3 after a 65 s certificate stall, and
+  so did every keyed run approved before it (42803587900, 42807178364). A journey that passed only after a tap gets a warning and a line in the job summary
   that names the card ("passed after 1 "Try again" retry on "We can't reach your kitchen.", trust-check stall"), so a
   real api outage can't hide behind a green run (`scripts/journey-retries.mjs`).
 - To check it: `gh workflow run ios-journeys.yml --ref <branch> -f stall_api=first-try` must pass with that line, and
