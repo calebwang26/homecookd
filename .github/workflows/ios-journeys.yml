@@ -467,13 +467,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           # A journey that needed a retry in open-link.yaml (a Try again tap on a card, or opening the link again) says so,
           # even when it passed, and so does every link open simctl failed (journey-xcrun.sh), landed or not, and every
-          # open whose link reached the app more than 30 s after it. Then a table of every open and how long it took.
+          # open whose link reached the app more than 30 s after it. Then a table of every open and how long it took, in
+          # the job log too: GitHub shows a job summary only to a signed-in browser, and `gh run view --log` reads the log.
           OPENS=("$RUNNER_TEMP/maestro-out" "$RUNNER_TEMP/openurl.jsonl" "$RUNNER_TEMP/openurl-stream.log")
           node scripts/journey-retries.mjs "${OPENS[@]}" | while IFS= read -r LINE; do
             echo "::warning title=Journey retry::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
-          node scripts/journey-retries.mjs --table "${OPENS[@]}" >> "$GITHUB_STEP_SUMMARY" || true
+          node scripts/journey-retries.mjs --table "${OPENS[@]}" | tee -a "$GITHUB_STEP_SUMMARY" || true
       # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed
       # journeys ran, every flow keeps only its screenshots and the simulator's log (report.xml stays): commands.json,
       # Maestro's own logs and the screen dumps go. In the simulator's log, which shows a stall's cause (trustd, #456),

@@ -209,7 +209,7 @@ Of the five above, the four that landed within 30 s would have passed with a war
 still fail. A link that starts the app arrives at launch, without that line, so a failed open of one isn't excused.
 
 Every open is logged, not only the failed ones, so a slow open shows even when nothing threw (the 64 s one above). The
-job summary's "Link opens" table lists each: the journey, when, how long simctl took or how it failed, and when the app
+"Link opens" table, in the job summary and the job log (`gh run view --log`; a summary needs a signed-in browser), lists each: the journey, when, how long simctl took or how it failed, and when the app
 got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
 the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
 keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
