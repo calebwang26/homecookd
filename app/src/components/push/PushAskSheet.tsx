@@ -29,7 +29,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ActionButton, Avatar, BottomSheet, EggMark, PressableScale, Txt, useSheetsUp, type ActionState, type AvatarProps } from '@/components/ui';
-import { pushAskWho, requestAndRegister, shouldAskPush, snoozePushAsk, type PushAskKind, type RegisterPush } from '@/lib/push';
+import { endPushAsk, pushAskWho, requestAndRegister, shouldAskPush, type PushAskKind, type RegisterPush } from '@/lib/push';
 import { useWords } from '@/lib/words/useWords';
 import { english, type T } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
@@ -54,6 +54,8 @@ export type PushAskSheetProps = {
    */
   onYes: () => void | Promise<boolean>;
   onNotNow: () => void;
+  /** It never showed (held behind another sheet until it gave up): not a "Not now", so nothing is snoozed. */
+  onDropped?: () => void;
 };
 
 /**
@@ -78,7 +80,7 @@ export function pushAskQuestion(kindOrWho: PushAskKind | 'kid' | 'cook', otherNa
   return name ? t('common.push.answers', { name }) : t('common.push.theyAnswer');
 }
 
-export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, onNotNow }: PushAskSheetProps) {
+export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, onNotNow, onDropped }: PushAskSheetProps) {
   const { t } = useWords();
   const question = pushAskQuestion(kind ?? who ?? 'kid', otherName, t);
   // Driven here rather than by ActionButton's own cycle, which would show a check for any answer.
@@ -97,7 +99,7 @@ export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, on
     if (next !== 'idle') setTimeout(() => setYesState('idle'), 1800);
   };
   return (
-    <BottomSheet visible={visible} onClose={onNotNow} accessibilityLabel={question}>
+    <BottomSheet visible={visible} onClose={onNotNow} onDropped={onDropped} accessibilityLabel={question}>
       <View style={styles.body}>
         {profile ? <Avatar profile={profile} size={72} /> : <EggMark size={64} />}
         <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
@@ -183,7 +185,11 @@ export function PushAskHost({ register }: { register: RegisterPush }) {
     return result === 'registered';
   };
   const notNow = () => {
-    void snoozePushAsk(shown.profileId);
+    void endPushAsk(shown.profileId, 'notNow');
+    close();
+  };
+  const dropped = () => {
+    void endPushAsk(shown.profileId, 'dropped');
     close();
   };
 
@@ -195,6 +201,7 @@ export function PushAskHost({ register }: { register: RegisterPush }) {
       profile={shown.profile}
       onYes={yes}
       onNotNow={notNow}
+      onDropped={dropped}
     />
   );
 }
