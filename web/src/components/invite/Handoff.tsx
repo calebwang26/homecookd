@@ -18,7 +18,7 @@
 // after "Copied" (it is opened from a timer; the second tap is a plain link either way), and that Open
 // homecookd opens the installed app in one tap (if not, the page it lands on has the scheme link).
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { APP_STORE_URL, arrivedFromOpen, copyText, isAndroid } from '@/lib/app-links';
+import { APP_STORE_URL, arrivedFromOpen, copyText, IPHONE_ONLY, isAndroid } from '@/lib/app-links';
 import s from './Handoff.module.css';
 
 type Note = 'copied' | 'not-copied' | null;
@@ -80,7 +80,7 @@ export function Handoff({
     return (
       <p className={s.desk}>
         <IconPhone />
-        homecookd is on iPhone for now. Open this link on an iPhone.
+        {IPHONE_ONLY}
       </p>
     );
   }

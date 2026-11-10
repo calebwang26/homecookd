@@ -1,7 +1,9 @@
 'use client';
 // Spotify-web "Get the app" popover: a coloured card anchored to what was tapped, with a small
-// pointer, a specific title, one line, "Not now" and a white "Get App" pill.
+// pointer, a specific title, one line, "Not now" and a white "Get App" pill. On Android (no app yet) the line is
+// IPHONE_ONLY and there's no pill: it would open Apple's page, a dead end there (Bug hunt, Nov 10).
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { IPHONE_ONLY, isAndroid } from '@/lib/app-links';
 import { motion } from 'motion/react';
 import type { LockKind } from './context';
 import ui from './RecipeWeb.module.css';
@@ -45,6 +47,8 @@ export function GetAppPopover({
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const getBtn = useRef<HTMLButtonElement>(null);
+  // drawn only after a tap, never on the server, so the phone can be asked right away
+  const [android] = useState(isAndroid);
   const [pos, setPos] = useState<{ above: boolean; top?: number; bottom?: number; px: number } | null>(null);
 
   useLayoutEffect(() => {
@@ -87,14 +91,16 @@ export function GetAppPopover({
             <h2 id="rw-pop-title" className={s.popTitle}>
               {copy.title}
             </h2>
-            <p className={s.popLine}>{copy.line}</p>
+            <p className={s.popLine}>{android ? IPHONE_ONLY : copy.line}</p>
             <div className={s.popActions}>
               <button type="button" className={`${ui.press} ${s.notNow}`} onClick={onClose}>
                 {labels.notNow}
               </button>
-              <button ref={getBtn} type="button" className={`${ui.press} ${s.getAppPill}`} onClick={onGetApp}>
-                {labels.getApp}
-              </button>
+              {!android && (
+                <button ref={getBtn} type="button" className={`${ui.press} ${s.getAppPill}`} onClick={onGetApp}>
+                  {labels.getApp}
+                </button>
+              )}
             </div>
           </motion.div>
         )}

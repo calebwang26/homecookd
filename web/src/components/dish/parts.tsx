@@ -1,12 +1,14 @@
 'use client';
 // Pieces both dish pages share: the top bar, the dish hero (the kid's photo or the designed peach card,
 // never a stock photo of some other dish), the bottom sheet, the toast, an audio player and the
-// "Get the app" sheet (K4 for the kid, M6 for Mom).
+// "Get the app" sheet (K4 for the kid, M6 for Mom). On Android there's no app yet: the top bar has no "Get the app",
+// and the sheet says IPHONE_ONLY (lib/app-links) where its button was (Bug hunt, Nov 10).
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Logo } from '@/components/primitives/Logo';
 import { IconClose } from '@/components/recipe-web/icons';
-import { APP_STORE_URL, copyText, WEB_ORIGIN } from '@/lib/app-links';
+import { APP_STORE_URL, copyText, IPHONE_ONLY, isAndroid, WEB_ORIGIN } from '@/lib/app-links';
+import { useAndroid } from '@/lib/useAndroid';
 import { CheckIcon } from './shareIcons';
 import { LangSwitch, useLang } from './lang';
 import ui from './ui.module.css';
@@ -17,6 +19,7 @@ export const STORE_URL = APP_STORE_URL;
 
 /** Straight to the store (Caleb, Oct 31: no sheet in between). A page with its own link copies it first, so the app can pick up the same dish. */
 export function goToStore() {
+  if (isAndroid()) return; // Apple's page is a dead end there; nothing on Android offers this
   const open = () => {
     window.location.href = STORE_URL;
   };
@@ -28,12 +31,14 @@ export function goToStore() {
 /** The bar on every page: the logo and "Get the app", then a row under it with `row` on the left and the language on the right. */
 export function TopBar({ row, lang = true }: { row?: ReactNode; lang?: boolean }) {
   const { t } = useLang();
+  const android = useAndroid();
   return (
     <>
       <header className={s.topBar}>
         <span className={s.brand}>
           <Logo height={28} reversed />
         </span>
+        {!android && (
         <a
           className={`${ui.press} ${s.topGetApp}`}
           href={STORE_URL}
@@ -45,6 +50,7 @@ export function TopBar({ row, lang = true }: { row?: ReactNode; lang?: boolean }
         >
           {t('common.getApp')}
         </a>
+        )}
       </header>
       {(row || lang) && (
         <div className={s.subBar}>
@@ -243,6 +249,7 @@ export function AppSheet({
 }) {
   const { t } = useLang();
   const id = useId();
+  const android = useAndroid();
   const getApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
@@ -271,6 +278,9 @@ export function AppSheet({
         ))}
       </ul>
       {extra}
+      {android ? (
+        <p className={s.appSub}>{IPHONE_ONLY}</p>
+      ) : (
       <a className={`${ui.press} ${ui.primary} ${s.appButton}`} href={STORE_URL} onClick={getApp} data-testid="get-app">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
           <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
@@ -278,13 +288,16 @@ export function AppSheet({
         </svg>
         {t('common.getApp')}
       </a>
+      )}
       <div className={s.appLinks}>
         <button type="button" className={`${ui.press} ${ui.textLink}`} onClick={onClose}>
           {t('common.notNow')}
         </button>
+        {!android && (
         <a className={`${ui.press} ${ui.textLink} ${s.openApp}`} href={schemeLink}>
           Open homecookd
         </a>
+        )}
       </div>
     </Sheet>
   );

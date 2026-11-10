@@ -21,6 +21,9 @@ export function isAndroid(): boolean {
   return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 }
 
+/** What an Android phone sees wherever "Get the app" would send it to Apple's page (/i, /miss, /a, /r). */
+export const IPHONE_ONLY = 'homecookd is on iPhone for now. Open this link on an iPhone.';
+
 /** homecookd://<path>?<params>: the app's own scheme (app/app.json). Only a phone with the app can open it. */
 export function appSchemeUrl(path: 'i' | 'r' | 'miss' | 'a', params: Record<string, string>): string {
   const q = new URLSearchParams(params).toString();
