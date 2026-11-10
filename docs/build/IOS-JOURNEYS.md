@@ -112,7 +112,27 @@ subflow's retries didn't help. Now:
   `-f stall_api=all` must fail. Both point the api's host at 192.0.2.1 (an address that never answers) on the runner;
   `first-try` brings it back 15 s after the app's first try.
 - If the stall comes back with the retry in place, the next fix is on the simulator's side (reset trustd, or warm the
-  certificate check before the journeys), not more taps.
+  certificate check before the journeys), not more taps. It came back: see the next section.
+
+**The stall's cause, and the warm-up (Master Agent, Nov 9).** It came back twice with the retry in place, both on runs
+that reused the built app, where the journeys start a few minutes after boot instead of about 20: run 42759943404
+(attempt 1, about 05:13Z: "We can't reach your kitchen" after a sign-in) and run 42766011110. The simulator's log from
+run 42766011110 shows what trustd did:
+- From 06:18:20 to 06:19:46Z it ran a burst of 2,090 signature checks (`SecKeyVerifySignature`) while mobileassetd
+  loaded its asset catalogs and started downloads: the simulator's first-boot work.
+- The app's first certificate check at 06:19:34 answered true.
+- From 06:19:49 every one of the app's connections sat in "Asyncing for external verify block" and came back
+  `result: false` 6–10 s later. It went on through at least 06:22:55. trustd took each new connection and logged nothing
+  else.
+
+So the journeys have two lines of defense, in this order:
+1. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). Safari opens the
+   staging api, and the step watches the simulator's log, filtered to Safari's own processes, for a certificate check
+   that answers true: up to 60 s a try. Without one it restarts the simulator's trustd and tries again, 3 restarts at
+   most. Then it fails the job with "the simulator's trust check never answered", and no journey runs on a stalled
+   simulator. The job summary gets the seconds waited, the try and the restarts; the log itself stays on the runner.
+2. **Try again** in `open-link.yaml` (above), for a stall that starts after the warm-up. A journey that needed it still
+   gets a warning, never a silent pass.
 
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.

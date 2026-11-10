@@ -269,6 +269,50 @@ jobs:
           echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+      # The simulator's certificate check (trustd) can stop answering for minutes after boot: in run 42766011110 it ran
+      # 2,090 signature checks while mobileassetd fetched its catalogs, then every app connection from 06:19:49 sat in
+      # "Asyncing for external verify block" and came back false (docs/build/IOS-JOURNEYS.md, "The trust-check stall").
+      # So before any journey, Safari opens the staging api and this waits for one certificate check to answer true: up
+      # to 60 s a try, restarting trustd between tries, 3 restarts at most; then the job fails, and no journey runs on a
+      # stalled simulator. It runs before the seed step, so no link or key exists yet; its log stays on the runner.
+      - name: Wait for the simulator's trust check
+        run: |
+          HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
+          LOG="$RUNNER_TEMP/trust-warmup.log"
+          START=$(date +%s); RESTARTS=0; OK=
+          for TRY in 1 2 3 4; do
+            : > "$LOG"
+            # Safari's own processes only: other daemons (apsd, mobileassetd) check certificates too and would answer true.
+            xcrun simctl spawn "$UDID" log stream --style compact --level info --predicate \
+              '(process == "MobileSafari" OR process == "com.apple.WebKit.Networking") AND eventMessage CONTAINS "external verify block with result"' \
+              > "$LOG" 2>/dev/null &
+            STREAM=$!
+            sleep 2
+            xcrun simctl openurl "$UDID" "https://$HOST/?trust-warmup=$TRY" || true
+            for _ in $(seq 1 60); do
+              if grep -q 'result: true' "$LOG"; then OK=1; break; fi
+              sleep 1
+            done
+            kill "$STREAM" 2>/dev/null || true
+            xcrun simctl terminate "$UDID" com.apple.mobilesafari 2>/dev/null || true
+            [ -n "$OK" ] && break
+            [ "$TRY" = 4 ] && break
+            RESTARTS=$((RESTARTS + 1))
+            echo "No answer on try $TRY: restarting the simulator's trustd"
+            xcrun simctl spawn "$UDID" launchctl kickstart -k system/com.apple.trustd 2>/dev/null \
+              || pkill -9 -f 'RuntimeRoot/usr/libexec/trustd' || true
+            sleep 3
+          done
+          rm -f "$LOG"
+          WAITED=$(( $(date +%s) - START ))
+          if [ -z "$OK" ]; then
+            echo "> ❌ The simulator's trust check never answered: ${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Simulator::the simulator's trust check never answered (${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times)"
+            exit 1
+          fi
+          echo "Trust check answered after ${WAITED} s (try ${TRY}, trustd restarted ${RESTARTS} times)."
+          echo "> Simulator trust check: answered after ${WAITED} s, try ${TRY} of 4, trustd restarted ${RESTARTS} times." >> "$GITHUB_STEP_SUMMARY"
+          echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
       # Journey 2's people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who joined by it.
       # The link and the kid's device key are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no secret, so
       # journey 2 is left out and says so; a key that's set but refused fails here, so a rotated key can't pass as a skip.
@@ -319,7 +363,8 @@ jobs:
             echo "| Pods (with cache) | $(m "$T_PREBUILD" "$T_PODS") |"
             echo "| xcodebuild Release, or the JS bundle into the reused app | $(m "$T_PODS" "$T_BUILD") |"
             echo "| Wait for the simulator (booting since the start) + install | $(m "$T_BUILD" "$T_BOOT") |"
-            echo "| Maestro journeys | $(m "$T_BOOT" "$T_JOURNEYS") |"
+            echo "| Install Maestro + the simulator's trust check (Safari warm-up) | $(m "$T_BOOT" "$T_WARM") |"
+            echo "| Seed + Maestro journeys | $(m "${T_WARM:-$T_BOOT}" "$T_JOURNEYS") |"
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
           } >> "$GITHUB_STEP_SUMMARY"
           # A journey that needed open-link.yaml's Try again (a "We can't reach homecookd." card) says so, even when it passed.
