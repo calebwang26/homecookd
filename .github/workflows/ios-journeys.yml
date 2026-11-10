@@ -313,17 +313,18 @@ jobs:
           echo "Trust check answered after ${WAITED} s (try ${TRY}, trustd restarted ${RESTARTS} times)."
           echo "> Simulator trust check: answered after ${WAITED} s, try ${TRY} of 4, trustd restarted ${RESTARTS} times." >> "$GITHUB_STEP_SUMMARY"
           echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
-      # Journey 2's people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who joined by it.
-      # The link and the kid's device key are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no secret, so
-      # journey 2 is left out and says so; a key that's set but refused fails here, so a rotated key can't pass as a skip.
+      # The signed-in journeys' people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who
+      # joined by it. The link and both device keys are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no
+      # secret, so the journeys tagged needs-key (2 and 3) are left out and say so; a key that's set but refused fails
+      # here, so a rotated key can't pass as a skip.
       # The step's name is the sweep's (journey-people-sweep.yml): rename both or neither.
       - name: Seed the journey test people
         env:
           TEST_SIGNIN_KEY: ${{ !inputs.no_key && secrets.TEST_SIGNIN_KEY || '' }}
         run: |
           if [ -z "$TEST_SIGNIN_KEY" ]; then
-            echo "Journey 2 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
-            echo "> Journey 2 (family link → name → sign in) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
+            echo "Journeys 2 and 3 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
+            echo "> Journeys 2 and 3 (family link sign-in; New message, Add family, Copy link) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           node scripts/journey-people.mjs setup "$RUNNER_TEMP/journey-people.json"
@@ -408,7 +409,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      # Journey 2's people go whatever happened above (a stall_api run's hosts entry first, or staging can't be reached).
+      # The test people go whatever happened above (a stall_api run's hosts entry first, or staging can't be reached).
       # A runner that dies never gets here: journey-people-sweep.yml finds those runs by this step's name, the same day.
       - name: Delete the journey test people
         if: always()
