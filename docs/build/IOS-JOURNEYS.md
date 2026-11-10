@@ -148,12 +148,17 @@ So the journeys have these lines of defense, in this order:
    connections are refused at once and never reach TLS or trustd. No journey uses push.
 2. **trustd's first check right after boot.** "Start booting a simulator" leaves a background job that waits for the
    boot, then opens the staging api in Safari once, so trustd's first check (and the rebuild it seems to start) happens
-   during npm ci, Pods and the build.
+   during npm ci, Pods and the build. Its first version ran in 1 of 3 proof runs. It used `bootstatus -b`, which may
+   race the boot started just above (not proven); it now waits with plain `bootstatus` and logs to the runner. The
+   summary says whether it ran.
 3. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). It watches trustd's
    log for "database is locked" from the moment it starts. Safari opens the staging api, and the step watches Safari's
    own processes for a certificate check that answers true: up to 60 s a try, restarting trustd between tries, 3
    restarts at most. Then, counted from that answer, it restarts Safari and opens the api every 8 s (each visit a new
-   check) until 30 s pass with no lock and at least 100 s have passed since trustd's first check, 6 minutes at most.
+   check) until 30 s pass with no lock and at least 100 s have passed since this trustd's first check: the early one
+   after boot or its last restart in this step, whichever is later, since nothing shows a restarted trustd skips the
+   rebuild. 6 minutes at most. Only real log lines count (they start with a date): `log stream` first prints a line
+   repeating its predicate, "… database is locked", which the first version counted as a locked read.
    This gate is what protects the journeys; step 2 only makes the wait shorter. Either failure says "The simulator,
    not the app or this PR … Re-run the job", and no journey runs on a stalled simulator. The job summary gets, on
    every run, the seconds waited, the try, the restarts and how long the database was locked (0 s too); the logs stay
