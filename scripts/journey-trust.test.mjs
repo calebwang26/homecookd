@@ -65,6 +65,13 @@ test("no trustd line anywhere can't tell: no stall named, no re-run advice", () 
   assert.doesNotMatch(line, /re-run|the simulator,/);
 });
 
+test("an empty stream (it didn't start) but trustd lines in the journey's own log still reads them, not \"no trustd log\"", () => {
+  const log = [EVAL('21:00:00.000'), EVAL('21:00:05.900'), CHECK('21:00:06.000', 'homecookd', false), EVAL('21:00:07.000')].join('\n');
+  const [line] = journeyLines([{ name: 'J', log }], trustd(''), GATE);
+  assert.doesNotMatch(line, /no trustd log/);
+  assert.match(line, /trustd kept evaluating and only the app's checks failed: look at the api's certificate$/);
+});
+
 test('trustd lines with no evaluation among them still read as the simulator', () => {
   const stream = [XPC('21:09:23.044'), XPC('21:11:01.157')].join('\n');
   assert.match(journeyLines([{ name: 'J', log: CHECK('21:09:32.114', 'homecookd', false) }], trustd(stream), GATE)[0],

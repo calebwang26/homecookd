@@ -793,6 +793,15 @@ test('a resend that failed with no upload row left gets its own failed row: neve
   assert.equal(U.patchUnsent([failed], 'r1', U.jobPatch(null))[0].didntSend, true);
 });
 
+test('videos gone: a note whose send already failed (its own row, no job) is kept; one with a job or without the flag goes', () => {
+  const at = { convexJob: null, upload: null, clipsHere: 0, now: NOW };
+  assert.equal(U.resendStep(note('r', { didntSend: true }), at), 'gone');
+  assert.equal(U.keepWhenGone(note('r', { didntSend: true })), true, 'its row stays and says so, until her x');
+  assert.equal(U.keepWhenGone(note('r')), false, 'never failed: gone as before');
+  assert.equal(U.keepWhenGone(note('r', { didntSend: false })), false);
+  assert.equal(U.keepWhenGone(note('r', { didntSend: true, jobId: 'family-recipe-1' })), false, 'with a job: its upload row says how that went');
+});
+
 test('the failed row\'s line comes from whether its videos are here, never from why its note went', () => {
   assert.equal(U.sendAgainOffer(note('r1'), 1), 'send');
   assert.equal(U.sendAgainOffer(note('r1'), 0), 'gone', 'its note is here and its videos are not');
