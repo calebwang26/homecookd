@@ -78,6 +78,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [family-ends-with-last-signed-in](memory/family-ends-with-last-signed-in.md) | A family ends with its last signed-in person; who may delete a phone-less person |
 | [person-who-comes-back](memory/person-who-comes-back.md) | Someone who left or moved and came back is tied to their old row, only for deletion |
 | [uptime-first](memory/uptime-first.md) | Nov 7: the app never crashes, about 99.9% uptime; the reliable production option by default, cost beside it |
+| [send-again-failed-upload](memory/send-again-failed-upload.md) | Nov 10: a recording whose upload gave up gets a real Send again on Home (Caleb: "if he'll upload, should say send again") |
 
 Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "The App UI session" and
 "the other session" in these notes were other Claude Code sessions, so they no longer exist.

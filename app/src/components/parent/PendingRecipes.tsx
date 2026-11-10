@@ -16,17 +16,21 @@
 // writes no status file, so a job is also done once its live stage is 'done' and its recipe (the
 // job's Convex recipeId, mapped to a library id through recipes.list) is in the library.
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, AppState, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { ensureJob, jobCreated } from '@/components/record/sendDraft';
+import { sendNoteAgain } from '@/components/record/useResendUnsent';
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
+import { errorMessage } from '@/lib/api';
 import { requestCancel } from '@/lib/deletes';
 import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
-import { dropUnsentFor } from '@/lib/unsentRecordings';
+import { noteForRow, sendAgainOffer } from '@/lib/unsentLogic';
+import { clipsHere, dropUnsentFor, loadUnsent, subscribeUnsent, unsentVersion } from '@/lib/unsentRecordings';
 import { useWords } from '@/lib/words/useWords';
 import type { T } from '@/lib/words/words';
 import {
@@ -41,8 +45,9 @@ import {
   type StoredJob,
 } from '@/lib/uploads';
 
-import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
+import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp, sendAgainRow } from './jobsLogic';
 import { describeJob, ProcessingRow, stoppedView, type ProcessingView } from './ProcessingRow';
+import { sendAgain, sendAgainLook, useSendAgainVersion } from './sendAgain';
 import { flushStops, inTime, markGone, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
 
 const POLL_MS = 60_000;
@@ -90,11 +95,13 @@ export type PendingState = {
   views: Record<string, ProcessingView>;
   /** Stop (Undo for a few seconds), undo that, or clear, per the row's action. */
   act: (job: StoredJob) => void;
+  /** Her Send again on a row whose upload gave up (view.again): its kept videos, sent again (sendAgain). */
+  again: (job: StoredJob) => void;
   poll: () => Promise<void>;
 };
 
 export function usePendingRecipes(): PendingState {
-  const { me } = useSession();
+  const { me, profiles, learners } = useSession();
   const { entries } = useLibrary();
   const toast = useToast();
   const { t } = useWords();
@@ -104,6 +111,9 @@ export function usePendingRecipes(): PendingState {
   const [now, setNow] = useState(() => Date.now());
   const stops = useStops();
   const liveJobs = useLiveJobs(me?.role === 'cook');
+  // The kept recordings (Send again needs a row's note and its videos on the phone), and each one's Send again.
+  const notesVersion = useSyncExternalStore(subscribeUnsent, unsentVersion, unsentVersion);
+  const againVersion = useSendAgainVersion();
 
   // Re-read jobs and progress whenever an upload reports in.
   useEffect(
@@ -246,8 +256,18 @@ export function usePendingRecipes(): PendingState {
       ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l, t), undefined, now, l, undefined, t)])),
     };
     for (const [id, state] of stops) if (all[id] && state !== 'gone') all[id] = stoppedView(state, t);
+    // A row whose upload from this phone gave up: Send again when its videos are still here (Caleb, Nov 10).
+    const notes = loadUnsent();
+    for (const j of jobs) {
+      const v = all[j.job_id];
+      if (!v?.uploadFailed || stops.has(j.job_id)) continue;
+      const note = noteForRow(notes, j);
+      all[j.job_id] = sendAgainRow(v, sendAgainOffer(note, note ? clipsHere(note).length : 0), note ? sendAgainLook(note.recordingId) : 'offer', t);
+    }
     return all;
-  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops, t]);
+    // notesVersion and againVersion: the kept recordings and each Send again, read above from their stores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops, t, notesVersion, againVersion]);
 
   const act = useCallback(
     (job: StoredJob) => {
@@ -278,6 +298,32 @@ export function usePendingRecipes(): PendingState {
     [views, statuses, stop, t],
   );
 
+  // One tap, one send (Send's own machine, per recording): her yes to the AI companies, then that note sent again
+  // the way a launch does; a failure says why and the button comes back. The old row goes once the new send starts.
+  const again = useCallback(
+    (job: StoredJob) => {
+      const note = noteForRow(loadUnsent(), job);
+      if (!note) return;
+      void sendAgain(note.recordingId, {
+        consent: () => ensureAiConsent(),
+        send: async (started) => {
+          let begun = false;
+          const r = await sendNoteAgain(note.recordingId, profiles, learners, () => {
+            begun = true;
+            started();
+          });
+          if (r === 'unreachable') throw new Error(t('parent.processing.cantReach'));
+          if (r === 'gone') throw new Error(t('parent.processing.videosGone'));
+          // Nothing was left to send (the server has the files, or it's already on its way): the row moves on by itself.
+          if (!begun) started();
+          setJobs(loadJobs());
+        },
+        failed: (e) => toast.show(errorMessage(e, t('parent.stopped.didntSend')), { tone: 'error' }),
+      });
+    },
+    [profiles, learners, t, toast],
+  );
+
   // Only this cook's recordings (another profile on this phone has their own list), then every other job of
   // the family still in the pipeline, so nothing is ever processing out of sight. A stopped one is gone.
   const visible = useMemo(
@@ -289,7 +335,7 @@ export function usePendingRecipes(): PendingState {
     [jobs, statuses, me, liveOnly, stops, t],
   );
 
-  return { jobs: visible, views, act, poll };
+  return { jobs: visible, views, act, again, poll };
 }
 
 /** The rows for `jobs` (a filtered subset of pending.jobs is fine). */
@@ -308,6 +354,7 @@ export function PendingList({ pending, jobs = pending.jobs, startIndex = 0 }: { 
               onAction={() => pending.act(job)}
               onOpen={(id) => router.push({ pathname: '/my-recipe/[id]', params: { id } })}
               onRetry={() => router.push('/record')}
+              onSendAgain={() => pending.again(job)}
             />
           </Animated.View>
         );

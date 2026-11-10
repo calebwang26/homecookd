@@ -5,6 +5,8 @@
 //                                              video, so the sending half of the bar isn't full
 //   uploadingRow(localState, live, …)          the same, unless this phone's own upload gave up: then
 //                                              the row says so ("Some videos didn't send")
+//   sendAgainRow(view, offer, look, t)         that row with her Send again (Caleb, Nov 10), or saying
+//                                              plainly its videos aren't on this phone
 //   liveJobFinished(worker, libraryIds, ...)   'done' and its recipe is in the library: drop the row
 //   recipeIdsToLookUp(workers, known)          finished jobs whose library id isn't known yet
 //   liveJobCancelled(worker)                   stopped (on this phone or another): drop the row
@@ -59,6 +61,20 @@ export function uploadingRow(
 ): { failed: true; hint: string } | { failed: false; hint: string; send: number } {
   if (localState === 'failed') return { failed: true, hint: t('parent.processing.someFailed') };
   return { failed: false, ...uploadingView(live, received, expected, t) };
+}
+
+/**
+ * A row whose upload gave up, with her Send again (Caleb, Nov 10: "Yes, if he'll upload, should say send again").
+ * 'send' (its videos are still on this phone): "Your videos didn't send" and the button, in `look`'s state.
+ * 'gone': says plainly its videos aren't on this phone, with no button that can't work (the x still clears it).
+ */
+export function sendAgainRow<V extends { hint: string }>(
+  view: V,
+  offer: 'send' | 'gone',
+  look: 'offer' | 'sending' | 'error',
+  t: T = english,
+): V & { again: 'offer' | 'sending' | 'error' | null } {
+  return offer === 'send' ? { ...view, hint: t('parent.processing.didntSend'), again: look } : { ...view, hint: t('parent.processing.videosGone'), again: null };
 }
 
 /**

@@ -83,6 +83,12 @@ export const PARENT = {
   'parent.processing.sendingToThem': 'Ready · sending it to them',
   'parent.processing.sendingToEveryone': 'Ready · sending it to everyone',
   'parent.processing.someFailed': 'Some videos didn’t send · send them again',
+  // Send again on that row (Caleb, Nov 10): its kept videos, sent again; or they're gone from the phone.
+  'parent.processing.didntSend': 'Your videos didn’t send',
+  'parent.processing.videosGone': 'Your videos didn’t send, and they’re not on this phone any more',
+  'parent.processing.sendAgain': 'Send again',
+  'parent.processing.sendAgainLabel': 'Send {dish} again',
+  'parent.processing.cantReach': 'We can’t reach homecookd. Try again in a moment.',
   'parent.processing.paused': 'Paused for now · it starts on its own',
   'parent.processing.writingLong': 'Writing it down · taking longer than usual',
   // {left}: "almost there" or one of the "… left" lines below

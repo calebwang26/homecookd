@@ -10,8 +10,11 @@
 // note (`local`) has no Convex recording: its job is found by its upload folder (uploadJob). The recording's
 // old rows on Home go first (found by its recording id), so one "Sending your videos" row shows. A
 // note stopped on Home while this ran is left alone (re-read before acting).
+// Her own "Send again" on a row whose upload gave up (Caleb, Nov 10) sends that note now through the same
+// steps, by hand (no give-up for its tries or age). A note is never sent from here twice at once.
 //
 //   useResendUnsent();   (app/_layout, inside the session)
+//   await sendNoteAgain(noteId, profiles, learners, onStarted)   Home's Send again (components/parent/sendAgain)
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
@@ -19,7 +22,7 @@ import type { Profile } from '@/lib/api';
 import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { clipFile, resendStep, sendsBySelf, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
+import { clipFile, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
 import { cleanOrphanCopies, clipsHere, countResend, dropUnsent, loadUnsent, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
 import { cancelJobUploads, loadJobs, removeJob, uploadsSupportedHere } from '@/lib/uploads';
 
@@ -38,6 +41,8 @@ export function keptClips(here: UnsentClip[]): DraftClip[] {
 
 /** Looked at in this run of the app: each one once (unless Convex couldn't answer). */
 const looked = new Set<string>();
+/** Being sent from here right now (a launch's pass or her Send again): never two at once. */
+const inFlight = new Set<string>();
 let running = false;
 /** The kept copies no note lists were tidied in this run of the app (once). */
 let tidied = false;
@@ -45,42 +50,64 @@ let tidied = false;
 /** This recording's upload rows on Home (jobs.json): the one on its note, and any found by its recording id. */
 const rowsOf = (u: Unsent) => loadJobs().filter((j) => j.job_id === u.jobId || j.recording_id === u.recordingId || j.unsent_id === u.recordingId);
 
-async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners: Profile[]) {
+/** One note, as a launch does it (`byHand`: her Send again). 'unreachable': the server couldn't say what exists. */
+async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners: Profile[], byHand = false, onStarted?: () => void): Promise<ResendStep | 'unreachable'> {
+  inFlight.add(u.recordingId);
+  try {
+    return await resendNote(u, cook, profiles, learners, byHand, onStarted);
+  } finally {
+    inFlight.delete(u.recordingId);
+  }
+}
+
+async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learners: Profile[], byHand: boolean, onStarted?: () => void): Promise<ResendStep | 'unreachable'> {
   const here = clipsHere(u);
   const recordingId = u.local ? null : u.recordingId;
   const seen = loadJobs().find((j) => j.job_id === u.jobId);
   // On AWS there are no recording rows: every note's job is found by its upload.
   const job = u.local || AWS_ON ? await uploadJob(u.jobId, seen?.convex_job === 'ok', cook.id) : await recordingJob(u.recordingId, cook.id);
   const row = loadJobs().find((j) => j.job_id === u.jobId);
-  const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now() });
-  if (step === 'wait') return void looked.delete(u.recordingId);
-  if (!stillUnsent(u.recordingId)) return; // stopped on Home meanwhile
+  const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now(), byHand });
+  if (step === 'wait') {
+    looked.delete(u.recordingId);
+    return job === undefined ? 'unreachable' : 'wait';
+  }
+  if (!stillUnsent(u.recordingId)) return 'done'; // stopped on Home meanwhile
   const to = doneTo(cook.id, profiles, learners, u);
   const title = (u.dish ?? '').trim().slice(0, MAX_TITLE);
-  if (step === 'done') return dropUnsent(u.recordingId);
+  if (step === 'done') {
+    dropUnsent(u.recordingId);
+    return step;
+  }
   if (step === 'give-up') {
-    // TODO(caleb): a way to send a given-up recording by hand (its videos stay in documents/recordings/).
+    // Never by hand: her Send again on Home is a fresh first try (its videos stay in documents/recordings/).
     console.warn('[unsent] gave up sending', u.recordingId);
-    return dropUnsent(u.recordingId);
+    dropUnsent(u.recordingId);
+    return step;
   }
   if (step === 'create') {
     countResend(u.recordingId);
     await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: !!u.glasses, language: u.language, recordingId, title });
-    return dropUnsent(u.recordingId);
+    dropUnsent(u.recordingId);
+    return step;
   }
   // 'gone': nothing to send. A job is left alone (its files may have arrived); with none, its rows are dead.
   if (step === 'gone') {
     if (!job) for (const r of rowsOf(u)) removeJob(r.job_id);
-    return dropUnsent(u.recordingId);
+    dropUnsent(u.recordingId);
+    return step;
   }
   // 'redo', 'send': the job the worker says is missing files is stopped first, and the old rows go.
   countResend(u.recordingId);
-  if (job && !(await cancelLiveJob(job.id, cook.id))) return dropUnsent(u.recordingId); // it finished meanwhile
+  if (job && !(await cancelLiveJob(job.id, cook.id))) {
+    dropUnsent(u.recordingId); // it finished meanwhile
+    return 'done';
+  }
   for (const r of rowsOf(u)) {
     cancelJobUploads(r.job_id);
     removeJob(r.job_id);
   }
-  if (!stillUnsent(u.recordingId)) return;
+  if (!stillUnsent(u.recordingId)) return 'done';
   await sendDraft({
     me: cook,
     draft: { glasses: !!u.glasses, language: u.language, recordingId },
@@ -91,7 +118,35 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
     dish: title,
     hello: u.hello ?? null,
     note: u.recordingId,
+    onStarted,
   });
+  return step;
+}
+
+/**
+ * Her "Send again" on Home: that note now, as its cook, the way a launch would (by hand: no give-up). 'sent': a
+ * new send started, or nothing was left to do (the server has the files, or it was stopped); 'busy': it's being
+ * sent from here already; 'unreachable': the server couldn't say what exists (never a second copy on a guess);
+ * 'gone': its note or its videos aren't on this phone.
+ */
+export async function sendNoteAgain(
+  noteId: string,
+  profiles: Profile[],
+  learners: Profile[],
+  onStarted?: () => void,
+): Promise<'sent' | 'busy' | 'unreachable' | 'gone'> {
+  if (inFlight.has(noteId)) return 'busy';
+  const u = loadUnsent().find((x) => x.recordingId === noteId);
+  if (!u || !clipsHere(u).length) return 'gone';
+  const cook = profiles.find((p) => p.id === u.cookId);
+  if (!cook) return 'unreachable'; // the family isn't loaded (her own row is hers)
+  looked.add(noteId); // a launch's pass in this run leaves it to this
+  const step = await resendOne(u, cook, profiles, learners, true, onStarted);
+  if (step === 'unreachable') {
+    looked.delete(noteId);
+    return 'unreachable';
+  }
+  return step === 'gone' ? 'gone' : 'sent';
 }
 
 async function resendAll(familyId: string, profiles: Profile[], learners: Profile[]) {
@@ -103,7 +158,7 @@ async function resendAll(familyId: string, profiles: Profile[], learners: Profil
   }
   try {
     for (const u of loadUnsent()) {
-      if (!sendsBySelf(u) || u.familyId !== familyId || looked.has(u.recordingId) || savedHere(u.recordingId)) continue;
+      if (!sendsBySelf(u) || u.familyId !== familyId || looked.has(u.recordingId) || inFlight.has(u.recordingId) || savedHere(u.recordingId)) continue;
       const cook = profiles.find((p) => p.id === u.cookId);
       if (!cook) {
         // Not in this family any more: kept until it's too old to send.
