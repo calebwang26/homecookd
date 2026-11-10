@@ -34,6 +34,11 @@ export type Unsent = {
   /** Sends (or jobs.create calls) started after a relaunch. */
   resends: number;
   /**
+   * A resend of it failed before its new upload existed (the rows of the job it replaced already gone, or it never
+   * had one): Home shows its own failed row, with Send again, until a send of it makes a job (failedNotes).
+   */
+  didntSend?: boolean;
+  /**
    * 'filming': written each time a 5-minute file is saved while she films, before "I'm done". Never
    * sent by itself: Home asks her (stoppedEarly). Unset: being sent (from "I'm done", Send, or Home).
    */
@@ -177,11 +182,46 @@ export function noteForRow(list: Unsent[], row: RowIds): Unsent | undefined {
 
 /**
  * Her "Send again" on a row whose upload gave up (Caleb, Nov 10: "if he'll upload, should say send again"):
- * 'send' when its note and some of its videos are still on this phone, else 'gone' (the row says so plainly,
- * with no button that can't work).
+ * 'send' when its note and some of its videos are still on this phone. With no note, 'kept' when the recording's
+ * own files still are (`filesHere`: a note dropped before Nov 10 left them in documents/recordings/), so the row
+ * never says they're gone, with no button (nothing is left to send them with). Else 'gone': the row says so
+ * plainly, with no button that can't work.
  */
-export function sendAgainOffer(note: Unsent | undefined, clipsHere: number): 'send' | 'gone' {
-  return note && clipsHere > 0 ? 'send' : 'gone';
+export function sendAgainOffer(note: Unsent | undefined, clipsHere: number, filesHere = false): 'send' | 'kept' | 'gone' {
+  if (note) return clipsHere > 0 ? 'send' : 'gone';
+  return filesHere ? 'kept' : 'gone';
+}
+
+/**
+ * The launch's give-up (too many tries, or too old) stops sending it by itself. While a row of it is on Home (an
+ * upload row, or its own failed row: `didntSend`) the note stays, so her Send again still works, and it goes when
+ * she clears that row. With no row nothing shows it, so it goes (the in-app videos stay in documents/recordings/).
+ */
+export function keepAfterGiveUp(u: Pick<Unsent, 'didntSend'>, rowsHere: number): boolean {
+  return rowsHere > 0 || u.didntSend === true;
+}
+
+/**
+ * Her recordings whose resend failed with no upload row left (`didntSend`, no job): each gets its own failed row on
+ * Home, with Send again. Not one an upload row already covers (`rows`, found as Stop finds a row's note), nor one
+ * she's still to be asked about, nor another cook's or another family's.
+ */
+export function failedNotes(list: Unsent[], at: { cookId: string | null | undefined; familyId: string | null | undefined; rows: RowIds[] }): Unsent[] {
+  if (!at.cookId) return [];
+  return list.filter(
+    (u) =>
+      u.didntSend === true &&
+      !u.jobId &&
+      sendsBySelf(u) &&
+      u.cookId === at.cookId &&
+      u.familyId === (at.familyId ?? null) &&
+      !at.rows.some((r) => rowHas(r)(u)),
+  );
+}
+
+/** What a note's upload job changes on it: a job made clears `didntSend` (its upload row is on Home now). */
+export function jobPatch(jobId: string | null): Partial<Unsent> {
+  return jobId ? { jobId, didntSend: undefined } : { jobId };
 }
 
 /**
@@ -210,7 +250,8 @@ export const REDO_AFTER_MS = 60 * 60_000;
  *   'send'      no job and no finished upload: send again
  *   'gone'      none of its videos are on the phone: nothing to send (its job is left alone: the files
  *               may have arrived)
- *   'give-up'   too many tries, or too old (the videos stay in documents/recordings/)
+ *   'give-up'   too many tries, or too old: not sent by itself any more (the videos stay in documents/recordings/,
+ *               and the note too while a row of it is on Home: keepAfterGiveUp)
  * `convexJob`: undefined = Convex couldn't say, null = no job. `upload`: this phone's row for the note's
  * job (null: none). `clipsHere`: how many of its videos are still on the phone. `byHand`: her own "Send
  * again" on Home, which is a fresh first try: no give-up for its tries or its age, and no hour's wait for a
