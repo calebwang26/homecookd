@@ -121,6 +121,15 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | node -e "const d=JSON.parse(require('fs').readFileSync(0)).devices;const all=Object.entries(d).filter(([k])=>/iOS/.test(k)).flatMap(([,v])=>v);const p=all.find(x=>/^iPhone 16$/.test(x.name))||all.find(x=>/^iPhone/.test(x.name));console.log(p.udid)")
           echo "UDID=$UDID" >> "$GITHUB_ENV"
           nohup xcrun simctl boot "$UDID" > "$RUNNER_TEMP/simctl-boot.log" 2>&1 &
+          # trustd's first certificate check after boot sets it rebuilding its pinning database, which holds a lock for
+          # minutes (run 42786504171: from about 70 s after the first check, 09:13:33-09:17:40, every check waited and
+          # failed). So the first check happens here, once the simulator is up, and the rebuild runs during npm ci, Pods
+          # and the build. "Wait for the simulator's trust check" then waits for the lock to be gone.
+          HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
+          # (bootstatus without -b, so it never races the boot above; it waits for the boot to finish)
+          nohup bash -c "for i in \$(seq 1 240); do xcrun simctl bootstatus '$UDID' > /dev/null 2>&1 && break; sleep 5; done; \
+            sleep 5; xcrun simctl openurl '$UDID' 'https://$HOST/?trust-first-use' && date +%s > '$RUNNER_TEMP/trust-first-use'" \
+            > "$RUNNER_TEMP/trust-first-use.log" 2>&1 &
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -292,7 +301,18 @@ jobs:
         run: |
           HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
           LOG="$RUNNER_TEMP/trust-warmup.log"
-          START=$(date +%s); RESTARTS=0; OK=
+          START=$(date +%s); RESTARTS=0; RESTARTED=0; OK=
+          # Only a real log line counts (it starts with a date): log stream's own first line, "Filtering the log data
+          # using ...", repeats the predicate's words.
+          real() { grep -E "^20[0-9]{2}-[0-9]{2}-[0-9]{2} .*$1" "$2" || true; }
+          locked() { real 'database is locked' "$LOCKLOG" | wc -l | tr -d ' '; }
+          # 09:13:33 -> seconds since midnight; anything else -> nothing (the caller then says 0 s)
+          sec() { [[ "$1" =~ ^([0-9]{2}):([0-9]{2}):([0-9]{2})$ ]] && echo $(( 10#${BASH_REMATCH[1]} * 3600 + 10#${BASH_REMATCH[2]} * 60 + 10#${BASH_REMATCH[3]} )); }
+          # trustd's pinning database lock (below) is watched from now, so a lock that starts during the checks is seen.
+          LOCKLOG="$RUNNER_TEMP/trust-lock.log"; : > "$LOCKLOG"
+          xcrun simctl spawn "$UDID" log stream --style compact --level info --predicate \
+            'process == "trustd" AND eventMessage CONTAINS "database is locked"' > "$LOCKLOG" 2>/dev/null &
+          LOCKSTREAM=$!
           for TRY in 1 2 3 4; do
             : > "$LOG"
             # Safari's own processes only: other daemons (apsd, mobileassetd) check certificates too and would answer true.
@@ -303,7 +323,7 @@ jobs:
             sleep 2
             xcrun simctl openurl "$UDID" "https://$HOST/?trust-warmup=$TRY" || true
             for _ in $(seq 1 60); do
-              if grep -q 'result: true' "$LOG"; then OK=1; break; fi
+              if [ -n "$(real 'result: true' "$LOG")" ]; then OK=1; break; fi
               sleep 1
             done
             kill "$STREAM" 2>/dev/null || true
@@ -314,17 +334,58 @@ jobs:
             echo "No answer on try $TRY: restarting the simulator's trustd"
             xcrun simctl spawn "$UDID" launchctl kickstart -k system/com.apple.trustd 2>/dev/null \
               || pkill -9 -f 'RuntimeRoot/usr/libexec/trustd' || true
+            RESTARTED=$(date +%s)
             sleep 3
           done
           rm -f "$LOG"
           WAITED=$(( $(date +%s) - START ))
           if [ -z "$OK" ]; then
-            echo "> ❌ The simulator's trust check never answered: ${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times." >> "$GITHUB_STEP_SUMMARY"
-            echo "::error title=Simulator::the simulator's trust check never answered (${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times)"
+            kill "$LOCKSTREAM" 2>/dev/null || true
+            echo "> ❌ **The simulator, not the app or this PR:** its trust check never answered (${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times). Re-run the job." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Simulator, not the app::the simulator's trust check never answered (${WAITED} s, 4 tries, trustd restarted ${RESTARTS} times). Not the app or this PR: re-run the job."
             exit 1
           fi
           echo "Trust check answered after ${WAITED} s (try ${TRY}, trustd restarted ${RESTARTS} times)."
-          echo "> Simulator trust check: answered after ${WAITED} s, try ${TRY} of 4, trustd restarted ${RESTARTS} times." >> "$GITHUB_STEP_SUMMARY"
+          # Then trustd's pinning database must be free: Safari, restarted each time so each visit makes a new
+          # certificate check, opens the api every 8 s until 30 s pass with no "database is locked" from trustd, counted
+          # from Safari's answer above, and 100 s have passed since this trustd's first check: the early one after boot,
+          # or its last restart here, whichever is later (the lock began about 70 s after a first check). 6 minutes at
+          # most. The lock stream has run since the step began.
+          EARLYAT=$(cat "$RUNNER_TEMP/trust-first-use" 2>/dev/null || true)
+          FIRST=${EARLYAT:-$START}
+          [ "$RESTARTED" -gt "$FIRST" ] && FIRST=$RESTARTED
+          LSTART=$(date +%s); LAST=$LSTART; SEEN=$(locked); FREE=
+          while [ $(( $(date +%s) - LSTART )) -lt 360 ]; do
+            xcrun simctl terminate "$UDID" com.apple.mobilesafari 2>/dev/null || true
+            xcrun simctl openurl "$UDID" "https://$HOST/?trust-probe=$(date +%s)" || true
+            sleep 8
+            N=$(locked)
+            if [ "$N" -gt "$SEEN" ]; then SEEN=$N; LAST=$(date +%s); fi
+            NOW=$(date +%s)
+            if [ $(( NOW - LAST )) -ge 30 ] && [ $(( NOW - FIRST )) -ge 100 ]; then FREE=1; break; fi
+          done
+          kill "$LOCKSTREAM" 2>/dev/null || true
+          xcrun simctl terminate "$UDID" com.apple.mobilesafari 2>/dev/null || true
+          # How long it was locked, from the log's own times (the first and the last locked read, UTC). A time that
+          # doesn't parse gives 0 s; past midnight, a day is added.
+          T1=$(real 'database is locked' "$LOCKLOG" | head -1 | awk '{print substr($2,1,8)}')
+          T2=$(real 'database is locked' "$LOCKLOG" | tail -1 | awk '{print substr($2,1,8)}')
+          rm -f "$LOCKLOG"
+          S1=$(sec "$T1" || true); S2=$(sec "$T2" || true); HELD=0; SPAN=
+          if [ -n "$S1" ] && [ -n "$S2" ]; then
+            HELD=$(( S2 - S1 )); [ "$HELD" -lt 0 ] && HELD=$(( HELD + 86400 ))
+            SPAN=", ${T1}-${T2} UTC"
+          fi
+          WAITED=$(( $(date +%s) - START ))
+          if [ -z "$FREE" ]; then
+            echo "> ❌ **The simulator, not the app or this PR:** its certificate service (trustd) kept its pinning database locked for 6 minutes (${SEEN} locked reads${SPAN}). Re-run the job." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Simulator, not the app::trustd's pinning database stayed locked for 6 minutes (${SEEN} locked reads). Not the app or this PR: re-run the job."
+            exit 1
+          fi
+          EARLY=$([ -n "$EARLYAT" ] && echo "early first check $(( LSTART - EARLYAT )) s before" || echo "no early first check")
+          LINE="Simulator trust check: free after ${WAITED} s in all, Safari answered on try ${TRY} of 4, trustd restarted ${RESTARTS} times; its pinning database locked ${SEEN} reads over ${HELD} s${SPAN} (${EARLY})."
+          echo "$LINE"
+          echo "> $LINE" >> "$GITHUB_STEP_SUMMARY"
           echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
       # Journey 2's people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who joined by it.
       # The link and the kid's device key are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no secret, so
