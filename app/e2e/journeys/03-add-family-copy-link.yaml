@@ -10,8 +10,11 @@ name: New message, Add family, Copy link
 tags:
   - needs-key
 ---
+# clearState empties the app's data but not the keychain, where a signed-in session lives; without clearKeychain
+# the journey after a signed-in one starts signed in (run 42763382649). Journeys run in no fixed order.
 - launchApp:
     clearState: true
+    clearKeychain: true
 - runFlow:
     file: ../flows/open-link.yaml
     env:
@@ -63,7 +66,7 @@ tags:
     timeout: 20000
 - tapOn: "Message Leo \\(test\\)"
 - extendedWaitUntil:
-    visible: ".*Ask Leo \\(test\\) anything.*"
+    visible: ".*Say hello to Leo \\(test\\).*"
     timeout: 20000
 - takeScreenshot: 03-chat
 - tapOn: "Back"

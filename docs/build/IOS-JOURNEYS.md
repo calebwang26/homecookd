@@ -148,8 +148,11 @@ signed in to that family.
 - The cook from the seed ("Asha (test)") signs in through the hook with `COOK_KEY`, her masked device key.
 - A new cook first picks her language ("Your language": English) and passes her one-time welcome ("Not now").
 - Then: Messages → New message (the family, with Leo) → Add family → Copy link ("Copied", the link from staging) →
-  Close → New message → Message Leo (test) → the chat ("Ask Leo (test) anything.") → Back → Home.
+  Close → New message → Message Leo (test) → the chat ("Say hello to Leo (test).") → Back → Home.
 - Every step after a sheet closes taps something and waits for the next screen, so a frozen screen fails the journey.
+- Maestro runs the journeys in no fixed order (run 42763382649: 03, 02, then 00), and `clearState` leaves the keychain,
+  where a session lives. So every journey launches with `clearKeychain: true` too, or the one after a signed-in journey
+  starts signed in.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 

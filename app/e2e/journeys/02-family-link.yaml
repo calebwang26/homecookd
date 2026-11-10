@@ -10,8 +10,11 @@ name: Family link, name, sign in
 tags:
   - needs-key
 ---
+# clearState empties the app's data but not the keychain, where a signed-in session lives; without clearKeychain
+# the journey after a signed-in one starts signed in (run 42763382649). Journeys run in no fixed order.
 - launchApp:
     clearState: true
+    clearKeychain: true
 - extendedWaitUntil:
     visible: ".*Cook your family.s food.*"
     timeout: 60000
