@@ -22,7 +22,7 @@ import type { Profile } from '@/lib/api';
 import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { clipFile, keepAfterGiveUp, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
+import { clipFile, keepAfterGiveUp, keepWhenGone, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
 import {
   cleanOrphanCopies,
   clipsHere,
@@ -107,6 +107,8 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
   // 'gone': nothing to send. A job is left alone (its files may have arrived); with none, its rows are dead.
   if (step === 'gone') {
     if (!job) for (const r of rowsOf(u)) removeJob(r.job_id);
+    // A send of it already failed with no upload row left: its own row stays and says the videos are gone, until her x.
+    if (keepWhenGone(u)) return step;
     dropUnsent(u.recordingId);
     return step;
   }
@@ -182,7 +184,8 @@ export async function sendNoteAgain(
   return step === 'gone' ? 'gone' : 'sent';
 }
 
-async function resendAll(familyId: string, profiles: Profile[], learners: Profile[]) {
+/** A launch's pass over every note (exported for scripts/test-send.mjs, which runs it against a fake phone and server). */
+export async function resendAll(familyId: string, profiles: Profile[], learners: Profile[]) {
   if (running) return;
   running = true;
   if (!tidied) {

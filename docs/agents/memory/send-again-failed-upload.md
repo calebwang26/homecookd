@@ -26,4 +26,6 @@ without waiting for the next launch's automatic resend or filming again.
   clears the row. (Master Agent, Nov 10: bugs under this decision, not new design.)
 - The row says the videos aren't on the phone only when they really aren't: from the note's kept videos, or, with no
   note left, from the recording's own folder (documents/recordings/<id>/), never from why the note went.
+- A row never leaves Home with no word: when a recording's send already failed (its own row) and its videos are then
+  gone too, the row stays with "…not on this phone any more" and no button until her x (Master Agent, Nov 10).
 - Changing the wording or the button needs Caleb's word.
