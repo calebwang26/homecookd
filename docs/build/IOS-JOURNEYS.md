@@ -179,6 +179,46 @@ So the journeys have these lines of defense, in this order:
 4. **Try again** in `open-link.yaml` (above), for anything that still slips through. A journey that needed it gets a
    warning, never a silent pass.
 
+**A link open iOS gives up on (fault four, Master Agent, Nov 10).** Maestro's `openLink` runs `xcrun simctl openurl`.
+Sometimes lsd stops waiting for SpringBoard after exactly 10 s (`_LSDispatchWithTimeout`, Code=60). simctl then fails,
+but SpringBoard still delivers the link seconds later. Maestro's `retry` and `optional` catch only Maestro's own errors,
+so this throw ends the journey ("Unknown error" in report.xml) on a link that landed. Every one seen on Nov 10, from the
+kept simulator logs:
+
+| Run (attempt) | Journey | Open (UTC) | iOS gave up | App got the link | Gate: trustd restarts |
+|---|---|---|---|---|---|
+| 42847823481 (1), #473 | Family link, name, sign in | 15:58:14 | +10.0 s | +53.0 s | 1 |
+| 42847823481 (2), #473 | Family link, name, sign in | 16:18:37 | +10.0 s | +15.8 s | 1 |
+| 42847823481 (2), #473 | Launch, then a link that doesn't work | 16:19:46 | +10.0 s | +21.5 s | 1 |
+| 42851642925, #471 | Record, film, send | 16:25:24 | +10.0 s | +16.4 s | 0 |
+| 42872308399 (2), #476 | Family link, name, sign in | 19:36:28 | +10.0 s | +14.2 s | 0 |
+
+A fifth slow open in 42851642925 didn't throw: journey 3's sign-in link (16:20:53) first reached SpringBoard 64 s later,
+and the journey passed after two re-opens. So a trustd restart in the gate isn't needed for it (0 in 42851642925).
+GitHub's notice on these jobs said macOS arm64 runners were under capacity pressure, and all of them fall between
+15:58 and 16:26 UTC; that is a guess at a cause, not a finding.
+
+The fix: `scripts/journey-xcrun.sh` is Maestro's `xcrun` in the Journeys step (first on its PATH). Every call goes straight
+to the real one, except a `simctl openurl` that fails. That open counts as opened only when the step's log stream shows
+lsd's Code=60 timeout and the app receiving a link (its own `UIOpenURLAction` line) within 30 s of the open, the time
+`open-link.yaml` would wait for its screen anyway. Then the flow goes on, and its own wait for that screen is still the
+proof. Anything else fails as before, with simctl's own error. Each failed open, passed or not, gets a "Journey retry"
+warning naming the journey, when iOS gave up and when the link landed (`journey-retries.mjs`, from report.xml's times).
+The 30 s run from the open to the app's own line, not to simctl returning, and a link that never arrives fails as before.
+Of the five above, the four that landed within 30 s would have passed with a warning, and 42847823481's first would
+still fail. A link that starts the app arrives at launch, without that line, so a failed open of one isn't excused.
+
+Every open is logged, not only the failed ones, so a slow open shows even when nothing threw (the 64 s one above). The
+"Link opens" table, in the job summary and the job log (`gh run view --log`; a summary needs a signed-in browser), lists each: the journey, when, how long simctl took or how it failed, and when the app
+got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
+the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
+keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
+the first open whose link the app received on its own (within 3 s) as one iOS gave up on, to check the landing check on
+a real simulator. Not an open iOS asks about ("Open in homecookd?"): its link lands only after Maestro taps Open, which
+can't happen while the stand-in holds `openLink`. Dispatch 42889278704 faked such an open, and its dialog stayed up and
+failed the two journeys after it. For the same reason a real Code=60 on an open waiting on that dialog would fail as
+before; none of the five above had the dialog (their links landed with no tap).
+
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.
 - Before Maestro starts, the step "Seed the journey test people" runs `scripts/journey-people.mjs setup` on AWS staging.
