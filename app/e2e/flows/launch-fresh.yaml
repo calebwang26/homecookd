@@ -15,6 +15,8 @@ name: A fresh install, signed out, on the first screen
     clearKeychain: true
 - runFlow:
     file: allow-permissions.yaml
+    env:
+      SHOT: leftover-prompt
 - extendedWaitUntil:
     visible: ".*(Cook your family.s food|would like to paste).*"
     timeout: 60000

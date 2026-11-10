@@ -93,6 +93,18 @@ test('Try again taps and re-opens together are both reported', () => {
   ]);
 });
 
+test('a prompt an earlier journey left up is reported, with or without retries; her own prompt is not', () => {
+  const J2 = 'Family link, name, sign in';
+  assert.deepEqual(lines(out([[J2, true, ['leftover-prompt-1']]])), [
+    `${J2}: started by answering 1 camera/microphone prompt an earlier journey left up (that journey stopped on it)`,
+  ]);
+  assert.deepEqual(lines(out([[J2, true, ['leftover-prompt-1', 'open-again-1']]])), [
+    `${J2}: started by answering 1 camera/microphone prompt an earlier journey left up (that journey stopped on it)`,
+    `${J2}: passed after 1 re-open of the link: the link didn’t land or the app stalled (the kept simulator log says which)`,
+  ]);
+  assert.deepEqual(lines(out([['Record, film, send', true, ['permission-prompt-1', 'permission-prompt-2']]])), []);
+});
+
 test("Maestro's real report: status and the escaped apostrophe", () => {
   const xml = `<testsuites><testsuite><testcase id="${LAUNCH.replace("'", '&apos;')}" name="${LAUNCH.replace("'", '&apos;')}" status="ERROR">
       <failure>Assertion is false</failure></testcase><testcase name="B" status="SUCCESS"/></testsuite></testsuites>`;

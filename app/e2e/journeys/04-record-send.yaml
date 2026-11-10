@@ -53,6 +53,8 @@ tags:
     timeout: 20000
 - runFlow:
     file: ../flows/allow-permissions.yaml
+    env:
+      SHOT: permission-prompt
 # The stand-in camera card and the red button ("Tap to start"). Filming starts only on her tap.
 - extendedWaitUntil:
     visible: "Start recording"

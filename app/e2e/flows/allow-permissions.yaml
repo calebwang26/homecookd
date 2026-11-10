@@ -13,6 +13,10 @@ name: Answer iOS's camera and microphone prompts
       visible: ".*would like to access the (Camera|Microphone).*"
     times: 3
     commands:
+      # SHOT names the screenshot: leftover-prompt-N at a fresh launch (a prompt an earlier journey left: the summary
+      # warns), permission-prompt-N in journey 4 (her own first recording asking: expected, no warning).
+      - evalScript: ${output.prompts = (output.prompts || 0) + 1}
+      - takeScreenshot: ${SHOT}-${output.prompts}
       - tapOn: "Allow"
       - extendedWaitUntil:
           visible: ".*would like to access the (Camera|Microphone).*"

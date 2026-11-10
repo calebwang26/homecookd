@@ -230,8 +230,12 @@ signed in to that family.
   filming stops, each file is a real 5 s clip from staging media (`EXPO_PUBLIC_E2E_CLIP_URL`, set in the workflow), so
   the recording uploads and makes a job exactly as a phone's does.
 - The recording screen asks iOS for the camera (and the microphone) the first time, as on a phone, and the cook taps
-  Allow (`flows/allow-permissions.yaml`). `launchApp`'s `permissions` didn't pre-grant it (run 42839865165), and a prompt
-  left up stays over the next journey's launch, so `flows/launch-fresh.yaml` answers any leftover prompt first.
+  Allow (`flows/allow-permissions.yaml`, screenshot `permission-prompt-N`: expected, no warning). `launchApp`'s
+  `permissions: camera: allow` didn't pre-grant it (run 42839865165), most likely because `simctl privacy`, which the
+  grant goes through, has no camera service (not verified on the runner). A prompt left up by a journey that stopped
+  on it stays over the next launch (journeys 2 and 0 in that run), so `flows/launch-fresh.yaml` answers it first and
+  saves `leftover-prompt-N`; the summary then warns "started by answering N camera/microphone prompts an earlier
+  journey left up".
 - The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
   recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
   sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
