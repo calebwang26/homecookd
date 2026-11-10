@@ -43,7 +43,7 @@ import {
 
 import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
 import { describeJob, ProcessingRow, stoppedView, type ProcessingView } from './ProcessingRow';
-import { flushStops, inTime, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
+import { flushStops, inTime, markGone, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
 
 const POLL_MS = 60_000;
 /** How long a stop waits for Convex (it queues a mutation while offline) or for jobs.create. */
@@ -267,6 +267,9 @@ export function usePendingRecipes(): PendingState {
           cancelJobUploads(job.job_id);
           requestCancel(job.job_id).catch((err) => console.warn('[uploads] quiet cancel failed', err));
         }
+        // Its live job, if one still runs (on 1.1 a failed upload's job waits in 'uploading'), is stopped by the
+        // effect above, once, and never comes back as a row of its own (requestCancel does nothing on AWS).
+        markGone(job.job_id);
         removeJob(job.job_id);
         dropUnsentFor(job);
         setJobs(loadJobs());
