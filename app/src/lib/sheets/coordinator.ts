@@ -5,13 +5,14 @@
 //   afterClose(() => router.push(...))        once every sheet up now has gone (+ SETTLE_MS)
 //   afterClose(() => pick.record(), 600)      ... and never sooner than 600 ms (a native camera or picker)
 //   useSheetsUp()                             how many sheets' Modals are up (root hosts wait for 0)
+//   showEventFor(id)                          what `visible` turning true becomes: held while any other is up
 //   pickToastViewport(viewports)              the newest viewport not inside a sheet that isn't open
 //
 // afterClose never waits forever: AFTER_CLOSE_CAP_MS (or minMs, if longer) runs it anyway.
 import { useSyncExternalStore } from 'react';
 
 import { motion } from '../../theme/tokens';
-import { CLOSING_WAIT_MS, isUp, SETTLE_MS, type SheetState } from './machine';
+import { CLOSING_WAIT_MS, isUp, SETTLE_MS, showEvent, type SheetEvent, type SheetState } from './machine';
 
 const sheets = new Map<string, SheetState>();
 const listeners = new Set<() => void>();
@@ -65,6 +66,15 @@ export function upCount(except?: string): number {
 export function othersClosing(except?: string): boolean {
   for (const [id, s] of sheets) if (id !== except && s === 'closing') return true;
   return false;
+}
+
+/**
+ * The event `visible` turning true becomes on sheet `id` (BottomSheet, before paint): `showBehind` while any
+ * other sheet's Modal is up, as the coordinator has it now. A sheet hidden in this same commit still reads
+ * `open` here (it reports `closing` from its effect), so it counts: presenting now would be over it.
+ */
+export function showEventFor(id: string): SheetEvent {
+  return showEvent(upCount(id) > 0);
 }
 
 export function useSheetsUp(): number {

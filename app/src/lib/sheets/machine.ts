@@ -10,9 +10,10 @@
 //
 // The invariant: a sheet's Modal never presents while another sheet's Modal is still going away (iOS
 // refuses it, or leaves an invisible Modal that takes every tap: #402).
-// Which event `visible` becomes is decided outside the table (initialSheetState, showEvent), exactly as
-// BottomSheet did before the table: a sheet created already visible waits while any other Modal is up
-// (that one may be closing in the same tap); one shown later waits only while another is closing.
+// Which event `visible` becomes is decided outside the table (initialSheetState, showEvent): a sheet
+// that becomes visible, created so or shown later, waits while any other sheet's Modal is up. That one
+// may be hiding in this same tap and reports `closing` only from its effect (#402: "New message" →
+// "Add family"; the AI consent sheet's "OK, continue" → Record's pre-record sheet, iOS journey 4).
 import { machine } from '../machine';
 
 export const SHEET_EVENTS = ['show', 'showBehind', 'settled', 'hide', 'closeDone'] as const;
@@ -40,9 +41,9 @@ export function initialSheetState(visible: boolean, othersUp: boolean): SheetSta
   return othersUp ? 'held' : 'open';
 }
 
-/** `visible` turned true on a sheet that already exists: it waits only while another one is closing. */
-export function showEvent(othersClosing: boolean): SheetEvent {
-  return othersClosing ? 'showBehind' : 'show';
+/** `visible` turned true on a sheet that already exists: like one created visible, it waits while any other Modal is up. */
+export function showEvent(othersUp: boolean): SheetEvent {
+  return othersUp ? 'showBehind' : 'show';
 }
 
 /** How long a held sheet waits before `settled`: the cap while another is closing, else a few frames. */
