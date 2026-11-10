@@ -30,17 +30,14 @@ tags:
     visible: ".*What will you teach today.*"
     timeout: 20000
 - tapOn: "Start recording"
-# A new cook's first recording asks for AI consent first ("homecookd uses AI for this"; the App Review path): the
-# test cook says OK, continue, which checks that path too.
+# A new cook's first recording asks for AI consent first (the App Review path, run 42820907631): its title must show,
+# and the test cook says OK, continue. The sheet is exercised, never changed.
 - extendedWaitUntil:
-    visible: ".*(What are you cooking|homecookd uses AI for this).*"
+    visible: ".*homecookd uses AI for this.*"
     timeout: 20000
-- runFlow:
-    when:
-      visible: ".*homecookd uses AI for this.*"
-    commands:
-      - takeScreenshot: 04-ai-consent
-      - tapOn: "OK, continue"
+- assertVisible: "OK, continue"
+- takeScreenshot: 04-ai-consent
+- tapOn: "OK, continue"
 - extendedWaitUntil:
     visible: ".*What are you cooking.*"
     timeout: 20000
