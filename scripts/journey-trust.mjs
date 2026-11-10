@@ -6,8 +6,9 @@
 // check passed), evaluated nothing for the six minutes left, and logged "database is locked" at 21:14:22.
 //   node scripts/journey-trust.mjs <maestro test-output dir> <trustd stream> [<gate passed, epoch s>] [--summary <file>]
 // The trustd stream is the simulator's `log stream --style syslog` of trustd alone, from boot (it stays on the runner).
-// Prints one line per journey whose app had a certificate check fail, saying whether trustd had stopped (the
-// simulator) or kept evaluating while only the app failed (the api's certificate), and one line on trustd's pinning
+// Prints one line per journey whose app had a certificate check fail, saying whether trustd had stopped (quiet for at
+// least STALL_GAP_MS before the first failure and through them: the simulator), or kept evaluating while only the app
+// failed (the api's certificate), or that there's no trustd log to tell by; and one line on trustd's pinning
 // database whenever it updated or locked. --summary writes the kept file: times, pids, versions and per-minute counts,
 // built from fixed words only, never a line's own text, so it can't hold a hostname, a link or a key.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -60,6 +61,11 @@ export function verdicts(text) {
   });
 }
 
+// A stall needs trustd quiet this long before the app's first failure (and through its failures). When the api's own
+// certificate fails, trustd's evaluation is the check that failed, well under a second before it; in 42898927696
+// trustd's last evaluation was 24 s before the app's first failure, in 42887110283 attempt 2, 55 s.
+export const STALL_GAP_MS = 5000;
+
 const hms = (ms) => new Date(ms).toISOString().slice(11, 19);
 const ago = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} m ${s % 60} s`);
 const after = (ms, gate) => {
@@ -82,20 +88,24 @@ export function journeyLines(journeys, t, gate) {
     const last = failed[failed.length - 1].ms;
     const others = v.filter((x) => x.proc !== APP);
     const otherFailed = others.filter((x) => !x.ok).length;
-    const evals = [...t.evals, ...trustd(log).evals].sort((a, b) => a - b);
+    const own = trustd(log);
+    const seen = t.pids.size > 0 || own.pids.size > 0; // any trustd line at all, in the stream or this journey's log
+    const evals = [...t.evals, ...own.evals].sort((a, b) => a - b);
     const before = evals.filter((ms) => ms < first);
     const during = evals.filter((ms) => ms >= first && ms <= last).length;
+    const stop = before[before.length - 1];
     let line = `${name}: the app's certificate checks failed ${failed.length} ${failed.length === 1 ? 'time' : 'times'}, ${hms(first)}–${hms(last)} UTC (other processes: ${otherFailed} failed, ${others.length - otherFailed} passed)`;
-    if (!during && before.length) {
-      const stop = before[before.length - 1];
+    if (!seen) {
+      line += "; there's no trustd log for this run, so it can't tell whether the simulator stopped checking certificates";
+    } else if (stop !== undefined && !during && first - stop >= STALL_GAP_MS) {
       const update = [...t.updates].reverse().find((u) => u.ms <= last);
       const locked = t.locked.filter((ms) => ms >= stop && ms <= last).length;
       line += `; trustd evaluated nothing after ${hms(stop)}${after(stop, gate)}`;
       if (update && update.ms >= stop - 60_000) line += `, and started a pinning database update (${update.from} → ${update.to}) at ${hms(update.ms)}`;
       if (locked) line += `; its pinning database was locked ${locked} ${locked === 1 ? 'time' : 'times'}`;
       line += ': the simulator stopped checking certificates, not the app (re-run the job)';
-    } else if (!during) {
-      line += '; trustd evaluated nothing in this run: the simulator, not the app (re-run the job)';
+    } else if (!evals.length) {
+      line += '; trustd logged but evaluated nothing in this run: the simulator, not the app (re-run the job)';
     } else if (otherFailed) {
       line += '; other processes failed too: the simulator, not the app';
     } else {

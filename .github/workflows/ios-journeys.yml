@@ -507,8 +507,9 @@ jobs:
       # simulator's certificate service, sometimes stops checking anything for minutes, even after the trust check
       # passed (42898927696: it started rebuilding its pinning database 58 s later), and every handshake then fails, the
       # app's included. Each journey whose app had a check fail gets a warning: when trustd last checked anything,
-      # whether it was rebuilding or locked, and other processes' results beside the app's, so a stall reads as the
-      # simulator and a failure only the app had reads as the api's certificate. Each rebuild or lock in the run gets a
+      # whether it was rebuilding or locked, and other processes' results beside the app's. It names the simulator only
+      # when trustd was quiet at least 5 s before the app's first failure and through them, or others failed too; a
+      # failure while trustd kept checking reads as the api's certificate, and no trustd log at all says it can't tell. Each rebuild or lock in the run gets a
       # line too, with when trustd checked again, if it did: what a fix would need to know. The kept file has times,
       # pids, versions and per-minute counts only, and goes through the same scrub as every log below.
       - name: Name a certificate stall
@@ -519,7 +520,7 @@ jobs:
             --summary "$RUNNER_TEMP/maestro-out/trustd-summary.txt" | while IFS= read -r LINE; do
             case "$LINE" in
               trustd*) echo "$LINE"; echo "> $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
-              *) echo "::warning title=Certificate stall::$LINE"; echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
+              *) echo "::warning title=Certificate checks failed::$LINE"; echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
             esac
           done
       # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed

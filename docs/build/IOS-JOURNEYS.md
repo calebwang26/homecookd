@@ -334,10 +334,12 @@ phones.
   should update from version 121 to version 131" and checked nothing for the six minutes left ("database is locked" at
   21:14:22), so every process failed, not only the app.
   **It names itself** ("Name a certificate stall", `scripts/journey-trust.mjs`): trustd's own log is streamed from boot
-  and stays on the runner. Each journey whose app had a check fail gets a "Certificate stall" warning: when trustd last
-  checked anything (and how long after the trust check passed), whether it was rebuilding or locked, and other
-  processes' results beside the app's. Only the app failing while trustd kept checking reads as the api's certificate
-  instead. Each rebuild or lock gets a summary line, with when trustd checked again, if it did. The kept
+  and stays on the runner. Each journey whose app had a check fail gets a "Certificate checks failed" warning: when
+  trustd last checked anything (and how long after the trust check passed), whether it was rebuilding or locked, and
+  other processes' results beside the app's. It names the simulator only when trustd was quiet at least 5 s before the
+  app's first failure and through them (24 s and 55 s in #481's two runs; when the api's own certificate fails, the check
+  that failed is under a second before), or other processes failed too. A failure while trustd kept checking reads as
+  the api's certificate, and a run with no trustd line at all says it can't tell, with no re-run advice. Each rebuild or lock gets a summary line, with when trustd checked again, if it did. The kept
   `trustd-summary.txt` holds times, pids, versions and per-minute counts only (tested with made-up hostnames, links and
   keys in the lines it reads), and goes through the same scrub as the logs. No wait or re-run is built on it until a
   run shows when the rebuild ends.
