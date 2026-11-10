@@ -30,6 +30,10 @@ on:
         type: choice
         options: ['off', first-try, all]
         default: 'off'
+      openurl_fault:
+        description: "Treat the first link open as one iOS gave up on (Code=60), to check that a link that still lands passes with a Journey retry warning"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -409,11 +413,26 @@ jobs:
       # never answers), so the app's requests hang like the trust-check stall. The simulator's sockets are the runner's,
       # so first-try sees the app's first try in netstat and brings the api back 15 s later, after the app's own 10 s
       # timeout has put up "We can't reach homecookd."; all keeps it down for the whole run.
+      # A link open iOS gives up on (docs/build/IOS-JOURNEYS.md): after 10 s lsd stops waiting (Code=60) while SpringBoard
+      # can still deliver the link seconds later, and Maestro's openLink then throws an error its retry can't catch. Maestro
+      # runs xcrun from its PATH, so scripts/journey-xcrun.sh goes first: a failed open counts as opened only when this
+      # step's stream shows lsd giving up and the app receiving a link within 30 s, and the Times step warns about each
+      # failed open, passed or not. The stream keeps only those two kinds of line; neither holds the link.
       - name: Journeys
         env:
           STALL_API: ${{ inputs.stall_api || 'off' }}
+          JOURNEY_OPENURL_FAKE: ${{ inputs.openurl_fault && 'first' || '' }}
         run: |
-          mkdir -p "$RUNNER_TEMP/maestro-out"
+          mkdir -p "$RUNNER_TEMP/maestro-out" "$RUNNER_TEMP/xcrun"
+          ln -sf "$PWD/scripts/journey-xcrun.sh" "$RUNNER_TEMP/xcrun/xcrun"
+          export JOURNEY_OPENURL_STREAM="$RUNNER_TEMP/openurl-stream.log" JOURNEY_OPENURL_LOG="$RUNNER_TEMP/openurl.jsonl"
+          : > "$JOURNEY_OPENURL_LOG"
+          xcrun simctl spawn "$UDID" log stream --style syslog --predicate \
+            '(process == "lsd" AND eventMessage CONTAINS "_LSDispatchWithTimeout") OR (process == "homecookd" AND eventMessage CONTAINS "UIOpenURLAction")' \
+            > "$JOURNEY_OPENURL_STREAM" 2>/dev/null &
+          OPENSTREAM=$!
+          trap 'kill $OPENSTREAM 2>/dev/null || true' EXIT
+          if [ -n "$JOURNEY_OPENURL_FAKE" ]; then echo "openurl_fault: the first link open counts as one iOS gave up on"; fi
           if [ "$STALL_API" != off ]; then
             HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
             dns() { sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; }
@@ -427,8 +446,8 @@ jobs:
           fi
           KEYED=(--exclude-tags needs-key)
           if [ -n "${KID_KEY:-}" ]; then KEYED=(-e "FAMILY_LINK=$FAMILY_LINK" -e "KID_KEY=$KID_KEY" -e "COOK_KEY=$COOK_KEY"); fi
-          maestro --device "$UDID" test app/e2e/journeys --format junit --output "$RUNNER_TEMP/maestro-out/report.xml" \
-            --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID" "${KEYED[@]}"
+          PATH="$RUNNER_TEMP/xcrun:$PATH" maestro --device "$UDID" test app/e2e/journeys --format junit \
+            --output "$RUNNER_TEMP/maestro-out/report.xml" --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID" "${KEYED[@]}"
           echo "T_JOURNEYS=$(date +%s)" >> "$GITHUB_ENV"
       - name: Times
         if: always()
@@ -446,8 +465,8 @@ jobs:
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
           } >> "$GITHUB_STEP_SUMMARY"
           # A journey that needed a retry in open-link.yaml (a Try again tap on a card, or opening the link again) says so,
-          # even when it passed.
-          node scripts/journey-retries.mjs "$RUNNER_TEMP/maestro-out" | while IFS= read -r LINE; do
+          # even when it passed, and so does every link open simctl failed (journey-xcrun.sh), landed or not.
+          node scripts/journey-retries.mjs "$RUNNER_TEMP/maestro-out" "$RUNNER_TEMP/openurl.jsonl" | while IFS= read -r LINE; do
             echo "::warning title=Journey retry::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
