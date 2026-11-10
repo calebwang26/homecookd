@@ -10,14 +10,9 @@ name: Family link, name, sign in
 tags:
   - needs-key
 ---
-# clearState empties the app's data but not the keychain, where a signed-in session lives; without clearKeychain
-# the journey after a signed-in one starts signed in (run 42763382649). Journeys run in no fixed order.
-- launchApp:
-    clearState: true
-    clearKeychain: true
-- extendedWaitUntil:
-    visible: ".*Cook your family.s food.*"
-    timeout: 60000
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
 # The join card, from staging's peek of the cook's real link.
 - runFlow:
     file: ../flows/open-link.yaml

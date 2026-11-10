@@ -1,0 +1,28 @@
+appId: ${APP_ID}
+name: A fresh install, signed out, on the first screen
+---
+# Every journey starts here. Journeys run in no fixed order, so nothing an earlier one left may carry over:
+# - clearState empties the app's data but not the keychain, where a signed-in session lives; without clearKeychain the
+#   journey after a signed-in one starts signed in (run 42763382649).
+# - A homecookd link left on the clipboard (journey 3's Copy link) makes the first screen's pickup read it, and iOS asks
+#   "homecookd would like to paste from homecookd", covering the screen (run 42778668467). That's the app working; the
+#   journeys answer Don't Allow Paste, so no copied link joins anything.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible: ".*(Cook your family.s food|would like to paste).*"
+    timeout: 60000
+# The pickup asks a moment after the screen is up.
+- extendedWaitUntil:
+    visible: ".*would like to paste.*"
+    timeout: 3000
+    optional: true
+- runFlow:
+    when:
+      visible: ".*would like to paste.*"
+    commands:
+      - tapOn: ".*Don.t Allow Paste.*"
+- extendedWaitUntil:
+    visible: ".*Cook your family.s food.*"
+    timeout: 20000

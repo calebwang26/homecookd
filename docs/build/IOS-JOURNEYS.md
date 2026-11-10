@@ -170,9 +170,11 @@ signed in to that family.
 - Then: Messages → New message (the family, with Leo) → Add family → Copy link ("Copied", the link from staging) →
   Close → New message → Message Leo (test) → the chat ("Say hello to Leo (test).") → Back → Home.
 - Every step after a sheet closes taps something and waits for the next screen, so a frozen screen fails the journey.
-- Maestro runs the journeys in no fixed order (run 42763382649: 03, 02, then 00), and `clearState` leaves the keychain,
-  where a session lives. So every journey launches with `clearKeychain: true` too, or the one after a signed-in journey
-  starts signed in.
+- Maestro runs the journeys in no fixed order (run 42763382649: 03, 02, then 00), so every journey starts with
+  `flows/launch-fresh.yaml`: a fresh install with `clearState` and `clearKeychain` (the keychain holds the session, and
+  `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
+  clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
+  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 

@@ -4,14 +4,9 @@
 appId: ${APP_ID}
 name: Launch, then a link that doesn't work
 ---
-# clearState empties the app's data but not the keychain, where a signed-in session lives; without clearKeychain
-# the journey after a signed-in one starts signed in (run 42763382649). Journeys run in no fixed order.
-- launchApp:
-    clearState: true
-    clearKeychain: true
-- extendedWaitUntil:
-    visible: ".*Cook your family.s food.*"
-    timeout: 60000
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
 - assertVisible: ".*Got a link from your family.*"
 - assertVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 00-first-screen
