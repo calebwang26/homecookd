@@ -95,7 +95,7 @@ From `docs/build/LAUNCH-LINKS.md` and `API.md`:
 - Apple bundle id + Team ID, then `node scripts/set-apple-ids.mjs`. That fills `APPLE_AUDIENCES`, the AASA file and
   `APP_BUNDLE_ID`. `homecookd.app/.well-known/apple-app-site-association` is 404 until then.
 - Google OAuth client ids (GCP project `project-11b9fc8a-1108-4ea8-a3b`).
-- `NEXT_PUBLIC_APP_STORE_URL` in Vercel, then the first TestFlight build (EAS config is in place).
+- Done (Nov 9): the site's "Get the app" needs no Vercel setting. It is the App Store page (`web/src/lib/app-links.ts`); `NEXT_PUBLIC_APP_STORE_URL` only replaces it.
 - Security: remove `host.exp.Exponent` from `APPLE_AUDIENCES` and the `EXPO_GO_BUNDLE_ID` default once TestFlight works.
 - `MADE_BY` on the website is empty (hidden) until Caleb provides it.
 - About 20 smaller `TODO(caleb)` product decisions: `grep -rn "TODO(caleb)" docs app supabase web`.

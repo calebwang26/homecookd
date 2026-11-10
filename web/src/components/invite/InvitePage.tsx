@@ -15,7 +15,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { EggMascot } from '@/components/primitives/EggMascot';
 import { Logo } from '@/components/primitives/Logo';
 import { Avatar } from '@/components/recipe-web/Avatar';
-import { appSchemeUrl, isPhoneOrTablet, LANDER_LINK, WEB_ORIGIN } from '@/lib/app-links';
+import { isPhoneOrTablet, LANDER_LINK, openAppUrl, WEB_ORIGIN } from '@/lib/app-links';
 import { cleanInviteCode, InviteError, isPlausibleInviteToken, peekInvite } from '@/lib/recipe-web/api';
 import { fixtureAllowed } from '@/lib/recipe-web/config';
 import { joinFamilyTitle } from '@/lib/recipe-web/recipe';
@@ -212,7 +212,7 @@ function Pending({ invite, token, code, phone }: Extract<Load, { state: 'ready' 
   // link is picked up by the app on its own and never shows a code.
   const joinLink = invite.kind === 'link' && !!token;
   const link = token ? `${WEB_ORIGIN}/i?t=${encodeURIComponent(token)}` : code!;
-  const openUrl = token ? appSchemeUrl('i', { t: token }) : appSchemeUrl('i', { c: code! });
+  const openUrl = openAppUrl('i', token ? { t: token } : { c: code! });
   return (
     <Hero
       face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <EggMascot size={96} mood="hello" />}
@@ -223,7 +223,6 @@ function Pending({ invite, token, code, phone }: Extract<Load, { state: 'ready' 
         <Handoff
           link={link}
           openUrl={openUrl}
-          askName={inviter?.name ?? null}
           phone={phone}
           copied={joinLink ? 'Copied. Open homecookd and it picks up your link.' : undefined}
         />
