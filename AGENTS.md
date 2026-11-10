@@ -290,6 +290,7 @@ python3 infra/scripts/test_plan_check.py                                # what a
 # website on AWS (staging only; infra/modules/web, docs/build/WEB-MIGRATION.md)
 cd web && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs   # the URL rules against every real file in web/out
 node infra/scripts/web-smoke.mjs https://homecookd.app                            # the same paths, against a running site
+node scripts/bug-hunt/walk.mjs --out <folder>                                     # Bug hunt's read-only walk of the live site as an iPhone and an Android phone (docs/agents/BUG-HUNT.md)
 node infra/scripts/load-test.mjs http://<staging api>                             # the api's load test (staging, fake models): 50 RPS for 15 min, then a burst
 
 # new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
