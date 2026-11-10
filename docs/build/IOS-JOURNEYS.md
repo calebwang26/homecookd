@@ -220,6 +220,14 @@ signed in to that family.
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+- **Copy link's "Copied" lasts 2 s, so the tap waits at most 200 ms to settle (Master Agent, Nov 10).** ExternalRow shows
+  "Copied" (the button's label: "Link copied") for `COPIED_MS` = 2000 ms after the copy. Maestro's `tapOn` first waits
+  for the app to settle, and only then does the next command look. In run 42856745720 that first look came 2.03 s after
+  the pasteboard write began, after the label had gone back, and 63 looks over the next 22 s found nothing. The copy
+  itself worked: the write completed at 16:52:57.835. The passing runs looked at +1.84 s (42859020816), +1.68 s
+  (42855180664), +1.82 s (42852281034) and +1.62 s (42847961184), so the check was a race the app won by a fraction of a
+  second. With `waitToSettleTimeoutMs: 200` the wait looks from about 0.2 s after the tap, every ~0.3 s, through the
+  whole window, even when the link takes seconds to come from staging.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 

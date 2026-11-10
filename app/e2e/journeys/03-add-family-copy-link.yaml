@@ -47,8 +47,13 @@ tags:
     visible: "Copy link"
     timeout: 20000
 - takeScreenshot: 03-add-family
-- tapOn: "Copy link"
-# #410: the link comes from staging; "Copied" fades in inside the sheet.
+# #410: the link comes from staging; "Copied" fades in inside the sheet, and the button's label reads "Link copied", for
+# 2 s only (ExternalRow's COPIED_MS). A tap first waits for the app to settle, and Maestro's default wait can eat those
+# 2 s: run 42856745720 first looked 2.03 s after the copy and missed it (passing runs: 1.62–1.84 s). So this tap waits
+# at most 200 ms, and the wait below looks from then on.
+- tapOn:
+    text: "Copy link"
+    waitToSettleTimeoutMs: 200
 - extendedWaitUntil:
     visible: ".*(Copied|Link copied).*"
     timeout: 20000
