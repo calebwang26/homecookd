@@ -254,9 +254,16 @@ signed in to that family.
   lock); this one isn't explained.
 - **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
   deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600).
-- **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out" and Maestro
-  says "Unknown error" at `openLink`, with 0 certificate FAILs (42847823481 attempt 1, 15:58:24Z; journeys 3 and 0
-  passed).
+- **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out"
+  (`_LSDispatchWithTimeout`, 10 s after the open) and Maestro says "Unknown error" at `openLink`, which throws, so
+  open-link.yaml's retry never runs. 0 certificate FAILs. Seen in #473's run 42847823481: attempt 1 journey 2, attempt
+  2 journeys 2 and 0. SpringBoard logged the request within 30 ms, then took 19.3, 1.8 and 4.0 s to start the open,
+  and the app got the link 53, 15.8 and 21.5 s later and showed the right screen. So the link lands late, and only
+  simctl's 10 s timeout fails the journey. **Lead (the Master Agent, unproven):** both attempts' trust gate had
+  restarted trustd ("Safari answered on try 2 of 4, trustd restarted 1 times", free after 188 and 191 s); about nine
+  runs without a restart had 0 failed opens out of 22. Time since launch doesn't explain it (failing opens came 22–49
+  s after launch, passing ones 13–15 s). Checking whether a trustd restart leaves SpringBoard slow, and reporting an
+  `openLink` that throws while the link lands, are queued as CI work after journey 4.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
