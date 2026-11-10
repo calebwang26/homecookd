@@ -429,3 +429,12 @@ export async function shouldAskPush(kind: PushAskKind, profileId: string | null 
 export function snoozePushAsk(profileId: string, now = Date.now()): Promise<void> {
   return kvSet(askKey(profileId), String(now));
 }
+
+/**
+ * A push ask that ended without a yes. "Not now" (its button, the close or the backdrop) snoozes it for 30
+ * days. A sheet that never showed ('dropped': held behind another sheet until it gave up, BottomSheet
+ * onDropped) stores nothing, so the next moment asks as if for the first time.
+ */
+export async function endPushAsk(profileId: string, how: 'notNow' | 'dropped', now = Date.now()): Promise<void> {
+  if (how === 'notNow') await snoozePushAsk(profileId, now);
+}

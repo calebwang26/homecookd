@@ -17,6 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { IconButton, PauseIcon, PlayIcon, Txt } from '@/components/ui';
 import { chapterMarks, subtitleAt, useClipVideo } from '@/lib/media';
+import { useModalClaim } from '@/lib/sheets/coordinator';
 import { alpha, colors } from '@/theme/tokens';
 
 import { ProgressRow, SkipGlyph } from './ProgressRow';
@@ -53,6 +54,8 @@ export function StepPlayerFull(props: StepPlayerFullProps) {
 }
 
 function Player({ url, start_s, end_s, at, label, quote, chapters, aspectHint, onClose, onRetry }: StepPlayerFullProps & { onRetry: (at: number) => void }) {
+  // A sheet must not present over this Modal, nor while it fades out after unmounting (lib/sheets/coordinator).
+  useModalClaim();
   const insets = useSafeAreaInsets();
   const v = useClipVideo(url, start_s, end_s, { at, aspectHint });
   const [firstFrame, setFirstFrame] = useState(false);
