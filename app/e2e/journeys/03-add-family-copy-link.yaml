@@ -16,8 +16,13 @@ tags:
     file: ../flows/open-link.yaml
     env:
       LINK: homecookd://e2e/sign-in?key=${COOK_KEY}
-      EXPECT: "(?s).*Messages.*"
-- assertNotVisible: ".*Sign in with Apple.*"
+      EXPECT: ".*Your language.*"
+# A new cook's first time in asks for her language (LanguageTiles); one tap saves it and her home comes up.
+- tapOn: "English"
+- extendedWaitUntil:
+    visible: ".*Messages.*"
+    timeout: 20000
+- assertNotVisible: ".*Your language.*"
 - takeScreenshot: 03-cook-home
 # Tab labels can carry a badge ("Messages, 1 new"), so the tabs are matched loosely.
 - tapOn: ".*Messages.*"
