@@ -128,16 +128,31 @@ run 42766011110, minute by minute:
 - A good check before the journeys isn't enough on its own: #460's first PR run (42775448005) passed the warm-up in 27 s,
   then the launch journey needed a Try again and journey 2 failed with the card up.
 
-So the journeys have three lines of defense, in this order:
+**A second cause: trustd's pinning database (Master Agent, Nov 10).** With the push storm gone, journey 3 still failed after
+sign-in on reused-app runs 42786504171 and 42790025629 (apsd: 0 checks). The kept log: the warm-up's Safari check passed
+(09:12:22), and about 70 s later trustd started answering its own reads of its certificate-pinning rules with `database
+is locked in "SELECT DISTINCT policies,transparentConnection FROM rules WHERE policyName=?"`: 942 times, 09:13:33–09:17:40,
+one trustd process. Every check reads that table, so each one waited until the app's TLS gave up ("Certificate
+verification result: FAIL", 7.5 s). Then it cleared. It looks like trustd rebuilding that database after its first
+check since boot. On a native run the 20-minute build hides it; a reused-app run starts the journeys inside it.
+
+So the journeys have these lines of defense, in this order:
 1. **No push storm.** "Start booting a simulator" points Apple's push hosts (`init`, `courier`, `0-…99-courier`, sandbox
    and production) at 127.0.0.1 in the runner's `/etc/hosts` before the boot. The simulator resolves through it, so apsd's
    connections are refused at once and never reach TLS or trustd. No journey uses push.
-2. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). Safari opens the
-   staging api, and the step watches the simulator's log, filtered to Safari's own processes, for a certificate check
-   that answers true: up to 60 s a try. Without one it restarts the simulator's trustd and tries again, 3 restarts at
-   most. Then it fails the job with "the simulator's trust check never answered", and no journey runs on a stalled
-   simulator. The job summary gets the seconds waited, the try and the restarts; the log itself stays on the runner.
-3. **Try again** in `open-link.yaml` (above), for anything that still slips through. A journey that needed it gets a
+2. **trustd's first check right after boot.** "Start booting a simulator" leaves a background job that waits for the
+   boot, then opens the staging api in Safari once, so trustd's first check (and the rebuild it seems to start) happens
+   during npm ci, Pods and the build.
+3. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). It watches trustd's
+   log for "database is locked" from the moment it starts. Safari opens the staging api, and the step watches Safari's
+   own processes for a certificate check that answers true: up to 60 s a try, restarting trustd between tries, 3
+   restarts at most. Then, counted from that answer, it restarts Safari and opens the api every 8 s (each visit a new
+   check) until 30 s pass with no lock and at least 100 s have passed since trustd's first check, 6 minutes at most.
+   This gate is what protects the journeys; step 2 only makes the wait shorter. Either failure says "The simulator,
+   not the app or this PR … Re-run the job", and no journey runs on a stalled simulator. The job summary gets, on
+   every run, the seconds waited, the try, the restarts and how long the database was locked (0 s too); the logs stay
+   on the runner.
+4. **Try again** in `open-link.yaml` (above), for anything that still slips through. A journey that needed it gets a
    warning, never a silent pass.
 
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
