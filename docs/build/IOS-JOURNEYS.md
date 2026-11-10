@@ -238,8 +238,16 @@ count. A simulator reads the "simulated entitlements" that Xcode links into the 
 it signs during the build, and a later codesign can't add them. So the build signs to run locally (`CODE_SIGN_IDENTITY=-`,
 manual, no team, no certificate), as Xcode does for any simulator build. "Sign the app for the simulator (ad-hoc)"
 re-signs after the JS swap (the section stays) and prints the identifier and the simulated `application-identifier`. It
-fails without them. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way
-about phones.
+fails without them. Xcode writes `FAKETEAMID.com.salik.homecookd` when there's no team. Proof, run 42866506647 (journey 4
+on main's app/src at 1289653c1):
+- nsurlsessiond logged "client bundle identifier com.salik.homecookd" for the app's pid (17:59:16.400), with 0 refusals.
+- The background upload sent 725,974 bytes to staging's uploads bucket and got 200 (17:59:17.410).
+- The row moved on to "Writing it down · about 1 hr left".
+
+The keychain works now too: 0 of securityd's -34018 in every journey, where an unsigned app had 16 each. So a session
+really is kept in the keychain between launches, and `launch-fresh`'s `clearKeychain` is what starts each journey
+signed out. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way about
+phones.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
