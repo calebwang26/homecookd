@@ -246,6 +246,18 @@ signed in to that family.
   an older check that way with the upload at 0%). The cook, her family and what she sent go with the test
   people.
 
+**Simulator faults seen so far (none is the app).** Each one has its own name, so a red run can be read at a glance:
+- **The certificate stall** (parked, Nov 10): trustd stops answering every process's certificate checks for minutes.
+  Apple's own NewsToday2 and NewsTag failed the same boringssl check alongside the app in 42846241678, and staging's
+  /health answered 200 in 0.17 s meanwhile, so it's simulator-wide. Seen in 42815821906, 42811383192 (journey 3) and
+  42846241678 (43 FAILs, 15:50:03–15:56:37Z). The two causes found so far are fixed (#460's push storm, #466's pinning
+  lock); this one isn't explained.
+- **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
+  deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600).
+- **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out" and Maestro
+  says "Unknown error" at `openLink`, with 0 certificate FAILs (42847823481 attempt 1, 15:58:24Z; journeys 3 and 0
+  passed).
+
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
 This Mac has no Xcode or Simulator, so the journeys run only in CI.
