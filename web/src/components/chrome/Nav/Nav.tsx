@@ -10,12 +10,14 @@
 //
 // Desktop (≥768): two pills that hug their content, so the page shows through the gap between them
 // (a7's nav is transparent): pot mascot + "homecookd" · links (hidden below 1200px) + RelationPicker +
-// green "Get early access". Mobile (<768): one bar · logo · "with Grandma ▾" (the label stays at every
-// width, QA B22) · "Early access"; no hamburger. Below 375px the mascot alone carries the brand.
+// green "Get the app now". Mobile (<768): one bar · logo · "with Grandma ▾" (the label stays at every
+// width, QA B22) · "Get the app"; no hamburger. Below 375px the mascot alone carries the brand.
 // Intro (a7 M1): logo first, then the items blur in left → right, 50ms apart, once.
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { MISS_HREF } from '@/lib/audience-route';
+import { APP_STORE_URL } from '@/lib/app-links';
+import { useAndroid } from '@/lib/useAndroid';
 import { Logo } from '@/components/primitives/Logo';
 import { Button } from '@/components/primitives/Button';
 import { RelationPicker } from '@/components/chrome/RelationPicker/RelationPicker';
@@ -69,8 +71,11 @@ export function Nav() {
 
   const copy = useCopy();
   const n = copy.nav;
-  // the kid version's button opens /miss, the parent's goes to the early-access form
-  const ctaHref = useAudience() === 'kid' ? MISS_HREF : '#early-access';
+  // The kid version's button opens /miss. The parent's gets the app (Caleb, Nov 10: "Get the app now"): the App Store,
+  // and on Android, which has no homecookd app yet, no button at all, never a link nothing can open (#465).
+  const kid = useAudience() === 'kid';
+  const android = useAndroid();
+  const ctaHref = kid ? MISS_HREF : APP_STORE_URL;
   // Stagger index for the intro (logo 0, links 1–4, picker, CTA).
   const item = (i: number) => ({ 'data-nav-item': '', style: { '--i': i } as CSSProperties });
   const last = n.links.length + 1;
@@ -105,14 +110,16 @@ export function Nav() {
             <div className={s.pickerSlot} {...item(last)}>
               <RelationPicker className={s.picker} />
             </div>
-            <div className={s.ctaSlot} {...item(last + 1)}>
-              <Button href={ctaHref} variant="primary" size="sm" arrow className={s.ctaWide}>
-                {n.cta}
-              </Button>
-              <Button href={ctaHref} variant="primary" size="sm" className={s.ctaNarrow}>
-                {n.ctaMobile}
-              </Button>
-            </div>
+            {kid || !android ? (
+              <div className={s.ctaSlot} {...item(last + 1)}>
+                <Button href={ctaHref} variant="primary" size="sm" arrow className={s.ctaWide}>
+                  {n.cta}
+                </Button>
+                <Button href={ctaHref} variant="primary" size="sm" className={s.ctaNarrow}>
+                  {n.ctaMobile}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

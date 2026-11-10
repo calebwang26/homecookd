@@ -27,8 +27,8 @@ export const copyParent: Copy = {
       auntie: "Auntie",
       uncle: "Uncle",
     },
-    cta: "Get early access",
-    ctaMobile: "Early access",
+    cta: "Get the app now",
+    ctaMobile: "Get the app",
     skipLink: "Skip to how it works",
   },
 
@@ -47,7 +47,7 @@ export const copyParent: Copy = {
     // three lines everywhere; "forever." sits on the highlighter
     h1Fixed: "Record it once.\nThey'll cook it\nforever.",
     h1Accent: "forever.",
-    cta: "Get early access",
+    cta: "Get the app now",
     switchLabel: "Here to learn the recipes?",
     // read after the label by screen readers, so the question says where it goes
     switchSr: "(opens the page for the ones learning to cook)",
@@ -394,9 +394,9 @@ export const copyParent: Copy = {
   },
 
   footer: {
-    prompt: "Know a dish by heart? Get\u00a0early\u00a0access and start with that one.", // keeps "Get early access" on one line
-    button: { before: "Get", after: "early access" },
-    buttonA11yLabel: "Get early access",
+    prompt: "Know a dish by heart? Get\u00a0the\u00a0app and start with that one.", // keeps "Get the app" on one line
+    button: { before: "Get the app", after: "now" },
+    buttonA11yLabel: "Get the app now",
     linksPrimary: [
       { label: "How it works", href: "#how-it-works" },
       { label: "The app", href: "#see-it-work" },
