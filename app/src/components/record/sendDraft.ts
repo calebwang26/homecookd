@@ -35,7 +35,8 @@ export function jobCreated(uploadId: string): Promise<void> {
   return creating.get(uploadId) ?? Promise.resolve();
 }
 /** The signer needs a title; without a dish name Convex gets none and the writer names the recipe. */
-const NO_DISH = 'family recipe';
+/** A send's title when she named no dish (its row says "Your family recipe"). */
+export const NO_DISH = 'family recipe';
 
 export type SendInput = {
   me: Profile;
