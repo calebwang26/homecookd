@@ -20,6 +20,7 @@ and ships every PR, routes new work, and keeps the "homecookd work tracker" doc 
 | App screens & recording | every other app screen: filming, Record, Send, Home, Recipes, Messages, profiles, cook languages (`app/src/lib/words`) |
 | AWS backend (Oct 31) | `infra/`, `api/`, `.github/workflows/` (checks and deploys), `docs/build/AWS-MIGRATION.md`, the AWS account |
 | App Store, web & builds | the App Review guard, Salik's handoff doc and App Store Connect, `web/`, native TestFlight builds, icon and screenshots, the TEST family |
+| Bug hunt (Nov 9) | finding and proving bugs on the live app and site, sent to the owner above; fixes none; owns only `docs/agents/BUG-HUNT.md` and `scripts/bug-hunt/` |
 
 **Why:** fewer chats to manage, each keeps its section's context, and no time or tokens spent briefing new chats.
 **How to apply:** a chat edits only its section; a change that spans sections goes to the main owner, who tells the

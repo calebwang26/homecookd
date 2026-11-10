@@ -2,12 +2,12 @@
 // Final CTA form + "Send this to {R}" (brief 8.12).
 //
 // Form: visible label, 60px pill input, hero button. If NEXT_PUBLIC_EARLY_ACCESS_URL is set, POST the
-// email (form-urlencoded); otherwise skip the request (brief 8.12 accept 4: the thank-you works without
-// an endpoint, for demos) and, in a production build, warn in the console that the address went
-// nowhere: set the variable before deploying. Either way the thank-you replaces the form in
-// place (role="status"). Nothing is stored locally. Errors are text (cream, with an icon), never color
-// only. Arriving through any #early-access link focuses the email field (fine pointers only, so a
-// phone's keyboard never jumps up mid-scroll).
+// email (form-urlencoded), and the thank-you replaces the form in place (role="status") once it went. A
+// production build without it shows no form at all (lib/early-access.ts: Bug hunt, Nov 10, found the
+// live form thanking people for addresses it sent nowhere); a dev build keeps the thank-you without a
+// request, for demos (brief 8.12 accept 4). Nothing is stored locally. Errors are text (cream, with an
+// icon), never color only. Arriving through any #early-access link focuses the email field (fine
+// pointers only, so a phone's keyboard never jumps up mid-scroll).
 //
 // Parent version (QA B21): one quiet line under the button says what happens next ("We'll email you
 // when your spot opens. No card, no spam."), and "Or just cook, and send the videos to your kids to
@@ -23,6 +23,7 @@ import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { fill } from '@/lib/relation';
 import { inviteUrl, mailtoHref, shareInvite, smsHref, type ShareResult } from '@/lib/share';
 import { MISS_HREF } from '@/lib/audience-route';
+import { earlyAccessMode } from '@/lib/early-access';
 import { EASE } from '@/lib/motion/tokens';
 import { MQ_FINE_POINTER } from '@/lib/motion/media';
 import { ANCHOR_EVENT } from '@/components/providers/LenisProvider';
@@ -37,6 +38,10 @@ import { PopIn } from '../InTheirWords/PopIn';
 import s from './EarlyAccessForm.module.css';
 
 type Status = 'idle' | 'sending' | 'done';
+
+// Read literally, so the build inlines both.
+const ENDPOINT = process.env.NEXT_PUBLIC_EARLY_ACCESS_URL;
+const MODE = earlyAccessMode(ENDPOINT, process.env.NODE_ENV);
 
 export function EarlyAccessForm() {
   const copy = useCopy();
@@ -92,15 +97,12 @@ export function EarlyAccessForm() {
       input.focus();
       return;
     }
+    if (MODE === 'off') return; // no form is drawn then; never thank anyone for an address that goes nowhere
     setError(null);
     setStatus('sending');
-    const endpoint = process.env.NEXT_PUBLIC_EARLY_ACCESS_URL;
-    if (!endpoint && process.env.NODE_ENV === 'production') {
-      console.warn('[homecookd] NEXT_PUBLIC_EARLY_ACCESS_URL is not set: this early-access sign-up was not sent anywhere.');
-    }
-    if (endpoint) {
+    if (MODE === 'post' && ENDPOINT) {
       try {
-        const res = await fetch(endpoint, {
+        const res = await fetch(ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           // audience: which version they signed up from (kid = /learn, parent = /teach)
@@ -139,7 +141,7 @@ export function EarlyAccessForm() {
           </PopIn>
         )}
 
-        {status !== 'done' ? (
+        {MODE !== 'off' && status !== 'done' ? (
           <form className={s.form} noValidate onSubmit={onSubmit} aria-busy={status === 'sending' || undefined}>
             <label htmlFor={inputId} className={s.label}>
               {T.emailLabel}

@@ -10,7 +10,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { goToStore } from '@/components/dish/parts';
 import { Logo } from '@/components/primitives/Logo';
-import { LANDER_LINK } from '@/lib/app-links';
+import { APP_STORE_URL, arrivedFromOpen, LANDER_LINK } from '@/lib/app-links';
+import { useAndroid } from '@/lib/useAndroid';
 import { getRecipe, getShare, isPlausibleToken, LoadError, type LoadErrorKind } from '@/lib/recipe-web/api';
 import { BUCKET_URL, fixtureAllowed } from '@/lib/recipe-web/config';
 import { clearProgress, readLastStep, writeLastStep } from '@/lib/recipe-web/progress';
@@ -119,13 +120,14 @@ export function RecipeWebApp() {
   );
 }
 
-/** Spotify-web style bar. Without `onGetApp` (loading / error) the pill simply goes to the lander
- *  (the kid page: whoever opens a shared recipe is learning it).
+/** Spotify-web style bar. Without `onGetApp` (loading / error) there is no recipe to hand over, so the
+ *  pill is a plain link to the App Store (the lander has no way to get the app).
  *  `overlay`: the recipe hero runs under the bar (bible Kid-Recipe proportions); `clear`: the bar is
  *  frosted and see-through while it still sits over the photo, solid once the page scrolls past.
  *  Lander links are plain <a>, never next/link: a soft navigation leaves the lander's lazily
  *  mounted sections blank (its deferred slots and head scripts only run on a full page load). */
 function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElement) => void; overlay?: boolean; clear?: boolean; dish?: DishLock | null }) {
+  const android = useAndroid();
   // On the dish pages the bar has a way back to the page the view opened from, and the wordmark stays put.
   const mark = (
     <>
@@ -146,12 +148,13 @@ function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElemen
           {mark}
         </a>
       )}
-      {onGetApp ? (
+      {/* No "Get the app" on Android: there's no app for it yet, and Apple's page is a dead end (Bug hunt, Nov 10). */}
+      {android ? null : onGetApp ? (
         <button type="button" className={`${ui.press} ${ui.getApp}`} onClick={(e) => onGetApp(e.currentTarget)}>
           {dish ? dish.t('common.getApp') : 'Get the app'}
         </button>
       ) : (
-        <a className={`${ui.press} ${ui.getApp} ${ui.getAppLink}`} href={LANDER_LINK.learner}>
+        <a className={`${ui.press} ${ui.getApp} ${ui.getAppLink}`} href={APP_STORE_URL}>
           Get the app
         </a>
       )}
@@ -165,7 +168,8 @@ export function RecipeWebView({ share, recipe, dish = null, start = 'recipe' }: 
   // On the dish pages the screens live in state only: the page's own address and back button stay as they are.
   const [screen, setScreen] = useState<Screen>(() => (dish ? { name: start } : parseHash(steps)));
   const [popover, setPopover] = useState<{ rect: DOMRect; copy: LockCopy; key: number } | null>(null);
-  const [sheet, setSheet] = useState(false);
+  // "Open homecookd" on the site's other host brought them back here: the sheet opens to say what's next.
+  const [sheet, setSheet] = useState(() => !dish && arrivedFromOpen());
   const closeSheet = useCallback(() => setSheet(false), []);
   const [watching, setWatching] = useState(false);
   const [hearing, setHearing] = useState<HearRequest | null>(null);

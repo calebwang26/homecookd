@@ -24,6 +24,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [aws-migration](memory/aws-migration.md) | Oct 31: all hosting moves to AWS in phases; what needs Caleb's OK |
 | [raw-footage-14-days](memory/raw-footage-14-days.md) | Nov 2: raw videos go 14 days after upload, with S3's 28-day undo copy; keep it as built |
 | [section-chats](memory/section-chats.md) | Oct 26: one permanent chat owns each codebase section; the Merge Agent routes work to them |
+| [bug-hunt](memory/bug-hunt.md) | Nov 9: the Bug hunt chat walks live daily and after releases, sends each proven bug to the owning chat, fixes none (`docs/agents/BUG-HUNT.md`) |
 | [claude-cost-settings](memory/claude-cost-settings.md) | Oct 26: homie's recording check on Haiku, Opus fast mode off, to keep Claude spend down |
 | [eval-cheap-by-default](memory/eval-cheap-by-default.md) | Oct 28: the language eval runs only the languages a change touches, 5-min clips, Batch API, $3 cap |
 | [recipe-cost-target](memory/recipe-cost-target.md) | Nov 8: a 10-minute recipe's model calls under $0.10, never by dropping quality; extraction stays on Sonnet |

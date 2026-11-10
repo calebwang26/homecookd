@@ -3,26 +3,25 @@
 // /r "Get the app" sheet:
 //   Get the app    -> puts the link on the clipboard inside the tap (Safari only allows it there).
 //                     Copied: `copied` (by default "Copied. Once homecookd is installed, come back and
-//                     tap Open homecookd.") stays up long enough to read,
-//                     then the store opens. Not copied: they stay here and are told to come back
-//                     and tap Open homecookd. Either way the button is a real store link, so a
-//                     second tap goes straight there.
-//                     No store link for this phone yet -> says plainly that homecookd is in early
-//                     testing and who to message. No link is ever made up.
-//   Open homecookd -> the app's scheme (a universal link never opens the app from its own domain).
+//                     tap Open homecookd.") stays up long enough to read, then the App Store opens.
+//                     Not copied: they stay here and are told to come back and tap Open homecookd.
+//                     Either way the button is a real App Store link, so a second tap goes straight there.
+//   Open homecookd -> `openUrl` (lib/app-links openAppUrl): first the same page on the site's other
+//                     host, which iPhone hands to the app when it is installed. Without the app that
+//                     page loads, says homecookd didn't open, and its Open homecookd is the app's scheme.
 //                     It copies the link too, inside the tap: the app picks up a copied /i, /miss or /a
 //                     link by itself on its first screen (app/src/components/signin/useLinkPickup.ts).
-//                     The app has no Paste invite since 1.1 (join by link only).
-// On a computer neither works, so it says "Open this link on your phone." instead.
+// On a computer neither works, so it says "Open this link on your phone." On Android there is no app
+// yet, so it says that instead of showing two buttons that go nowhere.
 //
-// TODO(caleb): once NEXT_PUBLIC_APP_STORE_URL is set, check on a real iPhone that the store opens
-// by itself after "Copied" (it is opened from a timer, after the tap). If it doesn't, the second
-// tap on Get the app still opens it.
+// TODO(caleb): check both on a real iPhone, which no test here can: that the App Store opens by itself
+// after "Copied" (it is opened from a timer; the second tap is a plain link either way), and that Open
+// homecookd opens the installed app in one tap (if not, the page it lands on has the scheme link).
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { copyText, storeUrlForThisDevice } from '@/lib/app-links';
+import { APP_STORE_URL, arrivedFromOpen, copyText, IPHONE_ONLY, isAndroid } from '@/lib/app-links';
 import s from './Handoff.module.css';
 
-type Note = 'copied' | 'not-copied' | 'testing' | null;
+type Note = 'copied' | 'not-copied' | null;
 
 /** How long the "Copied." note shows before the store opens. */
 const READ_MS = 1600;
@@ -30,17 +29,14 @@ const READ_MS = 1600;
 export function Handoff({
   link,
   openUrl,
-  askName,
   phone,
   hint,
   copied = 'Copied. Once homecookd is installed, come back and tap Open homecookd.',
 }: {
   /** What "Get the app" copies (the invite or share link). */
   link: string;
-  /** homecookd://… for "Open homecookd". */
+  /** Where "Open homecookd" goes (openAppUrl). */
   openUrl: string;
-  /** Who to message while there is no store link ("Mom"); null = whoever sent it. */
-  askName: string | null;
   /** false on a computer. */
   phone: boolean;
   /** A short line under the buttons until one is tapped. */
@@ -49,6 +45,8 @@ export function Handoff({
   copied?: string;
 }) {
   const [note, setNote] = useState<Note>(null);
+  // "Open homecookd" on the site's other host brought them here: the app didn't take the link.
+  const [arrived] = useState(arrivedFromOpen);
   const copying = useRef(false);
   const leave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
@@ -64,10 +62,10 @@ export function Handoff({
 
   // On a small phone the note sits below the fold: bring it up so "what next" is never missed.
   useEffect(() => {
-    if (!note) return;
+    if (!note && !arrived) return;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     noteRef.current?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
-  }, [note]);
+  }, [note, arrived]);
 
   if (!phone) {
     return (
@@ -78,56 +76,51 @@ export function Handoff({
     );
   }
 
-  const store = storeUrlForThisDevice();
+  if (isAndroid()) {
+    return (
+      <p className={s.desk}>
+        <IconPhone />
+        {IPHONE_ONLY}
+      </p>
+    );
+  }
 
-  const getApp = (e: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
-    if (!store) {
-      e.preventDefault();
-      setNote('testing');
-      return;
-    }
-    // The note is up: this tap is a plain link to the store.
-    if (note === 'copied' || note === 'not-copied') {
+  const getApp = (e: MouseEvent<HTMLAnchorElement>) => {
+    // The note is up: this tap is a plain link to the App Store.
+    if (note) {
       if (leave.current) clearTimeout(leave.current);
       return;
     }
     e.preventDefault();
     if (copying.current) return;
     copying.current = true;
-    // The copy starts here, inside the tap. Only a copy that worked sends them on to the store.
+    // The copy starts here, inside the tap. Only a copy that worked sends them on to the App Store.
     copyText(link).then((ok) => {
       copying.current = false;
       if (!alive.current) return;
       setNote(ok ? 'copied' : 'not-copied');
-      if (ok) leave.current = setTimeout(() => alive.current && window.location.assign(store), READ_MS);
+      if (ok) leave.current = setTimeout(() => alive.current && window.location.assign(APP_STORE_URL), READ_MS);
     });
   };
 
-  const ask = askName ? `Message ${askName} to get it.` : 'Message whoever sent this to get it.';
   const line =
-    note === 'testing'
-      ? `homecookd is in early testing. ${ask}`
-      : note === 'copied'
-        ? copied
-        : note === 'not-copied'
-          ? 'Couldn’t copy the link. Get the app, then come back and tap Open homecookd.'
+    note === 'copied'
+      ? copied
+      : note === 'not-copied'
+        ? 'Couldn’t copy the link. Get the app, then come back and tap Open homecookd.'
+        : arrived
+          ? 'homecookd didn’t open. If it isn’t on this phone yet, tap Get the app.'
           : hint;
 
   return (
     <div className={s.wrap}>
-      {store ? (
-        <a className={`${s.press} ${s.primary}`} href={store} onClick={getApp} aria-describedby="handoff-note">
-          Get the app
-        </a>
-      ) : (
-        <button type="button" className={`${s.press} ${s.primary}`} onClick={getApp} aria-describedby="handoff-note">
-          Get the app
-        </button>
-      )}
+      <a className={`${s.press} ${s.primary}`} href={APP_STORE_URL} onClick={getApp} aria-describedby="handoff-note">
+        Get the app
+      </a>
       <a className={`${s.press} ${s.secondary}`} href={openUrl} onClick={() => void copyText(link)}>
         Open homecookd
       </a>
-      <p ref={noteRef} id="handoff-note" className={s.note} role="status" aria-live="polite" data-strong={note ? '' : undefined}>
+      <p ref={noteRef} id="handoff-note" className={s.note} role="status" aria-live="polite" data-strong={note || arrived ? '' : undefined}>
         {line ?? ''}
       </p>
     </div>
