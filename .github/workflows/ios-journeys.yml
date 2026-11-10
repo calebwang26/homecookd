@@ -21,6 +21,10 @@ on:
         description: Build the native app even if one with this fingerprint is cached (to time a native build)
         type: boolean
         default: false
+      no_key:
+        description: "Run as a fork's PR would: no TEST_SIGNIN_KEY, so journey 2 must skip, not fail"
+        type: boolean
+        default: false
       stall_api:
         description: "Make the staging api hang, to check open-link.yaml's Try again (first-try: must pass after one; all: must fail)"
         type: choice
@@ -259,6 +263,20 @@ jobs:
           echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+      # Journey 2's people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who joined by it.
+      # The link and the kid's device key are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no secret, so
+      # journey 2 is left out and says so; a key that's set but refused fails here, so a rotated key can't pass as a skip.
+      # The step's name is the sweep's (journey-people-sweep.yml): rename both or neither.
+      - name: Seed the journey test people
+        env:
+          TEST_SIGNIN_KEY: ${{ !inputs.no_key && secrets.TEST_SIGNIN_KEY || '' }}
+        run: |
+          if [ -z "$TEST_SIGNIN_KEY" ]; then
+            echo "Journey 2 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
+            echo "> Journey 2 (family link → name → sign in) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node scripts/journey-people.mjs setup "$RUNNER_TEMP/journey-people.json"
       # stall_api (manual runs only) checks the Try again retry: the api's host resolves to 192.0.2.1 (TEST-NET-1, which
       # never answers), so the app's requests hang like the trust-check stall. The simulator's sockets are the runner's,
       # so first-try sees the app's first try in netstat and brings the api back 15 s later, after the app's own 10 s
@@ -279,8 +297,10 @@ jobs:
                 sudo sed -i '' '/# stall_api$/d' /etc/hosts; dns; echo "$HOST answers again from $(date -u +%T)" ) &
             fi
           fi
+          KEYED=(--exclude-tags needs-key)
+          if [ -n "${KID_KEY:-}" ]; then KEYED=(-e "FAMILY_LINK=$FAMILY_LINK" -e "KID_KEY=$KID_KEY"); fi
           maestro --device "$UDID" test app/e2e/journeys --format junit --output "$RUNNER_TEMP/maestro-out/report.xml" \
-            --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID"
+            --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID" "${KEYED[@]}"
           echo "T_JOURNEYS=$(date +%s)" >> "$GITHUB_ENV"
       - name: Times
         if: always()
@@ -301,6 +321,23 @@ jobs:
             echo "::warning title=Try again::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
+      # Maestro echoes an opened link in commands.json and its logs. A journey with a real family link or a device key
+      # keeps only its screenshots (and report.xml): every flow's commands.json, logs and screen dump go, except the
+      # launch journey's, whose made-up link is no secret. Then any file still holding either value goes too.
+      - name: Drop what echoes a key or a link
+        if: always()
+        run: |
+          shopt -s nullglob
+          for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
+            [ "$(basename "$d")" = "Launch, then a link that doesn't work" ] && continue
+            rm -rf "$d/commands.json" "$d/logs" "$d/screen-hierarchy"
+          done
+          for v in "${KID_KEY:-}" "${FAMILY_LINK#*t=}"; do
+            [ -n "$v" ] || continue
+            { grep -rlF -- "$v" "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
+              echo "::warning title=Journey files::dropped $(basename "$f"): it held a key or a link"; rm -f "$f"
+            done
+          done
       - name: Keep Maestro's screenshots and report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -309,6 +346,19 @@ jobs:
           path: ${{ runner.temp }}/maestro-out
           retention-days: 7
           if-no-files-found: ignore
+
+      # Journey 2's people go whatever happened above (a stall_api run's hosts entry first, or staging can't be reached).
+      # A runner that dies never gets here: journey-people-sweep.yml finds those runs by this step's name, the same day.
+      - name: Delete the journey test people
+        if: always()
+        env:
+          TEST_SIGNIN_KEY: ${{ !inputs.no_key && secrets.TEST_SIGNIN_KEY || '' }}
+        run: |
+          [ -f "$RUNNER_TEMP/journey-people.json" ] || { echo "No test people were made."; exit 0; }
+          if grep -q '# stall_api$' /etc/hosts; then
+            sudo sed -i '' '/# stall_api$/d' /etc/hosts; sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+          fi
+          node scripts/journey-people.mjs delete "$RUNNER_TEMP/journey-people.json"
 
   # The one to require on main: a skipped journeys job (no app/ change) passes, a failed or cancelled one doesn't.
   result:

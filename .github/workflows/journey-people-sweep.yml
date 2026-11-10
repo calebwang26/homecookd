@@ -1,0 +1,32 @@
+# Journey 2's test people on AWS staging are deleted by ios-journeys.yml's own last step, whatever happened. A runner
+# that dies never runs it, so every 6 hours this finds the last day's finished runs whose "Seed the journey test people"
+# ran and whose "Delete the journey test people" didn't succeed, and deletes their people (scripts/journey-people.mjs
+# sweep; test ids are j<run id>-<attempt>-cook|kid). Same day, as the Master Agent asked. Staging only; seconds on ubuntu.
+name: journey-people-sweep
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: journey-people-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: scripts
+      - name: Delete test people a dead run left behind
+        env:
+          TEST_SIGNIN_KEY: ${{ secrets.TEST_SIGNIN_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/journey-people.mjs sweep
