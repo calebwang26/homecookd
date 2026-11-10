@@ -5,7 +5,7 @@ before it reaches a phone. Workflow: `.github/workflows/ios-journeys.yml`. Journ
 Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 
 1. **The spike (this file's first PR).** The workflow builds the app for the simulator from the PR's own commit
-   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no signing and no EAS; no ccache until a build passes)
+   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no certificate and no EAS; no ccache until a build passes)
    against AWS staging. It boots an iPhone simulator, installs Maestro (a pinned release whose sha256 is checked) and runs
    one journey: a fresh install opens on the first screen, and a made-up family link opens the dead-link card from
    staging. Each phase's time goes into the run's summary. Three runs, cold then warm, report the real times. The gate is
@@ -220,6 +220,18 @@ signed in to that family.
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+
+**The app is signed ad-hoc before it's installed (Master Agent, Nov 10).** The build has `CODE_SIGNING_ALLOWED=NO`, and
+the cached app stays that way. Unsigned, its process has no bundle id that iOS can read, and journey 4's recording never
+uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid 29891 does not have a
+bundle ID, rejecting connection". expo-file-system's background upload then failed ("failed to create a background
+NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in 35 s, and the row
+stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines, so their uploads never happened
+either. The same log has securityd's "Client has neither application-identifier nor keychain-access-groups
+entitlements" for the app. "Sign the app for the simulator (ad-hoc)" runs after the JS swap and before `simctl install`
+on both paths: `codesign --force --deep --sign -`, no certificate and no entitlements, like Xcode's "Sign to Run Locally".
+It prints the signed identifier and fails unless it's `APP_ID`. A store or TestFlight build is signed by EAS with its
+bundle id, so this says nothing either way about phones.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 

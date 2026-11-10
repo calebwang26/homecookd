@@ -278,6 +278,18 @@ jobs:
             || { tail -40 "$RUNNER_TEMP/maestro-out/hermesc.log"; exit 1; }
           echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
           echo "NATIVE=reused" >> "$GITHUB_ENV"
+      # The build is unsigned (CODE_SIGNING_ALLOWED=NO, cached that way), so iOS can't tell the app's bundle id from its
+      # process: nsurlsessiond refused its background upload session ("does not have a bundle ID, rejecting connection",
+      # run 42852281034), and a recording never left "Sending your videos · 0%". An ad-hoc signature, after the JS swap and
+      # before the install on both paths, binds the bundle id, as Xcode's "Sign to Run Locally" does. No certificate, no
+      # entitlements: a store build is signed by EAS and none of this reaches it.
+      - name: Sign the app for the simulator (ad-hoc)
+        run: |
+          APP="$RUNNER_TEMP/built/homecookd.app"
+          codesign --force --deep --sign - --timestamp=none "$APP"
+          ID=$(codesign -dv "$APP" 2>&1 | grep '^Identifier=' || true)
+          echo "$ID"
+          [ "$ID" = "Identifier=$APP_ID" ] || { echo "::error title=Signing::the app's signed identifier isn't $APP_ID"; exit 1; }
       - name: Wait for the simulator and install the app
         run: |
           cat "$RUNNER_TEMP/simctl-boot.log" || true
