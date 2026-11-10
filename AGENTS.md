@@ -76,7 +76,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
   the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`,
   or whose draft was superseded by a merged PR. Never delete `main`, a branch with an
   open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
-  `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
+  `claude/pipeline-times-cover-8be573`, and any other a chat works from). Never delete an OTA line either: the source of
+  what phones run, the only record of it when it isn't on main (`claude/ota-1-1-0-sheets-composer` for runtime 1.1.0,
+  `claude/ota-1-1-1-roles` for 1.1.1; Master Agent, Nov 9). Deleting is remote-only; a merged PR's branch
   can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
 - **Section chats (Oct 26):** since Nov 5 they run in Terminal tabs, not the desktop app; `~/homecookd-chats.command`
   (on Caleb's Mac, untracked) reopens the Master Agent, every section chat and a text copy of the work tracker. Each codebase section has one permanent Claude chat that owns it (Voice & homie,
@@ -224,11 +226,12 @@ scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only 
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
 scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging and production-aws only, refuses production
 scripts/safe-eas-update.sh production-aws "<what changed>" --check-only|--caleb-ok [--canary-ok "<reason>"] [--no-sim "<reason>"]  # a JS fix to production-aws phones: runtime 1.1.0 (build 18, the App Store's 1.1) from a 1.1.0 checkout, or 1.1.1 (build 21, TestFlight) from main; exactly the build profile's values, no app/.env; publishing needs Caleb's yes. 1.1.1 needs a passing ios-journeys run on the same app/ tree, nothing uncommitted in app/ (scripts/check-sim.mjs). Then 1.1.0, refused until the newest 1.1.1 group is 2 h old with the same app/src files (scripts/check-canary.mjs prints when)
-node --test scripts/*.test.mjs                                     # the scripts' own tests: the canary order, the simulator gate, safe-eas-update.sh's arguments (stubbed npx), the machine-test marker, the journeys' Try again summary
+node --test scripts/*.test.mjs                                     # the scripts' own tests: the canary order, the simulator gate, safe-eas-update.sh's arguments (stubbed npx), the machine-test marker, the journeys' Try again summary, journey 2's test people (fake staging)
 cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # 1.1 on production AWS (api.homecookd.app): the App Store build (18, released Nov 8); its JS fixes go out with safe-eas-update.sh production-aws
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-# iOS journeys run only in CI (no Xcode on this Mac): .github/workflows/ios-journeys.yml builds the app for the simulator and runs Maestro on app/e2e/journeys/*.yaml; gh workflow run ios-journeys.yml --ref <branch> (docs/build/IOS-JOURNEYS.md)
+# iOS journeys run only in CI (no Xcode on this Mac): .github/workflows/ios-journeys.yml builds the app for the simulator and runs Maestro on app/e2e/journeys/*.yaml; gh workflow run ios-journeys.yml --ref <branch> [-f no_key=true: as a fork's PR] (docs/build/IOS-JOURNEYS.md)
+node scripts/journey-people.mjs setup|delete <state> | sweep        # journey 2's staging test people (TEST_SIGNIN_KEY from the env, never printed; <state> outside /tmp); the workflows run it
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
 cd app && node scripts/test-sheets.mjs                             # the sheet machine and coordinator (lib/machine.ts, lib/sheets/): every state × event, afterClose on a fake clock
 cd app && node scripts/test-send.mjs                               # Send's machine (components/record/sendMachine.ts): every state × event, one tap one send, through sendKept/sendDraft on a fake api and clock

@@ -20,7 +20,9 @@ tags:
     file: ../flows/open-link.yaml
     env:
       LINK: ${FAMILY_LINK}
-      EXPECT: ".*Join Asha \\(test\\).s family.*"
+      EXPECT: ".*Asha \\(test\\) sent this.*"
+# The title wraps ("Join Asha / (test)'s family"), and `.` stops at a line break without (?s).
+- assertVisible: "(?s).*Join Asha.*family.*"
 - assertVisible: ".*What do they call you.*"
 - assertVisible: "I miss the food"
 - assertVisible: "I cook"
@@ -35,5 +37,7 @@ tags:
     file: ../flows/open-link.yaml
     env:
       LINK: homecookd://e2e/sign-in?key=${KID_KEY}
-      EXPECT: ".*(Who.s in the kitchen|Asha \\(test\\)|Leo \\(test\\)).*"
+      EXPECT: "(?s).*(Who.s in the kitchen|Leo \\(test\\)).*"
+- assertNotVisible: ".*sent this.*"
+- assertNotVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 02-signed-in

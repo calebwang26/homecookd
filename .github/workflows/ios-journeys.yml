@@ -321,15 +321,16 @@ jobs:
             echo "::warning title=Try again::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
-      # Maestro echoes an opened link in commands.json and its logs. A journey with a real family link or a device key
-      # keeps only its screenshots (and report.xml): every flow's commands.json, logs and screen dump go, except the
-      # launch journey's, whose made-up link is no secret. Then any file still holding either value goes too.
+      # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when journey 2 ran,
+      # only screenshots and report.xml are kept: every flow's commands.json, logs and screen dump go. Without it (a
+      # fork's PR) the launch journey's stay: its made-up link is no secret. Then any file still holding the link's token
+      # or the device key goes too, with a warning: that would be a leak this step didn't expect.
       - name: Drop what echoes a key or a link
         if: always()
         run: |
           shopt -s nullglob
           for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
-            [ "$(basename "$d")" = "Launch, then a link that doesn't work" ] && continue
+            if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
             rm -rf "$d/commands.json" "$d/logs" "$d/screen-hierarchy"
           done
           for v in "${KID_KEY:-}" "${FAMILY_LINK#*t=}"; do
