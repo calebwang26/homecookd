@@ -14,6 +14,8 @@
 // 6. The screen uses the machine (send.tsx), and sendDraft says `started` once the upload has started.
 // 7. Home's Send again (components/parent/sendAgain, Caleb Nov 10): the same machine, one per recording: one tap
 //    one send, a tap while it's going does nothing, a failure says so and the button comes back, recordings apart.
+// 8. The launch's pass (components/record/useResendUnsent resendAll), run for real against a fake phone and server:
+//    a note whose videos are gone keeps its own row when its send already failed, and goes otherwise, as before.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -29,14 +31,39 @@ const call = (name) => `(...a) => globalThis.__api.${name}(...a)`;
 const stubs = {
   '@/lib/askReminders': stub(`export const askFilmed = ${call('askFilmed')};`),
   '@/lib/aiConsent': stub(`export const requireAiConsent = ${call('requireAiConsent')}; export const getAiConsent = () => 'given';`),
-  '@/lib/live/convex': stub(`export const convexKidIds = async (kids) => kids.map((k) => k.id); export const createJob = ${call('createJob')};`),
+  '@/lib/live/convex': stub(
+    `export const convexKidIds = async (kids) => kids.map((k) => k.id); export const createJob = ${call('createJob')};` +
+      ['cancelLiveJob', 'recordingJob', 'uploadJob'].map((n) => ` export const ${n} = ${call(n)};`).join(''),
+  ),
   '@/lib/uploads': stub(
     `export const startUpload = ${call('startUpload')}; export const ensurePendingSend = ${call('ensurePendingSend')};` +
-      ` export const updateJobMeta = ${call('updateJobMeta')}; export const uploadFinished = ${call('uploadFinished')};`,
+      ` export const updateJobMeta = ${call('updateJobMeta')}; export const uploadFinished = ${call('uploadFinished')};` +
+      ` export const cancelJobUploads = ${call('cancelJobUploads')}; export const loadJobs = ${call('loadJobs')};` +
+      ` export const removeJob = ${call('removeJob')}; export const uploadsSupportedHere = true;`,
   ),
   '@/lib/unsentRecordings': stub(
-    ['keepForSend', 'saveUnsent', 'loadUnsent', 'putUnsent', 'dropUnsent', 'markUnsentJob', 'stillUnsent'].map((n) => `export const ${n} = ${call(n)};`).join(' '),
+    [
+      'keepForSend',
+      'saveUnsent',
+      'loadUnsent',
+      'putUnsent',
+      'dropUnsent',
+      'markUnsentJob',
+      'stillUnsent',
+      'cleanOrphanCopies',
+      'clipsHere',
+      'countResend',
+      'markUnsentDidntSend',
+      'savedHere',
+      'unsentUri',
+    ]
+      .map((n) => `export const ${n} = ${call(n)};`)
+      .join(' '),
   ),
+  // Section 8 loads useResendUnsent: 1.1's backend (a note's job found by its upload), no screen, no session.
+  '@/lib/aws/config': stub(`export const AWS_ON = true;`),
+  'react-native': stub(`export const AppState = { addEventListener: () => ({ remove() {} }) }; export const Platform = { OS: 'ios' };`),
+  '@/lib/session': stub(`export const useSession = () => ({});`),
 };
 registerHooks({
   resolve(spec, ctx, next) {
@@ -709,6 +736,66 @@ await test('the give-up keeps a note a row of it shows (before it would drop it)
   const recs = readFileSync(join(root, 'src/lib/unsentRecordings.ts'), 'utf8');
   assert.match(recs, /save\(patchUnsent\(list, recordingId, jobPatch\(jobId\)\)\)/, 'a job made clears the flag');
   assert.match(recs, /u\.recordingId === recordingId && !u\.jobId\)\) save\(patchUnsent\(list, recordingId, \{ didntSend: true \}\)\)/, 'flagged only with no job');
+});
+
+await test('the launch\'s pass, for real: a note whose send already failed keeps its own row when its videos are gone; any other gone note goes as before; nothing is sent', async () => {
+  const R = await load('src/components/record/useResendUnsent.ts');
+  const U = await load('src/lib/unsentLogic.ts');
+  const cook = { id: 'cook-1', name: 'Asha', role: 'cook' };
+  const note = (id, extra = {}) => ({
+    recordingId: id,
+    familyId: 'fam-1',
+    cookId: 'cook-1',
+    clips: [{ path: `recordings/${id}/part-01.mp4`, durationMs: 3000, width: 1080, height: 1920, startedAt: 1 }],
+    dish: 'Poha',
+    language: 'en',
+    forKids: null,
+    everyone: true,
+    requestFrom: null,
+    savedAt: new Date().toISOString(),
+    jobId: null,
+    resends: 0,
+    ...extra,
+  });
+  // Its own row's note (#484: its send failed, no upload row left), one that never failed, and one with a job.
+  let notes = [note('gone-flagged', { didntSend: true }), note('gone-plain'), note('gone-with-job', { didntSend: true, jobId: 'up-3' })];
+  const live = { 'up-3': { id: 'job-3', stage: 'uploading', error: null } };
+  const dropped = [];
+  const rowsRemoved = [];
+  const sent = [];
+  globalThis.__api = {
+    cleanOrphanCopies: () => {},
+    loadUnsent: () => notes,
+    savedHere: () => false,
+    stillUnsent: (id) => notes.some((u) => u.recordingId === id),
+    clipsHere: () => [], // none of their videos are on the phone
+    unsentUri: (c) => `file:///documents/${c.path}`,
+    uploadJob: async (uploadId) => (uploadId ? (live[uploadId] ?? null) : null),
+    recordingJob: async () => assert.fail('1.1 finds a job by its upload'),
+    loadJobs: () => [],
+    removeJob: (id) => rowsRemoved.push(id),
+    dropUnsent: (id) => {
+      dropped.push(id);
+      notes = notes.filter((u) => u.recordingId !== id);
+    },
+    countResend: (id) => sent.push(`count ${id}`),
+    cancelLiveJob: async (id) => sent.push(`stop ${id}`),
+    requireAiConsent: async () => sent.push('consent'),
+    startUpload: async () => sent.push('upload'),
+  };
+  await R.resendAll('fam-1', [cook], []);
+  assert.deepEqual(dropped, ['gone-plain', 'gone-with-job'], 'without the flag, or with a job: gone, as before');
+  assert.deepEqual(notes.map((u) => u.recordingId), ['gone-flagged'], 'kept: its own row stays');
+  assert.deepEqual(sent, [], 'nothing sent, nothing stopped, no try counted');
+  assert.deepEqual(rowsRemoved, [], 'no upload rows of theirs to clear');
+  // Home still lists it as its own row, saying plainly the videos aren't on the phone, with no button.
+  assert.deepEqual(U.failedNotes(notes, { cookId: 'cook-1', familyId: 'fam-1', rows: [] }).map((u) => u.recordingId), ['gone-flagged']);
+  assert.equal(U.sendAgainOffer(notes[0], 0), 'gone');
+  // Her Send again can't send it either (there is no button, and the call says 'gone'); the note stays for her x.
+  assert.equal(await R.sendNoteAgain('gone-flagged', [cook], []), 'gone');
+  assert.deepEqual(sent, []);
+  assert.equal(notes.length, 1);
+  assert.deepEqual(U.withoutUnsentFor(notes, { job_id: 'unsent:gone-flagged', recording_id: 'gone-flagged' }), [], 'her x lets it go');
 });
 
 console.log(`\n${passed} passed`);
