@@ -165,12 +165,14 @@ await test('coordinator: up and closing counts follow what each sheet reports', 
   C.reportSheet('a', 'open');
   C.reportSheet('b', 'held');
   assert.equal(C.upCount(), 1);
-  assert.equal(C.upCount('a'), 0);
-  assert.equal(C.othersClosing('b'), false);
+  assert.equal(C.upCount('a'), 0, 'never itself');
+  assert.equal(C.upCount('b', ['a']), 0, 'nor a sheet it sits inside');
   C.reportSheet('a', 'closing');
-  assert.equal(C.upCount(), 1);
-  assert.equal(C.othersClosing('b'), true);
-  assert.equal(C.othersClosing('a'), false, 'never itself');
+  assert.equal(C.upCount(), 1, 'closing is still up');
+  C.modalGone('a');
+  assert.equal(C.sheetState('a'), 'hidden', 'its Modal unmounted');
+  C.modalGone('nobody');
+  assert.equal(C.sheetState('nobody'), undefined, 'an unknown sheet stays unknown');
   C.reportSheet('a', 'hidden');
   assert.equal(C.upCount(), 0);
   C.forgetSheet('a');
@@ -268,8 +270,10 @@ await test('whenSheetsClosed resolves once the sheets are gone', async () => {
  * ancestors aside): the bug class (#402, journey 4). Closing → open isn't a new present (its Modal never left).
  */
 const presentedOver = [];
+const harness = new Set();
 function sheet(id, ancestors = []) {
   const s = { id, state: 'hidden', dropped: false, presentedAt: null, cancel: null };
+  harness.add(s);
   const move = (event) => {
     const from = s.state;
     const next = C.moveSheet(id, from, event);
@@ -295,10 +299,21 @@ function sheet(id, ancestors = []) {
   };
   s.show = () => move(C.showEventFor(id, ancestors));
   s.hide = () => move('hide');
-  s.closeDone = () => move('closeDone');
+  // BottomSheet's close timer only dispatches closeDone; the commit that unmounts the Modal tells the coordinator.
+  s.closeTimer = () => {
+    if (s.state === 'closing') s.state = 'hidden';
+  };
+  s.unmountCommit = () => C.modalGone(id);
+  s.closeDone = () => {
+    s.closeTimer();
+    s.unmountCommit();
+  };
   return s;
 }
+/** A clean slate: every earlier test's held sheets stop waiting, so one failure names one test. */
 function fresh() {
+  for (const s of harness) s.cancel?.();
+  harness.clear();
   reset();
   presentedOver.length = 0;
 }
@@ -473,6 +488,34 @@ await test('(a) named fix: a raw <Modal> (StepPlayerFull) holds sheets while up 
   advance(SM.CLOSING_WAIT_MS);
   assert.equal(C.sheetState('player'), 'open');
   C.forgetSheet('player');
+});
+
+await test('a sheet is gone for the coordinator in the commit that unmounts its Modal, not at its close timer: a held sheet\'s SETTLE_MS starts there', () => {
+  fresh();
+  const a = sheet('a');
+  const b = sheet('b');
+  a.show();
+  b.show();
+  a.hide();
+  advance(motion.sheetCloseMs);
+  a.closeTimer();
+  assert.equal(C.sheetState('a'), 'closing', 'dispatched, but the render that unmounts the Modal has not committed');
+  advance(1000);
+  assert.equal(b.state, 'held', 'a slow render: still nothing presents');
+  const goneAt = now;
+  a.unmountCommit();
+  advance(SM.SETTLE_MS - 1);
+  assert.equal(b.state, 'held');
+  advance(1);
+  assert.equal(b.state, 'open');
+  assert.equal(b.presentedAt - goneAt, SM.SETTLE_MS, 'SETTLE_MS from the unmount commit');
+  assert.deepEqual(presentedOver, []);
+  // BottomSheet itself: the close timer records nothing; the mounted layout effect's cleanup does (modalGone).
+  const src = readFileSync(join(root, 'src/components/ui/BottomSheet.tsx'), 'utf8');
+  const timer = src.slice(src.indexOf('const t = setTimeout(() => {'), src.indexOf("send('closeDone');"));
+  assert.ok(timer.length > 0 && timer.length < 400, 'the close timer');
+  assert.doesNotMatch(timer, /moveSheet|modalGone|reportSheet/, 'the close timer only dispatches closeDone');
+  assert.match(src, /return \(\) => \{\s*modalGone\(sheetId\);/, 'the mounted layout effect\'s cleanup tells the coordinator');
 });
 
 await test('(b) BottomSheet records its moves only through moveSheet, never from a passive effect that could write a stale state back', () => {

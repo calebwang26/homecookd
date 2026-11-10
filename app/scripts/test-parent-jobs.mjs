@@ -1,7 +1,8 @@
 // Unit tests for Parent Home's recordings on their way, read from the worker's live stage (TS run by
 // Node's type stripping):
 //   src/components/parent/jobsLogic.ts   'uploading' keeps the sending half of the bar short of full,
-//                                        with "Still sending the video"; a live job is finished once
+//                                        with "Still sending the video", unless this phone's upload gave
+//                                        up ("Some videos didn't send"); a live job is finished once
 //                                        it's 'done' and its recipe is in the library; which finished
 //                                        jobs still need their library id looked up,
 //                                        and a job stopped anywhere is dropped
@@ -13,7 +14,7 @@
 //                                        backoff until Convex lists it, then the row says it failed
 //   node scripts/test-parent-jobs.mjs
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -47,6 +48,29 @@ const test = (name, fn) => {
 test('every stage still going has its line; uploading says the video is still on its way', () => {
   for (const stage of ['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']) assert.ok(J.stageHint(stage), stage);
   assert.equal(J.stageHint('uploading'), 'Still sending the video');
+});
+
+test('uploading: a phone whose own upload gave up says so, never "Sending your videos · 0%" (on 1.1 the live stage is uploading from the start)', () => {
+  // CI journey 4 (run 42852281034): every try was refused, the job's local_state went 'failed', and the row still read "Sending your videos · 0%".
+  assert.deepEqual(J.uploadingRow('failed', 0, 0, 1), { failed: true, hint: 'Some videos didn’t send · send them again' });
+  assert.deepEqual(J.uploadingRow('failed', null, 0, 3), { failed: true, hint: 'Some videos didn’t send · send them again' }, 'after a restart too');
+  assert.deepEqual(J.uploadingRow('uploading', 0.42, 0, 3), { failed: false, hint: 'Sending your videos · 42%', send: 0.42 });
+  assert.deepEqual(J.uploadingRow('uploaded', 1, 0, 3), { failed: false, ...J.uploadingView(1, 0, 3) }, 'sent, the worker just hasn\'t seen it');
+  assert.deepEqual(J.uploadingRow(undefined, null, 1, 2), { failed: false, ...J.uploadingView(null, 1, 2) }, 'a row with no stored state (another phone\'s)');
+});
+
+test('the row uses it: ProcessingRow\'s live-stage uploading branch shows a failed upload, and clearing it marks the job gone', () => {
+  const row = readFileSync(join(root, 'src/components/parent/ProcessingRow.tsx'), 'utf8');
+  const from = row.indexOf("if (worker.stage === 'uploading') {");
+  const branch = row.slice(from, row.indexOf('return { ...ok, hint: stageHint(worker.stage, t)', from));
+  assert.ok(from > 0 && branch.length > 0, 'the live uploading branch');
+  assert.match(branch, /uploadingRow\(job\.local_state,/, 'the live uploading branch asks uploadingRow with the stored state');
+  assert.match(branch, /if \(row\.failed\) return \{ \.\.\.problem, hint: row\.hint \};/, 'and returns the failed row');
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  const at = home.indexOf("if (action === 'remove') {");
+  const remove = home.slice(at, home.indexOf('removeJob(job.job_id);', at));
+  assert.ok(at > 0 && remove.length > 0, 'the remove action');
+  assert.match(remove, /markGone\(job\.job_id\);/, 'a cleared row\'s live job is stopped and not listed again');
 });
 
 test('uploading: this phone’s own progress, else the server’s count; never a full sending half', () => {
@@ -142,6 +166,18 @@ await atest('a stop that fails comes back as it was; the background runs a waiti
   // Offline, Convex queues the mutation instead of failing it: the wait gives up, so the row comes back.
   await assert.rejects(S.inTime(new Promise(() => {}), 20), /no answer/);
   assert.equal(await S.inTime(Promise.resolve(7), 20), 7);
+});
+
+test('markGone: a failed row cleared with its x is gone at once (Home then stops its live job once), never over a stop in progress', () => {
+  S.markGone('cleared');
+  assert.equal(S.stopState('cleared'), 'gone');
+  S.markGone('cleared');
+  assert.equal(S.stopState('cleared'), 'gone', 'twice is the same');
+  S.stopSoon('waiting-one', async () => true, 60_000);
+  S.markGone('waiting-one');
+  assert.equal(S.stopState('waiting-one'), 'waiting', 'an x waiting for Undo keeps its own stop');
+  assert.equal(S.undoStop('waiting-one', Date.now() + 10_000), true);
+  assert.equal(S.stopState('waiting-one'), null);
 });
 
 test('jobs.create is asked again until Convex lists the job, backing off, then the row says it failed', () => {
