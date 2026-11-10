@@ -66,7 +66,8 @@ const ITEMS: Item[] = [
 
 const NO_LINK: WordKey = 'share.app.noLink';
 const NO_COPY: WordKey = 'share.app.noCopy';
-const COPIED_MS = 2000;
+/** How long Copy link reads "Copied": long enough to notice, and for iOS journey 3 to see it (its first look comes 1.6–2 s after the tap). */
+const COPIED_MS = 3500;
 const SPIN_AFTER_MS = 120;
 /** Long enough to read "Link copied. Paste it in Instagram." before Instagram takes over. */
 const INSTAGRAM_BEAT_MS = 800;
