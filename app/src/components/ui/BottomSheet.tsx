@@ -29,8 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useMachine } from '@/lib/machine';
-import { forgetSheet, othersClosing as othersClosingNow, reportSheet, upCount, useOthersClosing } from '@/lib/sheets/coordinator';
-import { heldWaitMs, initialSheetState, isUp, sheetMachine, showEvent } from '@/lib/sheets/machine';
+import { forgetSheet, reportSheet, showEventFor, upCount, useOthersClosing } from '@/lib/sheets/coordinator';
+import { heldWaitMs, initialSheetState, isUp, sheetMachine } from '@/lib/sheets/machine';
 import { alpha, colors, motion, radii } from '@/theme/tokens';
 
 import { CloseIcon } from './icons';
@@ -111,7 +111,7 @@ export function BottomSheet({
   useLayoutEffect(() => {
     if (visible === lastVisible.current) return;
     lastVisible.current = visible;
-    send(visible ? showEvent(othersClosingNow(sheetId)) : 'hide');
+    send(visible ? showEventFor(sheetId) : 'hide');
   }, [visible, send, sheetId]);
 
   // Held: present SETTLE_MS after the other sheet's Modal is gone, never later than CLOSING_WAIT_MS while
