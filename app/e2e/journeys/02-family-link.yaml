@@ -29,7 +29,8 @@ tags:
 - takeScreenshot: 02-join-card
 - tapOn: "Mom, Leo, Auntie Lin.*"
 - inputText: "Leo"
-- hideKeyboard
+# The keyboard's Done closes it (the field has no submit action); Maestro's hideKeyboard can't on this field.
+- pressKey: Enter
 - assertVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 02-name-typed
 # Signed in as the kid, as the Apple button would: the app lands in Asha's family.
