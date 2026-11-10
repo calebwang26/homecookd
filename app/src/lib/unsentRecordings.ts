@@ -154,7 +154,8 @@ export function backToFilming(recordingId: string) {
   if (list.some((u) => u.recordingId === recordingId && !u.jobId)) save(patchUnsent(list, recordingId, { state: 'filming' }));
 }
 
-export function markUnsentJob(recordingId: string, jobId: string) {
+/** The note's upload job (null: it has none now, e.g. the job it pointed at was stopped to send it again). */
+export function markUnsentJob(recordingId: string, jobId: string | null) {
   const list = loadUnsent();
   if (list.some((u) => u.recordingId === recordingId)) save(patchUnsent(list, recordingId, { jobId }));
 }

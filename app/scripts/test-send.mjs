@@ -678,4 +678,22 @@ await test('Send again: the row uses it (PendingRecipes), through the launch\'s 
   assert.match(resend, /if \(inFlight\.has\(noteId\)\) return 'busy';/, 'and her tap one a launch is sending');
 });
 
+await test('a resend keeps its note sendable: the note\'s job is cleared between stopping the old job and the send; a by-hand failure goes back to the next pass; queued says On its way', () => {
+  const src = readFileSync(join(root, 'src/components/record/useResendUnsent.ts'), 'utf8');
+  const at = (s) => {
+    const i = src.indexOf(s);
+    assert.ok(i > 0, s);
+    return i;
+  };
+  const stop = at('if (job && !(await cancelLiveJob(job.id, cook.id))) {');
+  const clear = at('if (job) markUnsentJob(u.recordingId, null);');
+  const rows = at('for (const r of rowsOf(u)) {\n    cancelJobUploads(r.job_id);');
+  const send = at('await sendDraft({');
+  assert.ok(stop < clear && clear < rows && rows < send, 'stop the old job, clear the note\'s job, drop the rows, then send');
+  assert.match(src, /catch \(e\) \{\s*looked\.delete\(noteId\);[^\n]*\n\s*throw e;/, 'a failed tap is the next pass\'s to send');
+  assert.match(src, /if \(step === 'wait'\) return 'waiting';/);
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  assert.match(home, /if \(r === 'waiting' \|\| r === 'busy'\) toast\.show\(t\('parent\.send\.onItsWay'\)\);/, 'not a quiet tap');
+});
+
 console.log(`\n${passed} passed`);

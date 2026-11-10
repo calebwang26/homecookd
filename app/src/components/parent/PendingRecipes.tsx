@@ -314,6 +314,8 @@ export function usePendingRecipes(): PendingState {
           });
           if (r === 'unreachable') throw new Error(t('parent.processing.cantReach'));
           if (r === 'gone') throw new Error(t('parent.processing.videosGone'));
+          // The server already has it (queued or claimed): say so, not a quiet tap.
+          if (r === 'waiting' || r === 'busy') toast.show(t('parent.send.onItsWay'));
           // Nothing was left to send (the server has the files, or it's already on its way): the row moves on by itself.
           if (!begun) started();
           setJobs(loadJobs());
