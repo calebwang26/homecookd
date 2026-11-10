@@ -52,6 +52,9 @@ env:
   MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
   # Maestro sends anonymous usage data unless this is set.
   MAESTRO_CLI_NO_ANALYTICS: '1'
+  # Maestro's XCTest driver didn't start within its default wait once (run 42759943404 attempt 2: "iOS driver not ready
+  # in time, consider increasing timeout by configuring MAESTRO_DRIVER_STARTUP_TIMEOUT"). 3 minutes, in ms.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: '180000'
 
 jobs:
   # The same test as scripts/check-sim.mjs: the app/ tree against the base this PR was merged onto (HEAD^1 of GitHub's merge
