@@ -456,9 +456,9 @@ jobs:
       # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed
       # journeys ran, every flow keeps only its screenshots and the simulator's log (report.xml stays): commands.json,
       # Maestro's own logs and the screen dumps go. In the simulator's log, which shows a stall's cause (trustd, #456),
-      # each exact value (both device keys, the link's token, the test ids) becomes ***. Without a key (a fork's PR) the
-      # launch journey keeps everything: its made-up link is no secret. Then any file still holding a key or the token
-      # goes, with a warning: that would be a leak this step didn't expect.
+      # each exact value (both device keys, the link's token, the test ids) and every S3 query string or X-Amz value
+      # becomes ***. Without a key (a fork's PR) the launch journey keeps everything: its made-up link is no secret. Then
+      # any file still holding a key, the token or an X-Amz value goes, with a warning: a leak this step didn't expect.
       # It fails closed (Master Agent, Nov 10): any error in it removes every logs/ folder, and the upload runs only
       # when this step succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
       - name: Drop what echoes a key or a link
@@ -473,22 +473,19 @@ jobs:
             find "$d/logs" -type f ! -name device-simulator.log -delete 2>/dev/null || true
           done
           SECRETS=("${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-cook" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-kid")
-          for f in "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log; do
-            # perl -pi says nothing to the shell about a file it couldn't open (exit 0), so check first, and after:
-            # a log that can't be read and rewritten, or that still holds any value, is removed, never kept as is.
-            if [ ! -r "$f" ] || [ ! -w "$f" ]; then rm -f "$f"; continue; fi
-            for v in "${SECRETS[@]}"; do
-              if [ -n "$v" ]; then V="$v" perl -pi -e 's/\Q$ENV{V}\E/***/g' "$f"; fi
-            done
-            for v in "${SECRETS[@]}"; do
-              if [ -n "$v" ] && grep -qF -- "$v" "$f"; then rm -f "$f"; break; fi
-            done
-          done
+          # Each kept log (scripts/journey-scrub.mjs, tested): every value above, an S3 address's query string (a presigned
+          # upload URL holds a temporary key id and session token: run 42852281034 logged one, cut short by iOS) and any
+          # X-Amz value become ***. A log it can't read and rewrite, or that still holds one, is deleted with a warning.
+          DROPS=$(JOURNEY_SCRUB_VALUES="$(printf '%s\n' "${SECRETS[@]}")" node scripts/journey-scrub.mjs "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log)
+          while IFS= read -r LINE; do [ -z "$LINE" ] || echo "::warning title=Journey files::$LINE"; done <<< "$DROPS"
           for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}"; do
             [ -n "$v" ] || continue
             { grep -rlF -- "$v" "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
               echo "::warning title=Journey files::dropped $(basename "$f"): it held a key or a link"; rm -f "$f"
             done
+          done
+          { grep -rlIiE 'x-amz-[a-z0-9-]+(=|: *)[^*&[:space:]]' "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
+            echo "::warning title=Journey files::dropped $(basename "$f"): it held an X-Amz value"; rm -f "$f"
           done
       - name: Keep Maestro's screenshots and report
         if: always() && steps.scrub.outcome == 'success'

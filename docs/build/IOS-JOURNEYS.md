@@ -203,10 +203,13 @@ signed in to that family.
   `***`: that log is what shows a stall's cause (Master Agent, Nov 9). `report.xml` stays. On a fork's PR the launch
   journey keeps its files: its made-up link is no secret. Then any file still holding a device key or the token goes,
   with a warning.
-- **It fails closed (Master Agent, Nov 10).** `perl -pi` exits 0 even on a file it can't open, so each log is checked
-  before (readable and writable, or it's removed) and after (still holding any value: removed). Any other error in the
-  step removes every `logs/` folder (an ERR trap), and "Keep Maestro's screenshots and report" runs only when the step
-  succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
+- **It fails closed (Master Agent, Nov 10).** `scripts/journey-scrub.mjs` (tested) masks each kept log in place: the
+  exact values, everything after "?" on any amazonaws.com address, and any X-Amz value. A presigned upload URL carries a
+  temporary key id and session token. Run 42852281034 logged one in a failed PUT's error, cut short by iOS, and the
+  mask must not depend on that. A log it can't read and rewrite, or that still holds a value afterwards, is deleted with
+  a warning. Then a last check drops any file in the output still holding a key, the token or an unmasked X-Amz value.
+  Any other error in the step removes every `logs/` folder (an ERR trap), and "Keep Maestro's screenshots and report"
+  runs only when the step succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
