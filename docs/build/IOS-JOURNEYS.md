@@ -5,7 +5,7 @@ before it reaches a phone. Workflow: `.github/workflows/ios-journeys.yml`. Journ
 Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 
 1. **The spike (this file's first PR).** The workflow builds the app for the simulator from the PR's own commit
-   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no signing and no EAS; no ccache until a build passes)
+   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no certificate and no EAS; no ccache until a build passes)
    against AWS staging. It boots an iPhone simulator, installs Maestro (a pinned release whose sha256 is checked) and runs
    one journey: a fresh install opens on the first screen, and a made-up family link opens the dead-link card from
    staging. Each phase's time goes into the run's summary. Three runs, cold then warm, report the real times. The gate is
@@ -262,6 +262,34 @@ signed in to that family.
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+
+**The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
+`CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
+Journey 4's recording never uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid
+29891 does not have a bundle ID, rejecting connection". Just before each refusal it logs "Evaluating new XPC connection …
+from pid … with client bundle identifier (null)"; for Apple's own daemons that line names a bundle id (42859652079, the
+app's pid 46975: (null) four times). So the proof is that line naming `com.salik.homecookd` in journey 4's kept log,
+with 0 refusals. expo-file-system's background upload then failed ("failed to
+create a background NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in
+35 s, and the row stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines. securityd
+refused every keychain call too ("Client has neither application-identifier nor keychain-access-groups entitlements",
+16 a journey).
+
+The first fix, a `codesign --sign -` after the build (run 42859652079), gave the right identifier and changed neither
+count. A simulator reads the "simulated entitlements" that Xcode links into the binary (`__TEXT,__entitlements`) when
+it signs during the build, and a later codesign can't add them. So the build signs to run locally (`CODE_SIGN_IDENTITY=-`,
+manual, no team, no certificate), as Xcode does for any simulator build. "Sign the app for the simulator (ad-hoc)"
+re-signs after the JS swap (the section stays) and prints the identifier and the simulated `application-identifier`. It
+fails without them. Xcode writes `FAKETEAMID.com.salik.homecookd` when there's no team. Proof, run 42866506647 (journey 4
+on main's app/src at 1289653c1):
+- nsurlsessiond logged "client bundle identifier com.salik.homecookd" for the app's pid (17:59:16.400), with 0 refusals.
+- The background upload sent 725,974 bytes to staging's uploads bucket and got 200 (17:59:17.410).
+- The row moved on to "Writing it down · about 1 hr left".
+
+The keychain works now too: 0 of securityd's -34018 in every journey, where an unsigned app had 16 each. So a session
+really is kept in the keychain between launches, and `launch-fresh`'s `clearKeychain` is what starts each journey
+signed out. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way about
+phones.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
