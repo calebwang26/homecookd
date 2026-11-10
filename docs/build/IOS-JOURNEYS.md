@@ -108,25 +108,37 @@ subflow's retries didn't help. Now:
 - If the stall comes back with the retry in place, the next fix is on the simulator's side (reset trustd, or warm the
   certificate check before the journeys), not more taps. It came back: see the next section.
 
-**The stall's cause, and the warm-up (Master Agent, Nov 9).** It came back twice with the retry in place, both on runs
-that reused the built app, where the journeys start a few minutes after boot instead of about 20: run 42759943404
+**The stall's cause: the push daemon's storm (Master Agent, Nov 9).** It came back twice with the retry in place, both on
+runs that reused the built app, where the journeys start a few minutes after boot instead of about 20: run 42759943404
 (attempt 1, about 05:13Z: "We can't reach your kitchen" after a sign-in) and run 42766011110. The simulator's log from
-run 42766011110 shows what trustd did:
-- From 06:18:20 to 06:19:46Z it ran a burst of 2,090 signature checks (`SecKeyVerifySignature`) while mobileassetd
-  loaded its asset catalogs and started downloads: the simulator's first-boot work.
-- The app's first certificate check at 06:19:34 answered true.
-- From 06:19:49 every one of the app's connections sat in "Asyncing for external verify block" and came back
-  `result: false` 6–10 s later. It went on through at least 06:22:55. trustd took each new connection and logged nothing
-  else.
+run 42766011110, minute by minute:
 
-So the journeys have two lines of defense, in this order:
-1. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). Safari opens the
+| Minute (UTC) | apsd TLS checks | trustd signature checks | the app's checks false / true |
+|---|---|---|---|
+| 06:18 | 609 | 1,232 | 0 / 0 |
+| 06:19 | 425 | 858 | 3 / 1 |
+| 06:20 | 1 | 0 | 9 / 0 |
+| 06:21 | 0 | 0 | 6 / 0 |
+
+- apsd, the simulator's push daemon, reconnected to Apple's sandbox push servers (`N-courier.sandbox.push.apple.com`)
+  about 600 times a minute, and each TLS connection cost trustd two signature checks (2,090 in all, 06:18:20–06:19:46).
+- The app's first check at 06:19:34 answered true. From 06:19:49 every one of its connections sat in "Asyncing for
+  external verify block" and came back `result: false` 6–10 s later, through at least 06:22:55. trustd took each new
+  connection and logged nothing else: it had stopped answering.
+- A good check before the journeys isn't enough on its own: #460's first PR run (42775448005) passed the warm-up in 27 s,
+  then the launch journey needed a Try again and journey 2 failed with the card up.
+
+So the journeys have three lines of defense, in this order:
+1. **No push storm.** "Start booting a simulator" points Apple's push hosts (`init`, `courier`, `0-…99-courier`, sandbox
+   and production) at 127.0.0.1 in the runner's `/etc/hosts` before the boot. The simulator resolves through it, so apsd's
+   connections are refused at once and never reach TLS or trustd. No journey uses push.
+2. **"Wait for the simulator's trust check"**, before the seed step (so no link or key exists yet). Safari opens the
    staging api, and the step watches the simulator's log, filtered to Safari's own processes, for a certificate check
    that answers true: up to 60 s a try. Without one it restarts the simulator's trustd and tries again, 3 restarts at
    most. Then it fails the job with "the simulator's trust check never answered", and no journey runs on a stalled
    simulator. The job summary gets the seconds waited, the try and the restarts; the log itself stays on the runner.
-2. **Try again** in `open-link.yaml` (above), for a stall that starts after the warm-up. A journey that needed it still
-   gets a warning, never a silent pass.
+3. **Try again** in `open-link.yaml` (above), for anything that still slips through. A journey that needed it gets a
+   warning, never a silent pass.
 
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.
