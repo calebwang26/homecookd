@@ -79,5 +79,13 @@ tags:
 - extendedWaitUntil:
     visible: ".*Journey dal.*"
     timeout: 90000
-- assertVisible: ".*Still being made.*"
+- takeScreenshot: 04-sending
+# The row says "Still being made." for every busy state, sending included (its label, components/parent/ProcessingRow),
+# so that proves nothing. The upload is done and the job exists once its hint moves past "Sending your videos" to the
+# server's own stage: "Writing it down · …" (processing) or "Waiting its turn" (queued). Staging runs no worker, so it
+# stays there. Run 42847961184 showed "Sending your videos · 0%" when the old check passed.
+- extendedWaitUntil:
+    visible: "(?s).*Journey dal.*(Writing it down|Waiting its turn).*"
+    timeout: 120000
+- assertNotVisible: ".*Sending your videos.*"
 - takeScreenshot: 04-being-made

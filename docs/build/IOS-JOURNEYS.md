@@ -240,8 +240,10 @@ signed in to that family.
   recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
   sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
   6 s → "I'm done" → "Done! Sending it to …" → her Home.
-- Staging runs no worker, so the job stays "Still being made": that row ("Journey dal", "Still being made.") on her
-  Home is the proof the videos went up and the job exists. The cook, her family and what she sent go with the test
+- Staging runs no worker, so the job stays queued on the server. The proof the videos went up and the job exists is
+  the row's hint moving past "Sending your videos · N%" to the server's stage ("Writing it down · …" or "Waiting its
+  turn"). The row's "Still being made." shows while it's still sending too, so it proves nothing (run 42847961184 passed
+  an older check that way with the upload at 0%). The cook, her family and what she sent go with the test
   people.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
