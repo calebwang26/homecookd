@@ -14,16 +14,18 @@
 // half of the bar is its real progress. Its 'uploading' (the worker found the video incomplete) is
 // still the sending half: "Still sending the video", that half not full (components/parent/jobsLogic).
 // Its 'done' opens the recipe once PendingRecipes knows its library id.
-// A failed row says why in the worker's own words (or "send it again"), and tapping it opens Record
-// to send the videos again. A quiet x on the right stops a recording (no confirm: the row says
-// "Stopped" with Undo for a few seconds, PendingRecipes + stops.ts) or clears one that failed.
+// A failed row says why in the worker's own words, and tapping it opens Record to send the videos again.
+// One whose upload from this phone gave up says "Your videos didn't send" with a Send again button (Caleb,
+// Nov 10), which sends its kept videos again (components/parent/sendAgain), or says plainly they aren't on
+// this phone any more. A quiet x on the right stops a recording (no confirm: the row says "Stopped" with
+// Undo for a few seconds, PendingRecipes + stops.ts) or clears one that failed.
 import { Image } from 'expo-image';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-native-reanimated';
 
 import { useVideoFrame } from '@/components/record/videoFrame';
 import { EVERYONE } from '@/components/record/who';
-import { CloseIcon, EggMascot, IconButton, NoPhoto, PressableScale, Txt } from '@/components/ui';
+import { ActionButton, CloseIcon, EggMascot, IconButton, NoPhoto, PressableScale, Txt } from '@/components/ui';
 import type { LiveJob } from '@/lib/live/convex';
 import { jobProgress, jobUploadLeftMs, needsPendingSend, PENDING_SEND_GIVE_UP, type JobStatus, type StoredJob } from '@/lib/uploads';
 import { useWords } from '@/lib/words/useWords';
@@ -66,6 +68,10 @@ export type ProcessingView = {
   action: 'cancel' | 'remove' | 'undo' | 'stopping' | null;
   /** Set once the recipe exists (the row opens it). */
   recipeId: string | null;
+  /** This phone's upload of it gave up (local_state 'failed'): Home offers Send again (PendingRecipes). */
+  uploadFailed?: boolean;
+  /** Her Send again: tappable, sending, or "Didn't send" for a moment; null or unset: no button. */
+  again?: 'offer' | 'sending' | 'error' | null;
 };
 
 /** A row just stopped: Undo while it waits, a spinner while the real stop runs. */
@@ -96,7 +102,7 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
       // The worker looked and the video isn't all there yet: still the sending half, unless this phone's
       // upload gave up (then the row says so and offers to clear it, as below).
       const row = uploadingRow(job.local_state, jobProgress(job.job_id), status?.files_received ?? 0, status?.files_expected || job.file_count, t);
-      if (row.failed) return { ...problem, hint: row.hint };
+      if (row.failed) return { ...problem, hint: row.hint, uploadFailed: true };
       return { ...ok, hint: row.hint, bar: { send: row.send, write: 0 }, action: 'cancel' };
     }
     return { ...ok, hint: stageHint(worker.stage, t), bar: { send: 1, write: Math.max(0.04, Math.min(1, worker.progress)) }, action: 'cancel' };
@@ -118,7 +124,7 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
     }
     return { ...ok, recipeId, hint: t('parent.processing.almostDone'), bar: { send: 1, write: 1 } };
   }
-  if (job.local_state === 'failed') return { ...problem, hint: t('parent.processing.someFailed') };
+  if (job.local_state === 'failed') return { ...problem, hint: t('parent.processing.someFailed'), uploadFailed: true };
 
   if (server === 'processing' || job.local_state === 'uploaded') {
     const long = (job.duration_s ?? 0) > LONG_RECORDING_S;
@@ -161,6 +167,7 @@ export function ProcessingRow({
   onAction,
   onOpen,
   onRetry,
+  onSendAgain,
 }: {
   job: StoredJob;
   view: ProcessingView;
@@ -169,12 +176,15 @@ export function ProcessingRow({
   onOpen: (recipeId: string) => void;
   /** A problem row with no recipe: send the videos again. */
   onRetry: () => void;
+  /** Her Send again (view.again): its kept videos, sent again. */
+  onSendAgain?: () => void;
 }) {
   const { t } = useWords();
   const frame = useVideoFrame(job.thumb_video_uri);
   const title = t('parent.processing.yourDish', { dish: job.title });
   const recipeId = view.recipeId;
-  const open = recipeId ? () => onOpen(recipeId) : view.problem ? onRetry : undefined;
+  // With Send again on the row, its button is the one way to send it again (not also the whole row).
+  const open = recipeId ? () => onOpen(recipeId) : view.problem && !view.again ? onRetry : undefined;
 
   const label = `${title}. ${view.busy ? `${t('parent.processing.stillBeingMade')} ` : ''}${view.hint}`;
   const body = (
@@ -206,8 +216,8 @@ export function ProcessingRow({
     </>
   );
 
-  return (
-    <View style={rowStyles.card}>
+  const row = (
+    <>
       {open ? (
         <PressableScale
           onPress={open}
@@ -249,6 +259,23 @@ export function ProcessingRow({
           style={styles.action}
         />
       ) : null}
+    </>
+  );
+  if (!view.again) return <View style={rowStyles.card}>{row}</View>;
+  // The button sits under the row, outside its one accessible element, so VoiceOver reaches it.
+  return (
+    <View style={[rowStyles.card, styles.column]}>
+      <View style={styles.top}>{row}</View>
+      <ActionButton
+        label={t('parent.processing.sendAgain')}
+        size="sm"
+        state={view.again === 'sending' ? 'loading' : view.again === 'error' ? 'error' : 'idle'}
+        errorLabel={t('parent.send.didntSend')}
+        disabled={view.again !== 'offer'}
+        onPress={onSendAgain}
+        accessibilityLabel={t('parent.processing.sendAgainLabel', { dish: job.title })}
+        style={styles.again}
+      />
     </View>
   );
 }
@@ -276,6 +303,9 @@ function Segment({ value }: { value: number }) {
 }
 
 const styles = StyleSheet.create({
+  column: { flexDirection: 'column', alignItems: 'stretch' },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  again: { alignSelf: 'flex-start' },
   main: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 16 },
   dim: { opacity: 0.4 },
   bar: { flexDirection: 'row', gap: 4, marginTop: 6 },

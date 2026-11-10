@@ -65,12 +65,26 @@ test('the row uses it: ProcessingRow\'s live-stage uploading branch shows a fail
   const branch = row.slice(from, row.indexOf('return { ...ok, hint: stageHint(worker.stage, t)', from));
   assert.ok(from > 0 && branch.length > 0, 'the live uploading branch');
   assert.match(branch, /uploadingRow\(job\.local_state,/, 'the live uploading branch asks uploadingRow with the stored state');
-  assert.match(branch, /if \(row\.failed\) return \{ \.\.\.problem, hint: row\.hint \};/, 'and returns the failed row');
+  assert.match(branch, /if \(row\.failed\) return \{ \.\.\.problem, hint: row\.hint, uploadFailed: true \};/, 'and returns the failed row');
   const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
   const at = home.indexOf("if (action === 'remove') {");
   const remove = home.slice(at, home.indexOf('removeJob(job.job_id);', at));
   assert.ok(at > 0 && remove.length > 0, 'the remove action');
   assert.match(remove, /markGone\(job\.job_id\);/, 'a cleared row\'s live job is stopped and not listed again');
+});
+
+test('Send again (Caleb, Nov 10): the failed row says it didn\'t send and offers the button, or says plainly its videos are gone', () => {
+  const v = { hint: 'Some videos didn’t send · send them again', problem: true, uploadFailed: true };
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'offer'), { ...v, hint: 'Your videos didn’t send', again: 'offer' });
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'sending'), { ...v, hint: 'Your videos didn’t send', again: 'sending' });
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'error'), { ...v, hint: 'Your videos didn’t send', again: 'error' });
+  assert.deepEqual(J.sendAgainRow(v, 'gone', 'offer'), { ...v, hint: 'Your videos didn’t send, and they’re not on this phone any more', again: null }, 'no button that can\'t work');
+  // Both of describeJob's failed-upload rows are marked, so Home can offer it on either.
+  const row = readFileSync(join(root, 'src/components/parent/ProcessingRow.tsx'), 'utf8');
+  assert.equal((row.match(/uploadFailed: true/g) ?? []).length, 2);
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  assert.match(home, /if \(!v\?\.uploadFailed \|\| stops\.has\(j\.job_id\)\) continue;/);
+  assert.match(home, /sendAgainRow\(v, sendAgainOffer\(note, note \? clipsHere\(note\)\.length : 0\)/);
 });
 
 test('uploading: this phone’s own progress, else the server’s count; never a full sending half', () => {

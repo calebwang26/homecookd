@@ -158,10 +158,30 @@ export function withoutUnsent(list: Unsent[], recordingId: string): Unsent[] {
   return list.filter((u) => u.recordingId !== recordingId);
 }
 
-/** Stopped or cleared on Home (that upload row): its note goes, found by the row's job, recording or note. */
-export function withoutUnsentFor(list: Unsent[], row: { job_id: string; recording_id?: string | null; unsent_id?: string | null }): Unsent[] {
+type RowIds = { job_id: string; recording_id?: string | null; unsent_id?: string | null };
+const rowHas = (row: RowIds) => {
   const ids = [row.recording_id, row.unsent_id].filter(Boolean);
-  return list.filter((u) => u.jobId !== row.job_id && !ids.includes(u.recordingId));
+  return (u: Unsent) => u.jobId === row.job_id || ids.includes(u.recordingId);
+};
+
+/** Stopped or cleared on Home (that upload row): its note goes, found by the row's job, recording or note. */
+export function withoutUnsentFor(list: Unsent[], row: RowIds): Unsent[] {
+  const has = rowHas(row);
+  return list.filter((u) => !has(u));
+}
+
+/** The note an upload row on Home came from (found the same way), if this phone still has it. */
+export function noteForRow(list: Unsent[], row: RowIds): Unsent | undefined {
+  return list.find(rowHas(row));
+}
+
+/**
+ * Her "Send again" on a row whose upload gave up (Caleb, Nov 10: "if he'll upload, should say send again"):
+ * 'send' when its note and some of its videos are still on this phone, else 'gone' (the row says so plainly,
+ * with no button that can't work).
+ */
+export function sendAgainOffer(note: Unsent | undefined, clipsHere: number): 'send' | 'gone' {
+  return note && clipsHere > 0 ? 'send' : 'gone';
 }
 
 /**
@@ -192,7 +212,9 @@ export const REDO_AFTER_MS = 60 * 60_000;
  *               may have arrived)
  *   'give-up'   too many tries, or too old (the videos stay in documents/recordings/)
  * `convexJob`: undefined = Convex couldn't say, null = no job. `upload`: this phone's row for the note's
- * job (null: none). `clipsHere`: how many of its videos are still on the phone.
+ * job (null: none). `clipsHere`: how many of its videos are still on the phone. `byHand`: her own "Send
+ * again" on Home, which is a fresh first try: no give-up for its tries or its age, and no hour's wait for a
+ * job missing files (every other rule, never a second copy on a guess included, still holds).
  */
 export type ResendStep = 'wait' | 'done' | 'create' | 'redo' | 'send' | 'gone' | 'give-up';
 
@@ -200,9 +222,11 @@ export type JobSeen = { stage: string | null; error?: string | null };
 
 export function resendStep(
   u: Pick<Unsent, 'resends' | 'savedAt'>,
-  at: { convexJob: JobSeen | null | undefined; upload: 'uploading' | 'uploaded' | 'failed' | null; clipsHere: number; now: number },
+  at: { convexJob: JobSeen | null | undefined; upload: 'uploading' | 'uploaded' | 'failed' | null; clipsHere: number; now: number; byHand?: boolean },
 ): ResendStep {
-  if (at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
+  const byHand = at.byHand === true;
+  const tooMany = !byHand && u.resends >= MAX_RESENDS;
+  if (!byHand && at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
   if (at.convexJob === undefined) return 'wait';
   const uploaded = at.upload === 'uploaded';
   if (at.convexJob) {
@@ -210,10 +234,10 @@ export function resendStep(
     if (stage === null || HAS_FILES.has(stage) || (stage === 'failed' && error === CANCELLED) || uploaded) return 'done';
     if (stage !== 'uploading') return 'wait';
     if (!at.clipsHere) return 'gone';
-    if (at.upload !== 'failed' && at.now - Date.parse(u.savedAt) < REDO_AFTER_MS) return 'wait';
-    return u.resends >= MAX_RESENDS ? 'give-up' : 'redo';
+    if (!byHand && at.upload !== 'failed' && at.now - Date.parse(u.savedAt) < REDO_AFTER_MS) return 'wait';
+    return tooMany ? 'give-up' : 'redo';
   }
-  if (uploaded) return u.resends >= MAX_RESENDS ? 'give-up' : 'create';
+  if (uploaded) return tooMany ? 'give-up' : 'create';
   if (!at.clipsHere) return 'gone';
-  return u.resends >= MAX_RESENDS ? 'give-up' : 'send';
+  return tooMany ? 'give-up' : 'send';
 }
