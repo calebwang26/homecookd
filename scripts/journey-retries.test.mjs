@@ -70,6 +70,29 @@ test('the summary names the card: the family load after a sign-in, or both', () 
   ]);
 });
 
+test('a journey that needed no re-open of the link says nothing', () => {
+  assert.deepEqual(lines(out([['Sign in', true, ['open-dialog']]])), []);
+});
+
+test('one re-open of the link is reported, passed or failed (#467: one, silent)', () => {
+  const J3 = 'New message, Add family, Copy link';
+  assert.deepEqual(lines(out([[J3, true, ['open-again-1']]])), [
+    `${J3}: passed after 1 re-open of the link: the link didn’t land or the app stalled (the kept simulator log says which)`,
+  ]);
+  assert.deepEqual(lines(out([[J3, false, ['open-again-1', 'open-again-2']]])), [
+    `${J3}: failed after 2 re-opens of the link: the link didn’t land or the app stalled (the kept simulator log says which)`,
+  ]);
+});
+
+test('Try again taps and re-opens together are both reported', () => {
+  assert.deepEqual(lines(out([[LAUNCH, true, ['try-again-1', 'open-again-1']]])), [
+    `${LAUNCH}: passed after 1 "Try again" retry on "We can't reach homecookd." and 1 re-open of the link, trust-check stall (if it repeats, check the staging api)`,
+  ]);
+  assert.deepEqual(lines(out([[LAUNCH, false, ['try-again-kitchen-1', 'open-again-1', 'open-again-2']]])), [
+    `${LAUNCH}: failed after 1 "Try again" retry on "We can't reach your kitchen." and 2 re-opens of the link: the card stayed up`,
+  ]);
+});
+
 test("Maestro's real report: status and the escaped apostrophe", () => {
   const xml = `<testsuites><testsuite><testcase id="${LAUNCH.replace("'", '&apos;')}" name="${LAUNCH.replace("'", '&apos;')}" status="ERROR">
       <failure>Assertion is false</failure></testcase><testcase name="B" status="SUCCESS"/></testsuite></testsuites>`;
