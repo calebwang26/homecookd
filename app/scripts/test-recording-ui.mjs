@@ -726,6 +726,20 @@ test('Send again by hand (Caleb, Nov 10): a fresh first try, never a give-up, an
   assert.equal(U.resendStep(note('r'), at(null, { clipsHere: 0 })), 'gone');
 });
 
+test('a resend that stopped its own old job: with the note\'s job cleared the next look sends it; left on the stopped job it was dropped', () => {
+  const stopped = [{ _id: 'j1', uploadPath: 'family-recipe-1/', stage: 'failed', error: U.CANCELLED }];
+  const at = (convexJob) => ({ convexJob, upload: null, clipsHere: 2, now: NOW });
+  // The bug (in the launch's resend before this): the send failed before its new upload existed, the note still
+  // named the old upload, and its "Cancelled." read as her own stop: 'done', the note dropped, never sent.
+  const stale = U.jobForUpload(stopped, 'family-recipe-1', false);
+  assert.deepEqual(stale, { id: 'j1', stage: 'failed', error: U.CANCELLED });
+  assert.equal(U.resendStep(note('r', { jobId: 'family-recipe-1' }), at(stale)), 'done');
+  // Cleared once we stopped it ourselves: no job, so the next look (or her Send again) sends it.
+  assert.equal(U.jobForUpload(stopped, null, false), null);
+  assert.equal(U.resendStep(note('r', { jobId: null }), at(U.jobForUpload(stopped, null, false))), 'send');
+  assert.equal(U.resendStep(note('r', { jobId: null }), { ...at(null), byHand: true }), 'send');
+});
+
 test('Send again: the row\'s note is found as Stop finds it; the button only when its videos are still here', () => {
   const list = [note('r1', { jobId: 'family-recipe-1' }), note('r2'), note('local-3')];
   assert.equal(U.noteForRow(list, { job_id: 'family-recipe-1' })?.recordingId, 'r1', 'by its job');
