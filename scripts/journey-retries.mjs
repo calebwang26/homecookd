@@ -58,8 +58,12 @@ export function lines(dir) {
       n ? `${n} "Try again" ${n === 1 ? 'retry' : 'retries'}${on}` : '',
       t.reopens ? `${t.reopens} ${t.reopens === 1 ? 're-open' : 're-opens'} of the link` : '',
     ].filter(Boolean).join(' and ');
-    if (passed.get(name) === true) return `${name}: passed after ${what}, trust-check stall (if it repeats, check the staging api)`;
-    if (passed.get(name) === false) return `${name}: failed after ${what}${n ? ': the card stayed up' : ''}`;
+    // A tap means the card was up: the api didn't answer. A re-open alone proves less (iOS's Open dialog can close
+    // without handing the link over, open-link.yaml's first reason), so it names both and where to look.
+    const why = n ? 'trust-check stall (if it repeats, check the staging api)' : '';
+    const unsure = 'the link didn’t land or the app stalled (the kept simulator log says which)';
+    if (passed.get(name) === true) return n ? `${name}: passed after ${what}, ${why}` : `${name}: passed after ${what}: ${unsure}`;
+    if (passed.get(name) === false) return n ? `${name}: failed after ${what}: the card stayed up` : `${name}: failed after ${what}: ${unsure}`;
     return `${name}: ${what} (no result in report.xml)`;
   });
 }

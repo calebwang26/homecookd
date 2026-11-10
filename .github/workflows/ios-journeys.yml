@@ -445,9 +445,10 @@ jobs:
             echo "| Seed + Maestro journeys | $(m "${T_WARM:-$T_BOOT}" "$T_JOURNEYS") |"
             echo "| **Total** | $(m "$T0" "${T_JOURNEYS:-$(date +%s)}") |"
           } >> "$GITHUB_STEP_SUMMARY"
-          # A journey that needed open-link.yaml's Try again (a "We can't reach homecookd." card) says so, even when it passed.
+          # A journey that needed a retry in open-link.yaml (a Try again tap on a card, or opening the link again) says so,
+          # even when it passed.
           node scripts/journey-retries.mjs "$RUNNER_TEMP/maestro-out" | while IFS= read -r LINE; do
-            echo "::warning title=Try again::$LINE"
+            echo "::warning title=Journey retry::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
       # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed
