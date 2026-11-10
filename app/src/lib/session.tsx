@@ -57,7 +57,7 @@
 // locks Dad and Leo, `invited` makes Maya invited, `needs` is a phone that came in through a family
 // invite (Mom and Leo locked, "Tap + to add yourself."). createSelf() then adds them locally.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { usePathname } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { AppState, Platform } from 'react-native';
 
 import { haptic } from '@/components/ui/haptics';
@@ -745,14 +745,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   // CI simulator journeys only (EXPO_PUBLIC_E2E, app/+native-intent.tsx): a test person's device key arrives
-  // from a link, maybe before this provider is up. Store builds fold the check away.
+  // from a link, maybe before this provider is up. Store builds fold the check away. Once it's adopted, in
+  // to "Who's in the kitchen?" as join.tsx's enter() does after a real sign-in: the link's own '/' came
+  // while still signed out, so SessionGate sent it back to the first screen, which decides only once.
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_E2E !== '1') return;
-    e2eAdopt = (key) => void adopt(key);
+    const signIn = (key: string) =>
+      void adopt(key).then(() => {
+        if (router.canDismiss()) router.dismissAll();
+        router.replace('/');
+      });
+    e2eAdopt = signIn;
     if (e2eKey) {
       const key = e2eKey;
       e2eKey = null;
-      setTimeout(() => void adopt(key), 0);
+      setTimeout(() => signIn(key), 0);
     }
     return () => {
       e2eAdopt = null;
