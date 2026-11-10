@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { appLink, DELETE_STEP, idsFor, leftovers, remove, SEED_STEP, setup, signIn } from './journey-people.mjs';
+import { appLink, DELETE_STEP, GH_WAITS_MS, gh, idsFor, leftovers, remove, SEED_STEP, setup, signIn } from './journey-people.mjs';
 
 const dir = mkdtempSync(join(process.cwd(), '.journey-people-test-'));
 const json = (status, body) => ({ status, text: async () => JSON.stringify(body) });
@@ -112,4 +112,44 @@ test('the sweep finds runs that seeded and never finished deleting', () => {
 test.after(async () => {
   const { rmSync } = await import('node:fs');
   rmSync(dir, { recursive: true, force: true });
+});
+
+/** A fake GitHub API: answers in order, records each URL. */
+function github(answers) {
+  const urls = [];
+  const f = async (url) => {
+    urls.push(url);
+    const a = answers[urls.length - 1];
+    if (a instanceof Error) throw a;
+    return { ok: a.status >= 200 && a.status < 300, status: a.status, json: async () => a.body };
+  };
+  return { f, urls };
+}
+
+test("the sweep's GitHub call tries a 502 again after 2 s and goes on (run 42840432828 stopped on one)", async () => {
+  const { f, urls } = github([{ status: 502 }, { status: 200, body: { jobs: [] } }]);
+  const waits = [];
+  assert.deepEqual(await gh('/actions/runs/1/attempts/1/jobs', f, async (ms) => waits.push(ms)), { jobs: [] });
+  assert.equal(urls.length, 2);
+  assert.deepEqual(waits, [2_000]);
+});
+
+test('a dropped connection is tried again too; three failures in a row fail, naming the path and the last answer', async () => {
+  const waits = [];
+  const ok = github([new Error('socket hang up'), { status: 200, body: { ok: 1 } }]);
+  assert.deepEqual(await gh('/x', ok.f, async (ms) => waits.push(ms)), { ok: 1 });
+  const bad = github([{ status: 503 }, { status: 502 }, { status: 504 }, { status: 200, body: {} }]);
+  await assert.rejects(gh('/actions/runs/1/attempts/1/jobs?per_page=1', bad.f, async (ms) => waits.push(ms)), /GitHub \/actions\/runs\/1\/attempts\/1\/jobs answered 504/);
+  assert.equal(bad.urls.length, 3);
+  assert.deepEqual(waits, [2_000, ...GH_WAITS_MS]);
+  const gone = github([new Error('a'), new Error('b'), new Error('c')]);
+  await assert.rejects(gh('/y', gone.f, async () => {}), /GitHub \/y didn't answer: c/);
+});
+
+test("a 4xx isn't tried again: it fails at once", async () => {
+  const { f, urls } = github([{ status: 404 }, { status: 200, body: {} }]);
+  let waited = false;
+  await assert.rejects(gh('/actions/workflows/x/runs', f, async () => (waited = true)), /answered 404/);
+  assert.equal(urls.length, 1);
+  assert.equal(waited, false);
 });

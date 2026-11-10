@@ -63,6 +63,15 @@ export function undoStop(id: string, now = Date.now()): boolean {
   return true;
 }
 
+/**
+ * A row cleared with its x after it failed (no stop of its own): gone now, so PendingRecipes stops a live job
+ * still running for it once and never lists that job as a row of its own. Nothing waiting is undone.
+ */
+export function markGone(id: string): void {
+  if (states.get(id) === 'waiting' || states.get(id) === 'stopping') return;
+  set(id, 'gone');
+}
+
 /** Runs every waiting stop now (the app is going to the background, where timers may never fire). */
 export function flushStops(): void {
   for (const [id, state] of states) if (state === 'waiting') go(id);

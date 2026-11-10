@@ -3,15 +3,20 @@
 //   cd app && node scripts/test-sheets.mjs
 //
 // 1. lib/machine.ts: a missing entry is a no-op (null), never a throw; step() keeps the last 20 events.
-// 2. The sheet table (hidden, held, open, closing), every pair; how `visible` becomes an event.
+// 2. The sheet table (hidden, held, open, closing; `drop`), every pair; how `visible` becomes an event.
 // 3. The root host table (the AI consent ask waits for no sheet up), every pair.
 // 4. afterClose: waits for every sheet up at the call, then SETTLE_MS, never before minMs, never past the cap.
 // 5. #402's hand-off: "New message" closes while "Add family" is created already visible.
+//    Every sheet below goes through the coordinator as BottomSheet does (moveSheet, holdSheet), and the helper
+//    fails the test whenever a sheet presents while another sheet's Modal is up (its ancestors aside).
 // 6. Toasts go to the newest viewport on screen, never one inside a held or closing sheet.
-// 7. A sheet shown in the same commit another one hides waits for that Modal (iOS journey 4: "OK, continue" on the AI
-//    consent sheet, then Record's pre-record sheet); one shown over a sheet that stays open presents a few frames later.
+// 7. A sheet shown while another's Modal is up waits on that Modal's state, not a timer (iOS journey 4: "OK, continue"
+//    on the AI consent sheet, then Record's pre-record sheet), in any flush order: (b) two shown in one commit present
+//    one at a time; (c) a root host showing while a sheet is held keeps it held; a sheet inside another's content
+//    opens at once; a held sheet gives up after HELD_MAX_MS; (a) a raw <Modal> (StepPlayerFull) counts while up and
+//    for CLOSING_WAIT_MS as it fades, and every raw <Modal> in src/ claims its place.
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -31,14 +36,16 @@ const C = await load('src/lib/sheets/coordinator.ts');
 const { motion } = await load('src/theme/tokens.ts');
 
 let passed = 0;
+let failed = 0;
+// Every test runs, so a change that breaks several says which (each test starts from reset()).
 const test = async (name, fn) => {
   try {
     await fn();
     passed += 1;
     console.log(`ok   ${name}`);
   } catch (e) {
-    console.error(`FAIL ${name}`);
-    throw e;
+    failed += 1;
+    console.error(`FAIL ${name}\n     ${String(e?.message ?? e).split('\n')[0]}`);
   }
 };
 
@@ -77,7 +84,7 @@ function advance(ms) {
   now = end;
 }
 function reset() {
-  for (const id of ['a', 'b', 'members', 'invite', 'share', 'consent', 'preRecord']) C.forgetSheet(id);
+  for (const id of ['a', 'b', 'members', 'invite', 'share', 'consent', 'preRecord', 'push', 'root', 'parent', 'child', 'sibling', 'player']) C.forgetSheet(id);
   timers = [];
   now = 0;
 }
@@ -109,14 +116,14 @@ await test('machine: step() records every event (no-ops too), keeps the last 20,
   clearMachineHistory();
 });
 
-await test('sheet: every state × event (today\'s BottomSheet, as a table)', () => {
+await test('sheet: every state × event (BottomSheet, as a table; `drop` gives up a held sheet)', () => {
   everyPair(SM.sheetMachine, {
     hidden: { show: 'open', showBehind: 'held' },
-    held: { settled: 'open', hide: 'hidden' },
+    held: { settled: 'open', hide: 'hidden', drop: 'hidden' },
     open: { hide: 'closing' },
     closing: { show: 'open', showBehind: 'open', closeDone: 'hidden' },
   });
-  assert.deepEqual([...SM.SHEET_EVENTS], ['show', 'showBehind', 'settled', 'hide', 'closeDone']);
+  assert.deepEqual([...SM.SHEET_EVENTS], ['show', 'showBehind', 'settled', 'hide', 'closeDone', 'drop']);
 });
 
 await test('sheet: its Modal is up only in open and closing', () => {
@@ -127,16 +134,22 @@ await test('sheet: its Modal is up only in open and closing', () => {
   assert.equal(SM.isUp(undefined), false);
 });
 
-await test('sheet: `visible` as an event: created visible or shown later, it waits while any other Modal is up', () => {
-  assert.equal(SM.initialSheetState(false, true), 'hidden');
-  assert.equal(SM.initialSheetState(true, false), 'open');
-  assert.equal(SM.initialSheetState(true, true), 'held');
+await test('sheet: `visible` as an event (on mount too): it waits while any other Modal is up; the waits', () => {
   assert.equal(SM.showEvent(false), 'show');
   assert.equal(SM.showEvent(true), 'showBehind');
-  assert.equal(SM.heldWaitMs(true), SM.CLOSING_WAIT_MS);
-  assert.equal(SM.heldWaitMs(false), SM.SETTLE_MS);
   assert.equal(SM.SETTLE_MS, 60);
   assert.equal(SM.CLOSING_WAIT_MS, 600);
+  assert.equal(SM.HELD_MAX_MS, 30_000);
+});
+
+await test('moveSheet: the next state is recorded at once; a move the table lacks records nothing', () => {
+  reset();
+  assert.equal(C.moveSheet('a', 'hidden', 'show'), 'open');
+  assert.equal(C.sheetState('a'), 'open', 'recorded by the decision itself, not a later effect');
+  assert.equal(C.moveSheet('a', 'open', 'show'), null);
+  assert.equal(C.sheetState('a'), 'open');
+  assert.equal(C.moveSheet('a', 'open', 'hide'), 'closing');
+  assert.equal(C.sheetState('a'), 'closing');
 });
 
 await test('root host (the AI consent ask): every state × event', () => {
@@ -152,12 +165,14 @@ await test('coordinator: up and closing counts follow what each sheet reports', 
   C.reportSheet('a', 'open');
   C.reportSheet('b', 'held');
   assert.equal(C.upCount(), 1);
-  assert.equal(C.upCount('a'), 0);
-  assert.equal(C.othersClosing('b'), false);
+  assert.equal(C.upCount('a'), 0, 'never itself');
+  assert.equal(C.upCount('b', ['a']), 0, 'nor a sheet it sits inside');
   C.reportSheet('a', 'closing');
-  assert.equal(C.upCount(), 1);
-  assert.equal(C.othersClosing('b'), true);
-  assert.equal(C.othersClosing('a'), false, 'never itself');
+  assert.equal(C.upCount(), 1, 'closing is still up');
+  C.modalGone('a');
+  assert.equal(C.sheetState('a'), 'hidden', 'its Modal unmounted');
+  C.modalGone('nobody');
+  assert.equal(C.sheetState('nobody'), undefined, 'an unknown sheet stays unknown');
   C.reportSheet('a', 'hidden');
   assert.equal(C.upCount(), 0);
   C.forgetSheet('a');
@@ -249,109 +264,279 @@ await test('whenSheetsClosed resolves once the sheets are gone', async () => {
   assert.equal(done, true);
 });
 
-await test('#402: "Add family" created visible while "New message" closes waits, then presents after it is gone', () => {
-  reset();
-  const T = SM.sheetMachine.transition;
-  let members = 'open';
-  C.reportSheet('members', members);
-  // One tap: members hides (before paint), invite mounts already visible in the same commit.
-  members = T(members, 'hide');
-  let invite = SM.initialSheetState(true, C.upCount('invite') > 0);
-  assert.equal(invite, 'held', 'members still reports open when invite is created');
-  C.reportSheet('members', members);
-  C.reportSheet('invite', invite);
-  assert.equal(SM.heldWaitMs(C.othersClosing('invite')), SM.CLOSING_WAIT_MS, 'members is closing: up to 600 ms');
-  // Members slides out and its Modal unmounts.
-  members = T(members, 'closeDone');
-  C.reportSheet('members', members);
-  assert.equal(C.othersClosing('invite'), false);
-  assert.equal(SM.heldWaitMs(C.othersClosing('invite')), SM.SETTLE_MS, 'then a few frames');
-  invite = T(invite, 'settled');
-  C.reportSheet('invite', invite);
-  assert.equal(invite, 'open');
-  assert.equal(C.upCount(), 1, 'only the invite sheet is up');
-});
-
-/** Reports a sheet's state, as BottomSheet's effect does, and notes any moment two Modals are up at once. */
-function reporter() {
-  const both = [];
-  return {
-    both,
-    report(id, s) {
-      C.reportSheet(id, s);
-      if (C.upCount() > 1) both.push(`${id} ${s}`);
-    },
+/**
+ * A BottomSheet as the coordinator sees it: every decision through moveSheet, a held sheet's wait through holdSheet,
+ * as components/ui/BottomSheet does. `presents` lists every moment it presented over another sheet's Modal (its
+ * ancestors aside): the bug class (#402, journey 4). Closing → open isn't a new present (its Modal never left).
+ */
+const presentedOver = [];
+const harness = new Set();
+function sheet(id, ancestors = []) {
+  const s = { id, state: 'hidden', dropped: false, presentedAt: null, cancel: null };
+  harness.add(s);
+  const move = (event) => {
+    const from = s.state;
+    const next = C.moveSheet(id, from, event);
+    if (!next) return;
+    s.state = next;
+    if (next === 'open' && from !== 'closing') {
+      s.presentedAt = now;
+      if (C.upCount(id, ancestors) > 0) presentedOver.push(`${id} at ${now} ms`);
+    }
+    if (next !== 'held' && s.cancel) {
+      s.cancel();
+      s.cancel = null;
+    }
+    if (next === 'held') {
+      s.cancel = C.holdSheet(id, ancestors, {
+        settle: () => move('settled'),
+        drop: () => {
+          move('drop');
+          s.dropped = true;
+        },
+      });
+    }
   };
+  s.show = () => move(C.showEventFor(id, ancestors));
+  s.hide = () => move('hide');
+  // BottomSheet's close timer only dispatches closeDone; the commit that unmounts the Modal tells the coordinator.
+  s.closeTimer = () => {
+    if (s.state === 'closing') s.state = 'hidden';
+  };
+  s.unmountCommit = () => C.modalGone(id);
+  s.closeDone = () => {
+    s.closeTimer();
+    s.unmountCommit();
+  };
+  return s;
+}
+/** A clean slate: every earlier test's held sheets stop waiting, so one failure names one test. */
+function fresh() {
+  for (const s of harness) s.cancel?.();
+  harness.clear();
+  reset();
+  presentedOver.length = 0;
 }
 
-await test('journey 4 (named fix): "OK, continue" shows the pre-record sheet while the consent sheet still reports open: it waits for that Modal, then presents', () => {
-  reset();
-  const T = SM.sheetMachine.transition;
-  const { both, report } = reporter();
-  let consent = 'open';
-  let preRecord = 'hidden';
-  report('consent', consent);
-  report('preRecord', preRecord);
-  // One commit: settle() resolved Record's `await ensureAiConsent()` (setSheet(true)) before the root host's `drop`,
-  // which comes from its effect. So the pre-record sheet's layout effect still finds the consent sheet open.
-  assert.equal(C.othersClosing('preRecord'), false, 'the consent sheet has not reported closing yet');
-  assert.equal(T('hidden', SM.showEvent(C.othersClosing('preRecord'))), 'open', 'the old rule (only behind a closing one) presented here, over the consent Modal');
-  preRecord = T(preRecord, C.showEventFor('preRecord'));
-  assert.equal(preRecord, 'held');
-  report('preRecord', preRecord);
-  assert.equal(SM.heldWaitMs(C.othersClosing('preRecord')), SM.SETTLE_MS, 'held: its timer starts at a few frames');
-  // The host drops in the same task: the consent sheet slides out, and the held timer re-arms to the closing cap.
-  consent = T(consent, 'hide');
-  report('consent', consent);
-  assert.equal(SM.heldWaitMs(C.othersClosing('preRecord')), SM.CLOSING_WAIT_MS);
-  consent = T(consent, 'closeDone');
-  report('consent', consent);
-  assert.equal(SM.heldWaitMs(C.othersClosing('preRecord')), SM.SETTLE_MS, 'the consent Modal is gone: a few frames');
-  preRecord = T(preRecord, 'settled');
-  report('preRecord', preRecord);
-  assert.equal(preRecord, 'open');
-  assert.deepEqual(both, [], 'never two Modals up at once');
+await test('#402: "Add family" created visible while "New message" closes waits, then presents after it is gone (either order in the commit)', () => {
+  for (const order of ['members first', 'invite first']) {
+    fresh();
+    const members = sheet('members');
+    const invite = sheet('invite');
+    members.show();
+    // One tap: members hides and invite mounts already visible, in the same commit.
+    if (order === 'members first') {
+      members.hide();
+      invite.show();
+    } else {
+      invite.show();
+      members.hide();
+    }
+    assert.equal(invite.state, 'held', order);
+    advance(motion.sheetCloseMs);
+    members.closeDone();
+    assert.equal(invite.state, 'held', 'a few frames after the Modal goes');
+    advance(SM.SETTLE_MS);
+    assert.equal(invite.state, 'open', order);
+    assert.equal(C.upCount(), 1, 'only the invite sheet is up');
+    assert.deepEqual(presentedOver, [], order);
+  }
 });
 
-await test('sheet (named fix): shown in the same commit another sheet is hidden, it waits for that one to go', () => {
-  reset();
-  const T = SM.sheetMachine.transition;
-  const { both, report } = reporter();
-  let a = 'open';
-  let b = 'hidden';
-  report('a', a);
-  report('b', b);
-  // One tap: a hides and b shows. a's layout effect moves it to closing, but it reports that from its effect, after
-  // b's layout effect has already decided.
-  a = T(a, 'hide');
-  b = T(b, C.showEventFor('b'));
-  assert.equal(b, 'held', 'a still reads open: b waits');
-  report('a', a);
-  report('b', b);
-  assert.equal(SM.heldWaitMs(C.othersClosing('b')), SM.CLOSING_WAIT_MS);
-  a = T(a, 'closeDone');
-  report('a', a);
-  b = T(b, 'settled');
-  report('b', b);
-  assert.equal(b, 'open');
-  assert.deepEqual(both, [], 'never two Modals up at once');
+await test('journey 4 (named fix): "OK, continue", then the pre-record sheet waits on the consent Modal, however late it starts to go', () => {
+  fresh();
+  const consent = sheet('consent');
+  const preRecord = sheet('preRecord');
+  consent.show();
+  // settle() resolved Record's await (setSheet(true)) before the root host dropped the consent sheet.
+  preRecord.show();
+  assert.equal(preRecord.state, 'held');
+  // A stalled JS thread: the consent sheet doesn't start to go for 5 s. Nothing presents over it meanwhile.
+  advance(5000);
+  assert.equal(preRecord.state, 'held', 'no timer lets it through');
+  const closeStart = now;
+  consent.hide();
+  advance(motion.sheetCloseMs);
+  consent.closeDone();
+  advance(SM.SETTLE_MS);
+  assert.equal(preRecord.state, 'open');
+  assert.equal(preRecord.presentedAt - closeStart, motion.sheetCloseMs + SM.SETTLE_MS, 'close start to present: 240 + 60 ms');
+  assert.deepEqual(presentedOver, []);
 });
 
-await test('sheet: shown over a sheet that stays open (one inside another), it presents a few frames later, never stuck', () => {
-  reset();
-  const T = SM.sheetMachine.transition;
-  C.reportSheet('a', 'open');
-  let b = T('hidden', C.showEventFor('b'));
-  assert.equal(b, 'held');
-  C.reportSheet('b', b);
-  assert.equal(SM.heldWaitMs(C.othersClosing('b')), SM.SETTLE_MS, 'nothing is closing: SETTLE_MS, then settled');
-  b = T(b, 'settled');
-  assert.equal(b, 'open');
-  C.reportSheet('b', b);
-  C.forgetSheet('a');
-  assert.equal(C.showEventFor('c'), 'showBehind', 'b is up');
-  C.forgetSheet('b');
-  assert.equal(C.showEventFor('c'), 'show', 'nothing up: at once');
+await test('(b) named fix: two sheets shown in one commit (the consent and push asks together) present one at a time', () => {
+  fresh();
+  const consent = sheet('consent');
+  const push = sheet('push');
+  consent.show();
+  push.show();
+  assert.equal(consent.state, 'open');
+  assert.equal(push.state, 'held', 'the first one is recorded when it decides, so the second sees it');
+  advance(10_000);
+  assert.equal(push.state, 'held', 'while the first is read');
+  consent.hide();
+  advance(motion.sheetCloseMs);
+  consent.closeDone();
+  advance(SM.SETTLE_MS);
+  assert.equal(push.state, 'open');
+  assert.deepEqual(presentedOver, []);
+});
+
+await test('(c) named fix: a root host showing while a sheet is held keeps it held until the root sheet goes', () => {
+  fresh();
+  const members = sheet('members');
+  const invite = sheet('invite');
+  const root = sheet('root');
+  members.show();
+  invite.show();
+  members.hide();
+  advance(motion.sheetCloseMs);
+  members.closeDone();
+  // No Modal is up (the held one isn't), so the root host clears and its sheet shows before invite settles.
+  assert.equal(C.upCount(), 0);
+  root.show();
+  assert.equal(root.state, 'open');
+  advance(SM.SETTLE_MS * 10);
+  assert.equal(invite.state, 'held', 'not over the root sheet');
+  root.hide();
+  advance(motion.sheetCloseMs);
+  root.closeDone();
+  advance(SM.SETTLE_MS);
+  assert.equal(invite.state, 'open');
+  assert.deepEqual(presentedOver, []);
+});
+
+await test('ancestors: a sheet inside another sheet\'s content opens at once over it; a sibling waits', () => {
+  fresh();
+  const parent = sheet('parent');
+  const child = sheet('child', ['parent']);
+  const sibling = sheet('sibling');
+  parent.show();
+  child.show();
+  assert.equal(child.state, 'open', 'it presents over its parent, from the parent\'s Modal');
+  sibling.show();
+  assert.equal(sibling.state, 'held');
+  child.hide();
+  advance(motion.sheetCloseMs);
+  child.closeDone();
+  advance(SM.SETTLE_MS);
+  assert.equal(sibling.state, 'held', 'the parent is still up');
+  parent.hide();
+  advance(motion.sheetCloseMs);
+  parent.closeDone();
+  advance(SM.SETTLE_MS);
+  assert.equal(sibling.state, 'open');
+  assert.deepEqual(presentedOver, []);
+});
+
+await test('held: it gives up after HELD_MAX_MS behind a Modal that stays up, never presents over it; hidden first, nothing fires', () => {
+  fresh();
+  const stuck = sheet('a');
+  const waiting = sheet('b');
+  stuck.show();
+  waiting.show();
+  advance(SM.HELD_MAX_MS - 1);
+  assert.equal(waiting.state, 'held');
+  assert.equal(waiting.dropped, false);
+  advance(1);
+  assert.equal(waiting.dropped, true, 'dropped at 30 s');
+  assert.equal(waiting.state, 'hidden');
+  assert.equal(C.sheetState('b'), 'hidden');
+  assert.equal(waiting.presentedAt, null, 'never shown');
+  // Hidden by its owner while held: its wait is cancelled, so neither settle nor drop comes later.
+  fresh();
+  const other = sheet('a');
+  const gone = sheet('b');
+  other.show();
+  gone.show();
+  gone.hide();
+  assert.equal(gone.state, 'hidden');
+  other.hide();
+  advance(SM.HELD_MAX_MS * 2);
+  assert.equal(gone.state, 'hidden');
+  assert.equal(gone.dropped, false);
+  assert.deepEqual(presentedOver, []);
+});
+
+await test('(a) named fix: a raw <Modal> (StepPlayerFull) holds sheets while up and for CLOSING_WAIT_MS after it unmounts', () => {
+  fresh();
+  C.claimModal('player');
+  assert.equal(C.upCount(), 1, 'root hosts wait for it too');
+  const s = sheet('a');
+  s.show();
+  assert.equal(s.state, 'held');
+  advance(10_000);
+  assert.equal(s.state, 'held');
+  // It unmounts (closed, or cook/[id] unmounted under it): UIKit is still fading it out.
+  const unmountedAt = now;
+  C.releaseModal('player');
+  assert.equal(C.sheetState('player'), 'closing');
+  advance(SM.CLOSING_WAIT_MS - 1);
+  assert.equal(s.state, 'held', 'not while it fades');
+  advance(1);
+  assert.equal(C.sheetState('player'), undefined, 'forgotten');
+  advance(SM.SETTLE_MS);
+  assert.equal(s.state, 'open');
+  assert.equal(s.presentedAt - unmountedAt, SM.CLOSING_WAIT_MS + SM.SETTLE_MS);
+  assert.deepEqual(presentedOver, []);
+  // Released twice, or never claimed: nothing. Claimed again while closing: its old timer leaves it up.
+  C.releaseModal('nobody');
+  assert.equal(C.sheetState('nobody'), undefined);
+  C.claimModal('player');
+  C.releaseModal('player');
+  C.claimModal('player');
+  advance(SM.CLOSING_WAIT_MS);
+  assert.equal(C.sheetState('player'), 'open');
+  C.forgetSheet('player');
+});
+
+await test('a sheet is gone for the coordinator in the commit that unmounts its Modal, not at its close timer: a held sheet\'s SETTLE_MS starts there', () => {
+  fresh();
+  const a = sheet('a');
+  const b = sheet('b');
+  a.show();
+  b.show();
+  a.hide();
+  advance(motion.sheetCloseMs);
+  a.closeTimer();
+  assert.equal(C.sheetState('a'), 'closing', 'dispatched, but the render that unmounts the Modal has not committed');
+  advance(1000);
+  assert.equal(b.state, 'held', 'a slow render: still nothing presents');
+  const goneAt = now;
+  a.unmountCommit();
+  advance(SM.SETTLE_MS - 1);
+  assert.equal(b.state, 'held');
+  advance(1);
+  assert.equal(b.state, 'open');
+  assert.equal(b.presentedAt - goneAt, SM.SETTLE_MS, 'SETTLE_MS from the unmount commit');
+  assert.deepEqual(presentedOver, []);
+  // BottomSheet itself: the close timer records nothing; the mounted layout effect's cleanup does (modalGone).
+  const src = readFileSync(join(root, 'src/components/ui/BottomSheet.tsx'), 'utf8');
+  const timer = src.slice(src.indexOf('const t = setTimeout(() => {'), src.indexOf("send('closeDone');"));
+  assert.ok(timer.length > 0 && timer.length < 400, 'the close timer');
+  assert.doesNotMatch(timer, /moveSheet|modalGone|reportSheet/, 'the close timer only dispatches closeDone');
+  assert.match(src, /return \(\) => \{\s*modalGone\(sheetId\);/, 'the mounted layout effect\'s cleanup tells the coordinator');
+});
+
+await test('(b) BottomSheet records its moves only through moveSheet, never from a passive effect that could write a stale state back', () => {
+  const src = readFileSync(join(root, 'src/components/ui/BottomSheet.tsx'), 'utf8');
+  assert.match(src, /\bmoveSheet\(/);
+  assert.doesNotMatch(src, /\breportSheet\b/, 'a passive reportSheet(state) flushes after a newer move on mount and undoes it');
+});
+
+await test('(a) every raw <Modal> in src/ claims its place (useModalClaim); BottomSheet is the only other Modal', () => {
+  const files = [];
+  const walk = (d) => {
+    for (const f of readdirSync(d)) {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.tsx$/.test(f)) files.push(p);
+    }
+  };
+  walk(join(root, 'src'));
+  const raw = files.filter((f) => /<Modal\b/.test(readFileSync(f, 'utf8')) && !f.endsWith(join('ui', 'BottomSheet.tsx')));
+  assert.ok(raw.length >= 1, 'StepPlayerFull at least');
+  for (const f of raw) assert.match(readFileSync(f, 'utf8'), /\buseModalClaim\(/, `${f.slice(root.length + 1)}: a raw <Modal> without useModalClaim()`);
 });
 
 await test('toast (named fix): the newest viewport on screen, never inside a held or closing sheet', () => {
@@ -387,4 +572,5 @@ await test('AiConsent host (named fix): waits while any sheet is up, then stays 
 });
 
 reset();
-console.log(`\n${passed} passed`);
+console.log(`\n${passed} passed${failed ? `, ${failed} failed` : ''}`);
+if (failed) process.exit(1);

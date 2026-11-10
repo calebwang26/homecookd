@@ -95,3 +95,5 @@ Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "
 - `repo-public.md`: Nov 8: the repo is public for unlimited Actions minutes; history scanned clean; nothing private may be committed, gitignored secrets stay untracked.
 - `state-machines.md`: Nov 8, 2026: every lifecycle made explicit, one machine per PR, with a transition table and a real test; the list is `docs/agents/STATE-MACHINES.md`.
 - `keep-app-ratings.md`: Nov 8, 2026: every App Store version keeps the star rating; leave "Reset summary rating" unticked when filling a version.
+- `miss-stays-out-of-app-links.md`: Nov 10, 2026: /miss stays out of the app-links file so 1.0 phones keep opening it on the website; the branch that adds it stays held.
+- `android-line-english.md`: Nov 10, 2026: the Android iPhone-only line stays in English on translated /miss and /a pages ("English is fine for now"); closed, no work.

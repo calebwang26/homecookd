@@ -30,7 +30,7 @@ import { useWords } from '@/lib/words/useWords';
 import { english, type T } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
 
-import { stageHint, uploadingView } from './jobsLogic';
+import { stageHint, uploadingRow } from './jobsLogic';
 import { rowStyles, THUMB } from './RecipeRow';
 
 // No live upload in this app session, the server still waiting for files, and this old: the upload
@@ -93,9 +93,11 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
     if (worker.stage === 'failed') return { ...problem, hint: worker.error || t('parent.processing.failed') };
     if (worker.stage === 'done') return { ...ok, recipeId: libraryId ?? null, hint: t('parent.processing.almostDone'), bar: { send: 1, write: 1 } };
     if (worker.stage === 'uploading') {
-      // The worker looked and the video isn't all there yet: still the sending half.
-      const { hint, send } = uploadingView(jobProgress(job.job_id), status?.files_received ?? 0, status?.files_expected || job.file_count, t);
-      return { ...ok, hint, bar: { send, write: 0 }, action: 'cancel' };
+      // The worker looked and the video isn't all there yet: still the sending half, unless this phone's
+      // upload gave up (then the row says so and offers to clear it, as below).
+      const row = uploadingRow(job.local_state, jobProgress(job.job_id), status?.files_received ?? 0, status?.files_expected || job.file_count, t);
+      if (row.failed) return { ...problem, hint: row.hint };
+      return { ...ok, hint: row.hint, bar: { send: row.send, write: 0 }, action: 'cancel' };
     }
     return { ...ok, hint: stageHint(worker.stage, t), bar: { send: 1, write: Math.max(0.04, Math.min(1, worker.progress)) }, action: 'cancel' };
   }
