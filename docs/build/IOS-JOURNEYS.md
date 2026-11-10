@@ -328,7 +328,17 @@ phones.
   lock); this one isn't explained. It also starts after a clean gate: 42866506647 (40 s after), 42872308399 attempt 1
   (2 m 25 s), 42887110283 attempt 2 (journey 3 clean, then journeys 2 and 0), and 42898927696, where the app's first
   handshake failed 80 s after the gate and all three journeys ended on a "We can't reach" card. The list in STATE.md
-  (#482's line) has the times.
+  (#482's line) has the times. In 42898927696 trustd's last check was 21:09:08; at 21:09:10 it logged "Pinning database
+  should update from version 121 to version 131" and checked nothing for the six minutes left ("database is locked" at
+  21:14:22), so every process failed, not only the app.
+  **It names itself** ("Name a certificate stall", `scripts/journey-trust.mjs`): trustd's own log is streamed from boot
+  and stays on the runner. Each journey whose app had a check fail gets a "Certificate stall" warning: when trustd last
+  checked anything (and how long after the trust check passed), whether it was rebuilding or locked, and other
+  processes' results beside the app's. Only the app failing while trustd kept checking reads as the api's certificate
+  instead. Each rebuild or lock gets a summary line, with when trustd checked again, if it did. The kept
+  `trustd-summary.txt` holds times, pids, versions and per-minute counts only (tested with made-up hostnames, links and
+  keys in the lines it reads), and goes through the same scrub as the logs. No wait or re-run is built on it until a
+  run shows when the rebuild ends.
 - **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
   deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600, 42887110283 attempt 1,
   42872308399 attempt 3). In the last two the driver's own log says why: "Failed to get screenshot: Timed out while
