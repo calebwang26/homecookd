@@ -22,8 +22,19 @@ import type { Profile } from '@/lib/api';
 import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { clipFile, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
-import { cleanOrphanCopies, clipsHere, countResend, dropUnsent, loadUnsent, markUnsentJob, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
+import { clipFile, keepAfterGiveUp, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
+import {
+  cleanOrphanCopies,
+  clipsHere,
+  countResend,
+  dropUnsent,
+  loadUnsent,
+  markUnsentDidntSend,
+  markUnsentJob,
+  savedHere,
+  stillUnsent,
+  unsentUri,
+} from '@/lib/unsentRecordings';
 import { cancelJobUploads, loadJobs, removeJob, uploadsSupportedHere } from '@/lib/uploads';
 
 import { chunkClip } from './cameraLogic';
@@ -80,8 +91,10 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
     return step;
   }
   if (step === 'give-up') {
-    // Never by hand: her Send again on Home is a fresh first try (its videos stay in documents/recordings/).
-    console.warn('[unsent] gave up sending', u.recordingId);
+    // Never by hand: her Send again on Home is a fresh first try. Not sent by itself any more; while a row of it is
+    // on Home the note stays, so that row's Send again still works, and it goes when she clears the row.
+    if (keepAfterGiveUp(u, rowsOf(u).length)) return step;
+    console.warn('[unsent] gave up sending', u.recordingId); // no row shows it (its in-app videos stay in documents/recordings/)
     dropUnsent(u.recordingId);
     return step;
   }
@@ -112,18 +125,25 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
     removeJob(r.job_id);
   }
   if (!stillUnsent(u.recordingId)) return 'done';
-  await sendDraft({
-    me: cook,
-    draft: { glasses: !!u.glasses, language: u.language, recordingId },
-    clips: keptClips(here),
-    kids: to.picked,
-    recipients: to.recipients,
-    toLabel: to.label,
-    dish: title,
-    hello: u.hello ?? null,
-    note: u.recordingId,
-    onStarted,
-  });
+  try {
+    await sendDraft({
+      me: cook,
+      draft: { glasses: !!u.glasses, language: u.language, recordingId },
+      clips: keptClips(here),
+      kids: to.picked,
+      recipients: to.recipients,
+      toLabel: to.label,
+      dish: title,
+      hello: u.hello ?? null,
+      note: u.recordingId,
+      onStarted,
+    });
+  } catch (e) {
+    // Its upload rows went above and no new one was made: Home shows the note's own failed row (Send again) until a
+    // send of it makes a job. (Only with no job: once one exists, its upload row is on Home.)
+    markUnsentDidntSend(u.recordingId);
+    throw e;
+  }
   return step;
 }
 
