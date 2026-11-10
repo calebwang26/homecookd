@@ -2,8 +2,10 @@
 // Which iOS journeys needed open-link.yaml's "Try again" (app/e2e/flows/open-link.yaml), for ios-journeys' job summary:
 // a green run that only passed after one says so, so a real api outage can't hide behind it.
 //   node scripts/journey-retries.mjs <maestro test-output dir>
-// Prints one line per journey that tapped Try again, nothing when none did. A tap saves takeScreenshot/try-again-N.png
-// in the journey's own folder (<dir>/<run>/<journey name>/), and report.xml (JUnit) says whether the journey passed.
+// Prints one line per journey that tapped Try again, nothing when none did, and names the card: a tap saves
+// takeScreenshot/try-again-N.png on "We can't reach homecookd." and try-again-kitchen-N.png on "We can't reach your
+// kitchen." (a family that didn't load after a sign-in), in the journey's own folder (<dir>/<run>/<journey name>/).
+// report.xml (JUnit) says whether the journey passed.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -22,7 +24,9 @@ export function results(xml) {
   return out;
 }
 
-/** Journey name -> how many Try again taps (try-again-N screenshots) it made. */
+export const CARDS = { api: '"We can\'t reach homecookd."', kitchen: '"We can\'t reach your kitchen."' };
+
+/** Journey name -> Try again taps on each card ({api, kitchen}), from the try-again screenshots. */
 export function taps(dir) {
   const out = new Map();
   if (!existsSync(dir)) return out;
@@ -30,8 +34,13 @@ export function taps(dir) {
     for (const flow of readdirSync(path.join(dir, run.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
       const shots = path.join(dir, run.name, flow.name, 'takeScreenshot');
       if (!existsSync(shots)) continue;
-      const n = readdirSync(shots).filter((f) => /^try-again-\d+\.png$/.test(f)).length;
-      if (n) out.set(flow.name, (out.get(flow.name) ?? 0) + n);
+      for (const f of readdirSync(shots)) {
+        const m = /^try-again-(kitchen-)?\d+\.png$/.exec(f);
+        if (!m) continue;
+        const t = out.get(flow.name) ?? { api: 0, kitchen: 0 };
+        t[m[1] ? 'kitchen' : 'api'] += 1;
+        out.set(flow.name, t);
+      }
     }
   }
   return out;
@@ -40,10 +49,13 @@ export function taps(dir) {
 export function lines(dir) {
   const xml = path.join(dir, 'report.xml');
   const passed = existsSync(xml) ? results(readFileSync(xml, 'utf8')) : new Map();
-  return [...taps(dir)].sort(([a], [b]) => a.localeCompare(b)).map(([name, n]) => {
-    const retries = `${n} "Try again" ${n === 1 ? 'retry' : 'retries'}`;
+  return [...taps(dir)].sort(([a], [b]) => a.localeCompare(b)).map(([name, t]) => {
+    const n = t.api + t.kitchen;
+    const cards = Object.keys(CARDS).filter((c) => t[c]);
+    const on = cards.length > 1 ? ` (${cards.map((c) => `${t[c]} on ${CARDS[c]}`).join(', ')})` : ` on ${CARDS[cards[0]]}`;
+    const retries = `${n} "Try again" ${n === 1 ? 'retry' : 'retries'}${on}`;
     if (passed.get(name) === true) return `${name}: passed after ${retries}, trust-check stall (if it repeats, check the staging api)`;
-    if (passed.get(name) === false) return `${name}: failed after ${retries}: "We can't reach homecookd." stayed up`;
+    if (passed.get(name) === false) return `${name}: failed after ${retries}: the card stayed up`;
     return `${name}: ${retries} (no result in report.xml)`;
   });
 }

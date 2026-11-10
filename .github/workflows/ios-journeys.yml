@@ -324,17 +324,26 @@ jobs:
             echo "::warning title=Try again::$LINE"
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
-      # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when journey 2 ran,
-      # only screenshots and report.xml are kept: every flow's commands.json, logs and screen dump go. Without it (a
-      # fork's PR) the launch journey's stay: its made-up link is no secret. Then any file still holding the link's token
-      # or the device key goes too, with a warning: that would be a leak this step didn't expect.
+      # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed
+      # journeys ran, every flow keeps only its screenshots and the simulator's log (report.xml stays): commands.json,
+      # Maestro's own logs and the screen dumps go. In the simulator's log, which shows a stall's cause (trustd, #456),
+      # each exact value (both device keys, the link's token, the test ids) becomes ***. Without a key (a fork's PR) the
+      # launch journey keeps everything: its made-up link is no secret. Then any file still holding a key or the token
+      # goes, with a warning: that would be a leak this step didn't expect.
       - name: Drop what echoes a key or a link
         if: always()
         run: |
           shopt -s nullglob
           for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
             if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
-            rm -rf "$d/commands.json" "$d/logs" "$d/screen-hierarchy"
+            rm -rf "$d/commands.json" "$d/screen-hierarchy"
+            find "$d/logs" -type f ! -name device-simulator.log -delete 2>/dev/null || true
+          done
+          SECRETS=("${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-cook" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-kid")
+          for f in "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log; do
+            for v in "${SECRETS[@]}"; do
+              if [ -n "$v" ]; then V="$v" perl -pi -e 's/\Q$ENV{V}\E/***/g' "$f"; fi
+            done
           done
           for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}"; do
             [ -n "$v" ] || continue

@@ -38,13 +38,13 @@ test('a journey with no Try again prints nothing', () => {
 
 test('a pass after one Try again says so', () => {
   assert.deepEqual(lines(out([[LAUNCH, true, ['try-again-1']]])), [
-    `${LAUNCH}: passed after 1 "Try again" retry, trust-check stall (if it repeats, check the staging api)`,
+    `${LAUNCH}: passed after 1 "Try again" retry on "We can't reach homecookd.", trust-check stall (if it repeats, check the staging api)`,
   ]);
 });
 
 test('a fail with the card still up after the last attempt says so', () => {
   assert.deepEqual(lines(out([[LAUNCH, false, ['try-again-1', 'try-again-2']]])), [
-    `${LAUNCH}: failed after 2 "Try again" retries: "We can't reach homecookd." stayed up`,
+    `${LAUNCH}: failed after 2 "Try again" retries on "We can't reach homecookd.": the card stayed up`,
   ]);
 });
 
@@ -55,8 +55,18 @@ test('each journey is counted on its own', () => {
     ['Ask Mom', false, ['try-again-2', 'try-again-3']],
   ]);
   assert.deepEqual(lines(dir), [
-    'Ask Mom: failed after 2 "Try again" retries: "We can\'t reach homecookd." stayed up',
-    `${LAUNCH}: passed after 1 "Try again" retry, trust-check stall (if it repeats, check the staging api)`,
+    'Ask Mom: failed after 2 "Try again" retries on "We can\'t reach homecookd.": the card stayed up',
+    `${LAUNCH}: passed after 1 "Try again" retry on "We can't reach homecookd.", trust-check stall (if it repeats, check the staging api)`,
+  ]);
+});
+
+test('the summary names the card: the family load after a sign-in, or both', () => {
+  const J3 = 'New message, Add family, Copy link';
+  assert.deepEqual(lines(out([[J3, true, ['try-again-kitchen-1']]])), [
+    `${J3}: passed after 1 "Try again" retry on "We can't reach your kitchen.", trust-check stall (if it repeats, check the staging api)`,
+  ]);
+  assert.deepEqual(lines(out([[J3, false, ['try-again-1', 'try-again-kitchen-2', 'try-again-kitchen-3']]])), [
+    `${J3}: failed after 3 "Try again" retries (1 on "We can't reach homecookd.", 2 on "We can't reach your kitchen."): the card stayed up`,
   ]);
 });
 
