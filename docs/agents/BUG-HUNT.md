@@ -16,6 +16,8 @@ deploy, an api deploy):
 1. **The live site at iPhone size**, plus one pass as Android: the lander, `/i` (the TEST family link), `/r`, `/d`,
    `/miss`, `/a`. Every button and link must go somewhere real: the App Store, the app, or a page that loads.
    Tools: `node infra/scripts/web-smoke.mjs https://homecookd.app` and `web/scripts/qa/` (`route-check.mjs`, `shoot.mjs`).
+   The walk itself: `node scripts/bug-hunt/walk.mjs --out <folder>` loads every page as an iPhone and as an Android phone,
+   reads only, and reports page errors, failed requests, sideways scroll and every link that doesn't answer.
 2. **The PRD-V2 path** (kid on the web → Ask Mom → Mom answers → film) on AWS staging with test people, deleted the same
    day: `web/scripts/qa/dish-api-e2e.mjs`, `mom-failures-e2e.mjs`, and the `app/scripts/aws-*-flows.mjs` scripts. On
    production these create real cards and call models, so they need Caleb's OK there.
