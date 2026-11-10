@@ -269,7 +269,9 @@ signed in to that family.
   `flows/launch-fresh.yaml`: a fresh install with `clearState` and `clearKeychain` (the keychain holds the session, and
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
-  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste. The prompt can
+  come 8 s after the launch (#483's run 42908446753, past a single 3 s look), so it's answered in rounds of up to 10 s
+  each, until a round with no prompt (3 at most).
 
 **The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
 `CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
