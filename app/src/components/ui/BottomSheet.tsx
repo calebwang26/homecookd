@@ -30,7 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useMachine } from '@/lib/machine';
-import { forgetSheet, holdSheet, moveSheet, showEventFor } from '@/lib/sheets/coordinator';
+import { forgetSheet, holdSheet, modalGone, moveSheet, showEventFor } from '@/lib/sheets/coordinator';
 import { isUp, sheetMachine } from '@/lib/sheets/machine';
 import { alpha, colors, motion, radii } from '@/theme/tokens';
 
@@ -165,8 +165,9 @@ export function BottomSheet({
   }, [state, sheetId, ancestors, send]);
 
   // Every move is recorded where it's decided (moveSheet: the layout effect above, holdSheet's settle and
-  // drop, closeDone below), never again from a passive effect: a render's passive effect can flush after a
-  // newer move (React flushes them before the next sync render) and would write a stale state back.
+  // drop), and its Modal's going in the commit that unmounts it (modalGone, below); never again from a passive
+  // effect: a render's passive effect can flush after a newer move (React flushes them before the next sync
+  // render) and would write a stale state back.
   useEffect(() => () => forgetSheet(sheetId), [sheetId]);
 
   const handleShow = useCallback(() => {
@@ -174,12 +175,17 @@ export function BottomSheet({
     shownRef.current?.();
   }, []);
 
-  // Layout effect, so 'mounted' is logged before the Modal's onShow.
+  // Layout effect, so 'mounted' is logged before the Modal's onShow. Its cleanup runs in the very commit that
+  // unmounts the Modal (closeDone, or the owner unmounting): only then does the coordinator hear this sheet is
+  // gone, so a held sheet's SETTLE_MS never starts before UIKit is told to take this Modal away.
   useLayoutEffect(() => {
     if (!mounted) return;
     traceRef.current?.('modal mounted');
-    return () => traceRef.current?.('modal unmounted');
-  }, [mounted]);
+    return () => {
+      modalGone(sheetId);
+      traceRef.current?.('modal unmounted');
+    };
+  }, [mounted, sheetId]);
   const closing = state === 'closing';
   useEffect(() => {
     if (!closing) return;
@@ -190,7 +196,7 @@ export function BottomSheet({
         : withTiming(sheetH || winH, { duration: motion.sheetCloseMs, easing: Easing.in(Easing.cubic) }),
     );
     const t = setTimeout(() => {
-      moveSheet(sheetId, 'closing', 'closeDone');
+      // Only the dispatch: the coordinator hears the sheet is gone from the commit that unmounts its Modal.
       send('closeDone');
       // Gone: the next opening starts with its content and no burst.
       setBurst(false);

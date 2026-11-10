@@ -8,6 +8,7 @@
 //   useSheetsUp()                             how many sheets' Modals are up (root hosts wait for 0)
 //   showEventFor(id, ancestors)               what `visible` turning true becomes: held while another is up
 //   moveSheet(id, state, event)               a sheet's move, recorded at once; returns the next state
+//   modalGone(id)                             its Modal unmounted in this commit: hidden from now
 //   holdSheet(id, ancestors, { settle, drop }) a held sheet's wait: every other Modal gone, then SETTLE_MS
 //   useModalClaim()                           a raw <Modal> (StepPlayerFull) counts while up and as it goes
 //   pickToastViewport(viewports)              the newest viewport not inside a sheet that isn't open
@@ -42,11 +43,19 @@ export function subscribeSheets(l: () => void): () => void {
   };
 }
 
-/** A sheet's state, as it is now: written by moveSheet (BottomSheet) and the raw Modal claim, nothing else. */
+/** A sheet's state, as it is now: written by moveSheet and modalGone (BottomSheet) and the raw Modal claim. */
 export function reportSheet(id: string, state: SheetState) {
   if (sheets.get(id) === state) return;
   sheets.set(id, state);
   changed();
+}
+
+/**
+ * Sheet `id`'s Modal unmounted in this commit (BottomSheet's layout-effect cleanup, the commit that tells UIKit
+ * to take it away): it's hidden from now, so a held sheet's SETTLE_MS starts no earlier than that.
+ */
+export function modalGone(id: string) {
+  if (sheets.has(id)) reportSheet(id, 'hidden');
 }
 
 /** BottomSheet unmounted. */
@@ -76,12 +85,6 @@ export function upCount(except?: string, ancestors: readonly string[] = []): num
   let n = 0;
   for (const [id, s] of sheets) if (id !== except && !ancestors.includes(id) && isUp(s)) n += 1;
   return n;
-}
-
-/** Another sheet's Modal is still going away. */
-export function othersClosing(except?: string): boolean {
-  for (const [id, s] of sheets) if (id !== except && s === 'closing') return true;
-  return false;
 }
 
 /**
