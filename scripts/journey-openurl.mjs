@@ -4,6 +4,7 @@
 // syslog`, only lsd's "_LSDispatchWithTimeout" lines (iOS giving up on an open after 10 s, Code=60) and the app's
 // "UIOpenURLAction" lines (the app receiving a link). Neither kind holds the link.
 //   node scripts/journey-openurl.mjs --since <ms> --stream <file> [--log <file>] [--exit <code>] [--wait <s>] [--simulated]
+//   node scripts/journey-openurl.mjs --since <ms> --stream <file> --landed-within <s>
 // Exits 0 when iOS gave up on the open and the app still received a link within --wait s (30: what open-link.yaml waits
 // for its screen anyway) of --since, the moment the open started; else 1. The 30 s are counted to the app's own line,
 // not to simctl returning. Either way it adds one JSON line to --log for the job summary (journey-retries.mjs):
@@ -11,6 +12,8 @@
 // --exit 0 (an open that worked) only adds its line, with how long simctl took, and exits 0 at once: the Times step reads
 // when the app got that link from the same stream, so a slow open shows even when nothing failed.
 // --simulated (the openurl_fault input) skips lsd's line: the open didn't really time out, the check of the landing did.
+// --landed-within <s> only asks whether the app received a link within <s> s from now (exit 0) or not (1), and writes
+// nothing: journey-xcrun.sh fakes the fault only on an open the app got on its own, never one waiting on iOS's dialog.
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -55,8 +58,18 @@ async function main() {
   const since = Number(arg('since'));
   const stream = arg('stream');
   if (!Number.isFinite(since) || !stream) {
-    console.error('usage: node scripts/journey-openurl.mjs --since <ms> --stream <file> [--log <file>] [--exit <code>] [--wait <s>] [--simulated]');
+    console.error('usage: node scripts/journey-openurl.mjs --since <ms> --stream <file> [--log <file>] [--exit <code>] [--wait <s>] [--simulated] | --landed-within <s>');
     process.exit(2);
+  }
+  const within = arg('landed-within');
+  if (within !== undefined) {
+    const until = Date.now() + Number(within) * 1000;
+    for (;;) {
+      const text = existsSync(stream) ? readFileSync(stream, 'utf8') : '';
+      if (events(text).some((e) => e.kind === 'landed' && e.ms >= since)) process.exit(0);
+      if (Date.now() > until) process.exit(1);
+      await new Promise((r) => setTimeout(r, 200));
+    }
   }
   const wait = Number(arg('wait', LAND_S));
   const simulated = process.argv.includes('--simulated');

@@ -161,7 +161,7 @@ process.exit(60);`);
   assert.equal(JSON.parse(readFileSync(s.log, 'utf8')).passed, true);
 });
 
-test('openurl_fault (JOURNEY_OPENURL_FAKE=first) treats only the first open that worked as one iOS gave up on', () => {
+test('openurl_fault (JOURNEY_OPENURL_FAKE=first) treats only the first open the app got on its own as one iOS gave up on', () => {
   const s = setup(`${STAMP}
 require('node:fs').appendFileSync(process.env.JOURNEY_OPENURL_STREAM, ${landedLine} + '\\n');
 process.exit(0);`);
@@ -173,6 +173,25 @@ process.exit(0);`);
   assert.equal(recs[0].simulated, true);
   assert.equal(recs[0].passed, true);
   assert.deepEqual([recs[1].simulated, recs[1].exit, recs[1].passed], [false, 0, true]);
+});
+
+test("openurl_fault skips an open waiting on iOS's Open dialog (no link yet): it goes through, and the next open is faked", () => {
+  // Dispatch 42889278704: the faked open was one iOS asked about, so its link could only land after Maestro's tap on
+  // Open, which can't come while the stand-in holds openLink; the dialog then blocked the journeys after it.
+  const s = setup(`${STAMP}
+const fs = require('node:fs');
+const n = process.env.JOURNEY_OPENURL_LOG + '.calls';
+const call = fs.existsSync(n) ? Number(fs.readFileSync(n, 'utf8')) + 1 : 1;
+fs.writeFileSync(n, String(call));
+if (call === 2) fs.appendFileSync(process.env.JOURNEY_OPENURL_STREAM, ${landedLine} + '\\n');
+process.exit(0);`);
+  const env = { ...s.env, JOURNEY_OPENURL_FAKE: 'first' };
+  const t0 = Date.now();
+  assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 0);
+  assert.ok(Date.now() - t0 >= 3000, 'it gave the link 3 s to land on its own');
+  assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 0);
+  const recs = readFileSync(s.log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(recs.map((r) => [r.exit, r.simulated, r.passed]), [[0, false, true], [1, true, true]]);
 });
 
 test('without JOURNEY_OPENURL_STREAM (outside the Journeys step) even openurl goes straight through', () => {

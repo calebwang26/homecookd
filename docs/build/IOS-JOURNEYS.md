@@ -213,7 +213,11 @@ Every open is logged, not only the failed ones, so a slow open shows even when n
 got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
 the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
 keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
-the first open as one iOS gave up on, to check the landing check on a real simulator.
+the first open whose link the app received on its own (within 3 s) as one iOS gave up on, to check the landing check on
+a real simulator. Not an open iOS asks about ("Open in homecookd?"): its link lands only after Maestro taps Open, which
+can't happen while the stand-in holds `openLink`. Dispatch 42889278704 faked such an open, and its dialog stayed up and
+failed the two journeys after it. For the same reason a real Code=60 on an open waiting on that dialog would fail as
+before; none of the five above had the dialog (their links landed with no tap).
 
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.

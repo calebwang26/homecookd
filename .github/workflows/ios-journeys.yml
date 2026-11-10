@@ -31,7 +31,7 @@ on:
         options: ['off', first-try, all]
         default: 'off'
       openurl_fault:
-        description: "Treat the first link open as one iOS gave up on (Code=60), to check that a link that still lands passes with a Journey retry warning"
+        description: "Treat the first link open the app gets on its own as one iOS gave up on (Code=60), to check that a link that still lands passes with a Journey retry warning"
         type: boolean
         default: false
 
@@ -433,7 +433,7 @@ jobs:
             > "$JOURNEY_OPENURL_STREAM" 2>/dev/null &
           OPENSTREAM=$!
           trap 'kill $OPENSTREAM 2>/dev/null || true' EXIT
-          if [ -n "$JOURNEY_OPENURL_FAKE" ]; then echo "openurl_fault: the first link open counts as one iOS gave up on"; fi
+          if [ -n "$JOURNEY_OPENURL_FAKE" ]; then echo "openurl_fault: the first link open the app gets on its own counts as one iOS gave up on"; fi
           if [ "$STALL_API" != off ]; then
             HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
             dns() { sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder; }
