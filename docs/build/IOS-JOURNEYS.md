@@ -108,9 +108,15 @@ subflow's retries didn't help. Now:
   "We can't reach your kitchen.". Opening the link again with no card to tap (the link didn't land, or the app sat on
   the screen it was on) is a retry too: `open-again-N`, taken before the link opens, so it shows the stuck screen and
   never the link, and the summary warns "passed after N re-opens of the link: the link didn't land or the app stalled
-  (the kept simulator log says which)", titled "Journey retry" like the taps. Without it a run passed silently:
-  #467's own run 42811383192 re-opened the sign-in link once in journeys 2 and 3 after a 65 s certificate stall, and
-  so did every keyed run approved before it (42803587900, 42807178364). A journey that passed only after a tap gets a warning and a line in the job summary
+  (the kept simulator log says which)", titled "Journey retry" like the taps. Without it a run passed silently: every
+  keyed run approved up to #467 re-opened the sign-in link once in each signed-in journey (42803587900, 42807178364,
+  42811383192). **That re-open isn't a stall:** the simulator-only sign-in hook (#435) adopts the key and the family
+  loads (GET /family 200), but the app isn't routed off the first screen until the link opens again. Scratch run
+  42820907631 had zero certificate FAILs and still one re-open each in journeys 2, 3 and 4. App screens is fixing the
+  hook (route once after the E2E adopt); until then, each signed-in journey shows one "Journey retry". The certificate
+  stall is a separate thing (runs 42815821906, 42786504171, 42790025629). In 42811383192 both happened: journey 3's
+  sign-in sat inside a real one (13 certificate FAILs, 12:17:56–12:18:53, first true check 12:19:04), while journey 2's
+  re-open came with no FAIL at all. A journey that passed only after a tap gets a warning and a line in the job summary
   that names the card ("passed after 1 "Try again" retry on "We can't reach your kitchen.", trust-check stall"), so a
   real api outage can't hide behind a green run (`scripts/journey-retries.mjs`).
 - To check it: `gh workflow run ios-journeys.yml --ref <branch> -f stall_api=first-try` must pass with that line, and
