@@ -219,6 +219,16 @@ export function failedNotes(list: Unsent[], at: { cookId: string | null | undefi
   );
 }
 
+/**
+ * The pass found none of its videos on the phone ('gone'). A note whose send already failed with no upload row left
+ * (`didntSend`, no job) is kept, so its own row stays on Home and says so plainly ("…not on this phone any more", no
+ * button) until her x clears it: never gone from Home with no word. Nothing is sent (every later pass is 'gone' again).
+ * Any other note goes, as before (one with a job is left to its job; its upload row says how that went).
+ */
+export function keepWhenGone(u: Pick<Unsent, 'didntSend' | 'jobId'>): boolean {
+  return u.didntSend === true && !u.jobId;
+}
+
 /** What a note's upload job changes on it: a job made clears `didntSend` (its upload row is on Home now). */
 export function jobPatch(jobId: string | null): Partial<Unsent> {
   return jobId ? { jobId, didntSend: undefined } : { jobId };
