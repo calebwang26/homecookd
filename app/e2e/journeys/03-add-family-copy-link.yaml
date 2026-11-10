@@ -1,0 +1,68 @@
+# Journey 3 (docs/build/IOS-JOURNEYS.md): Messages → New message → Add family → Copy link → Close → a chat → Home.
+# That's the path that froze 1.1 for Caleb twice: #402 (an invisible sheet took every tap after Add family) and #410 (the
+# screen stopped redrawing after Copy link). So every step after a sheet closes taps something and waits for the next
+# screen: a frozen screen fails here, not on a phone.
+# Signed in as the cook ("Asha (test)", made by scripts/journey-people.mjs with the kid "Leo (test)" in her family)
+# through the simulator-only homecookd://e2e/sign-in hook; COOK_KEY is her masked device key. Without TEST_SIGNIN_KEY (a
+# fork's PR) the workflow leaves this journey out.
+appId: ${APP_ID}
+name: New message, Add family, Copy link
+tags:
+  - needs-key
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: homecookd://e2e/sign-in?key=${COOK_KEY}
+      EXPECT: "(?s).*Messages.*"
+- assertNotVisible: ".*Sign in with Apple.*"
+- takeScreenshot: 03-cook-home
+# Tab labels can carry a badge ("Messages, 1 new"), so the tabs are matched loosely.
+- tapOn: ".*Messages.*"
+- extendedWaitUntil:
+    visible: "New message"
+    timeout: 20000
+- tapOn: "New message"
+# The New message sheet: everyone in the family, and Add family first.
+- extendedWaitUntil:
+    visible: "Add family"
+    timeout: 20000
+- assertVisible: ".*Leo \\(test\\).*"
+- takeScreenshot: 03-new-message
+- tapOn: "Add family"
+# #402: the invite sheet opens once the New message sheet has gone, and nothing invisible is left taking taps.
+- extendedWaitUntil:
+    visible: "Copy link"
+    timeout: 20000
+- takeScreenshot: 03-add-family
+- tapOn: "Copy link"
+# #410: the link comes from staging; "Copied" fades in inside the sheet.
+- extendedWaitUntil:
+    visible: ".*(Copied|Link copied).*"
+    timeout: 20000
+- takeScreenshot: 03-copied
+- tapOn: "Close"
+- extendedWaitUntil:
+    notVisible: "Copy link"
+    timeout: 10000
+# The screen must still take taps and redraw: a chat with Leo, then Home.
+- tapOn: "New message"
+- extendedWaitUntil:
+    visible: "Message Leo \\(test\\)"
+    timeout: 20000
+- tapOn: "Message Leo \\(test\\)"
+- extendedWaitUntil:
+    visible: ".*Ask Leo \\(test\\) anything.*"
+    timeout: 20000
+- takeScreenshot: 03-chat
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: ".*Home.*"
+    timeout: 20000
+- tapOn: ".*Home.*"
+- extendedWaitUntil:
+    notVisible: "New message"
+    timeout: 10000
+- takeScreenshot: 03-home

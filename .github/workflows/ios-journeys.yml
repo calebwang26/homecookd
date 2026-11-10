@@ -301,7 +301,7 @@ jobs:
             fi
           fi
           KEYED=(--exclude-tags needs-key)
-          if [ -n "${KID_KEY:-}" ]; then KEYED=(-e "FAMILY_LINK=$FAMILY_LINK" -e "KID_KEY=$KID_KEY"); fi
+          if [ -n "${KID_KEY:-}" ]; then KEYED=(-e "FAMILY_LINK=$FAMILY_LINK" -e "KID_KEY=$KID_KEY" -e "COOK_KEY=$COOK_KEY"); fi
           maestro --device "$UDID" test app/e2e/journeys --format junit --output "$RUNNER_TEMP/maestro-out/report.xml" \
             --test-output-dir "$RUNNER_TEMP/maestro-out" -e APP_ID="$APP_ID" "${KEYED[@]}"
           echo "T_JOURNEYS=$(date +%s)" >> "$GITHUB_ENV"
@@ -336,7 +336,7 @@ jobs:
             if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
             rm -rf "$d/commands.json" "$d/logs" "$d/screen-hierarchy"
           done
-          for v in "${KID_KEY:-}" "${FAMILY_LINK#*t=}"; do
+          for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}"; do
             [ -n "$v" ] || continue
             { grep -rlF -- "$v" "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
               echo "::warning title=Journey files::dropped $(basename "$f"): it held a key or a link"; rm -f "$f"

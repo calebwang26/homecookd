@@ -1,7 +1,8 @@
 // The iOS journeys' test people on AWS staging (docs/build/IOS-JOURNEYS.md, "Test people"). Plain fetch, no packages, so
 // the sweep runs without npm ci. TEST_SIGNIN_KEY comes from the environment and is never printed.
 //   node scripts/journey-people.mjs setup <state>   a cook ("Asha (test)") and her family link; a kid ("Leo (test)") who
-//                                                    joined by it. Masks, then writes FAMILY_LINK and KID_KEY to $GITHUB_ENV
+//                                                    joined by it. Masks, then writes FAMILY_LINK, KID_KEY and COOK_KEY
+//                                                    (each one's device key, for the e2e sign-in link) to $GITHUB_ENV
 //   node scripts/journey-people.mjs delete <state>  deletes both (if: always()); a missing state file is nothing to do
 //   node scripts/journey-people.mjs sweep           deletes the people of any run in the last day whose own delete didn't
 //                                                    finish (a runner that died), same day; needs GITHUB_TOKEN with actions: read
@@ -63,7 +64,7 @@ export async function setup(key, state, ids, f = fetch, mask = maskInActions) {
   const kid = await signIn(key, ids.kid, 'kid', { join_token: familyLink.split('t=')[1] }, f);
   mask(`::add-mask::${kid.device_key}`);
   if (kid.family_name !== cook.family_name) throw new Error('the kid did not join the cook’s family');
-  return { familyLink, kidKey: kid.device_key, familyName: cook.family_name };
+  return { familyLink, kidKey: kid.device_key, cookKey: cook.device_key, familyName: cook.family_name };
 }
 
 /** Signs each one in again and deletes the account. Never throws: one that's already gone is fine. */
@@ -130,7 +131,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   if (step === 'setup') {
     const out = await setup(key, state, idsFor(process.env.GITHUB_RUN_ID ?? `local${Date.now()}`, process.env.GITHUB_RUN_ATTEMPT ?? '1'));
-    if (process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `FAMILY_LINK=${out.familyLink}\nKID_KEY=${out.kidKey}\n`);
+    if (process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `FAMILY_LINK=${out.familyLink}\nKID_KEY=${out.kidKey}\nCOOK_KEY=${out.cookKey}\n`);
     console.log(`Seeded: a cook and a kid who joined her family by its link (${out.familyName}).`);
   } else if (step === 'delete') {
     if (existsSync(state)) await remove(key, JSON.parse(readFileSync(state, 'utf8')));

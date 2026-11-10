@@ -59,7 +59,7 @@ test('setup keeps the ids before any sign-in, then joins the kid by the cook’s
     '/join-links': json(200, { url: 'https://homecookd.app/i?t=AbCdEfGhIjKlMnOpQrStUv' }),
   });
   const out = await setup('the-key', state, idsFor(7, 1), f, (line) => masked.push(line));
-  assert.deepEqual(out, { familyLink: 'homecookd://i?t=AbCdEfGhIjKlMnOpQrStUv', kidKey: 'key-j7-1-kid', familyName: 'Asha (test)’s family' });
+  assert.deepEqual(out, { familyLink: 'homecookd://i?t=AbCdEfGhIjKlMnOpQrStUv', kidKey: 'key-j7-1-kid', cookKey: 'key-j7-1-cook', familyName: 'Asha (test)’s family' });
   assert.deepEqual(calls.map((c) => c.path), ['/v1/test/sign-in', '/join-links', '/v1/test/sign-in']);
   assert.equal(calls[0].headers['x-test-signin-key'], 'the-key');
   assert.deepEqual(calls[0].body, { test_id: 'j7-1-cook', name: 'Asha (test)', role: 'cook' });
