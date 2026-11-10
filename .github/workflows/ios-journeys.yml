@@ -534,7 +534,7 @@ jobs:
         id: scrub
         if: always()
         run: |
-          trap 'rm -rf "$RUNNER_TEMP"/maestro-out/*/*/logs; echo "::warning title=Journey files::the scrub failed, so every log was removed and nothing is uploaded"' ERR
+          trap 'rm -rf "$RUNNER_TEMP"/maestro-out/*/*/logs "$RUNNER_TEMP"/maestro-out/trustd-summary.txt; echo "::warning title=Journey files::the scrub failed, so every log was removed and nothing is uploaded"' ERR
           shopt -s nullglob
           for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
             if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
