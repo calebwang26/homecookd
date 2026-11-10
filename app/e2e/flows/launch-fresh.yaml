@@ -7,14 +7,14 @@ name: A fresh install, signed out, on the first screen
 # - A homecookd link left on the clipboard (journey 3's Copy link) makes the first screen's pickup read it, and iOS asks
 #   "homecookd would like to paste from homecookd", covering the screen (run 42778668467). That's the app working; the
 #   journeys answer Don't Allow Paste, so no copied link joins anything.
-# - Camera and microphone are granted up front, as a phone's first recording would ask: journey 4 films (with the
-#   stand-in camera), and a permission sheet left up would cover the screen.
+# - A permission prompt a failed journey left up (iOS keeps it over the next launch, run 42839865165) is answered
+#   first, or the next journey can't reach its first screen. (launchApp's `permissions` didn't pre-grant the camera
+#   there, so journey 4 answers the prompts itself, as a cook would.)
 - launchApp:
     clearState: true
     clearKeychain: true
-    permissions:
-      camera: allow
-      microphone: allow
+- runFlow:
+    file: allow-permissions.yaml
 - extendedWaitUntil:
     visible: ".*(Cook your family.s food|would like to paste).*"
     timeout: 60000

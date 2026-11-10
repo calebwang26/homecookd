@@ -1,0 +1,20 @@
+appId: ${APP_ID}
+name: Answer iOS's camera and microphone prompts
+---
+# iOS asks "homecookd would like to access the Camera" (then the Microphone) the first time the app films. The
+# journeys answer Allow, as a cook would; a prompt that isn't up is skipped. Waits briefly, since a prompt can follow
+# the screen by a moment.
+- extendedWaitUntil:
+    visible: ".*would like to access the (Camera|Microphone).*"
+    timeout: 4000
+    optional: true
+- repeat:
+    while:
+      visible: ".*would like to access the (Camera|Microphone).*"
+    times: 3
+    commands:
+      - tapOn: "Allow"
+      - extendedWaitUntil:
+          visible: ".*would like to access the (Camera|Microphone).*"
+          timeout: 3000
+          optional: true

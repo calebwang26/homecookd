@@ -229,7 +229,9 @@ signed in to that family.
 - A simulator has no camera, so this build films with the stand-in camera (`useInAppCamera` `e2eCamera`, #435). When
   filming stops, each file is a real 5 s clip from staging media (`EXPO_PUBLIC_E2E_CLIP_URL`, set in the workflow), so
   the recording uploads and makes a job exactly as a phone's does.
-- `flows/launch-fresh.yaml` grants camera and microphone up front, as a first recording on a phone would ask.
+- The recording screen asks iOS for the camera (and the microphone) the first time, as on a phone, and the cook taps
+  Allow (`flows/allow-permissions.yaml`). `launchApp`'s `permissions` didn't pre-grant it (run 42839865165), and a prompt
+  left up stays over the next journey's launch, so `flows/launch-fresh.yaml` answers any leftover prompt first.
 - The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
   recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
   sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
