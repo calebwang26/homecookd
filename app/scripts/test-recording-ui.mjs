@@ -705,6 +705,42 @@ test('unsent recordings: what a launch does with one, from what Convex and the u
   assert.equal(U.resendStep(old, at(undefined)), 'give-up', 'a week old: stop asking, even offline');
 });
 
+test('Send again by hand (Caleb, Nov 10): a fresh first try, never a give-up, and still never a second copy on a guess', () => {
+  const at = (convexJob, extra = {}) => ({ convexJob, upload: 'failed', clipsHere: 2, now: NOW, byHand: true, ...extra });
+  const job = (stage, error = null) => ({ stage, error });
+  const worn = note('r', { resends: U.MAX_RESENDS + 2 });
+  const old = note('r', { savedAt: new Date(NOW - U.MAX_AGE_MS - 1).toISOString() });
+  // What the launch gives up on, her tap sends: its tries and its age don't count.
+  assert.equal(U.resendStep(worn, { ...at(null), byHand: false }), 'give-up', 'the launch gives up');
+  assert.equal(U.resendStep(worn, at(null)), 'send');
+  assert.equal(U.resendStep(worn, at(job('uploading'))), 'redo', 'its job is missing the files: stop it, send again');
+  assert.equal(U.resendStep(worn, at(null, { upload: 'uploaded' })), 'create');
+  assert.equal(U.resendStep(old, at(null)), 'send', 'a week old');
+  // No hour's wait for a job missing files, even if this phone didn't see the upload fail.
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { upload: 'uploading' })), 'redo');
+  // Every other rule holds: can't reach the server, queued or claimed, already in, stopped, or nothing left to send.
+  assert.equal(U.resendStep(worn, at(undefined)), 'wait', 'never a second copy on a guess');
+  for (const s of ['queued', 'preparing']) assert.equal(U.resendStep(note('r'), at(job(s))), 'wait', s);
+  for (const s of ['understanding', 'writing', 'done']) assert.equal(U.resendStep(note('r'), at(job(s))), 'done', s);
+  assert.equal(U.resendStep(note('r'), at(job('failed', U.CANCELLED))), 'done');
+  assert.equal(U.resendStep(note('r'), at(null, { clipsHere: 0 })), 'gone');
+});
+
+test('Send again: the row\'s note is found as Stop finds it; the button only when its videos are still here', () => {
+  const list = [note('r1', { jobId: 'family-recipe-1' }), note('r2'), note('local-3')];
+  assert.equal(U.noteForRow(list, { job_id: 'family-recipe-1' })?.recordingId, 'r1', 'by its job');
+  assert.equal(U.noteForRow(list, { job_id: 'x', recording_id: 'r2' })?.recordingId, 'r2', 'by its recording');
+  assert.equal(U.noteForRow(list, { job_id: 'x', unsent_id: 'local-3' })?.recordingId, 'local-3', 'a Send-screen note');
+  assert.equal(U.noteForRow(list, { job_id: 'x', recording_id: null }), undefined);
+  assert.equal(U.sendAgainOffer(list[0], 2), 'send');
+  assert.equal(U.sendAgainOffer(list[0], 0), 'gone', 'its videos left the phone');
+  assert.equal(U.sendAgainOffer(undefined, 0), 'gone', 'no note on this phone');
+  // Stop and noteForRow agree on which note a row is.
+  for (const row of [{ job_id: 'family-recipe-1' }, { job_id: 'x', recording_id: 'r2' }, { job_id: 'x', unsent_id: 'local-3' }]) {
+    assert.ok(!U.withoutUnsentFor(list, row).includes(U.noteForRow(list, row)));
+  }
+});
+
 test('stopped early: each saved file updates the recording’s filming note; never over one being sent', () => {
   let list = U.withFilming([], note('r1', { clips: [] }));
   assert.equal(list[0].state, 'filming');
