@@ -355,16 +355,22 @@ jobs:
           done
           kill "$LOCKSTREAM" 2>/dev/null || true
           xcrun simctl terminate "$UDID" com.apple.mobilesafari 2>/dev/null || true
+          # How long it was locked, from the log's own times (the first and the last locked read, both UTC).
+          T1=$(grep 'database is locked' "$LOCKLOG" | head -1 | awk '{print substr($2,1,8)}')
+          T2=$(grep 'database is locked' "$LOCKLOG" | tail -1 | awk '{print substr($2,1,8)}')
           rm -f "$LOCKLOG"
-          HELD=$(( SEEN > 0 ? LAST - LSTART : 0 )); WAITED=$(( $(date +%s) - START ))
+          HELD=0
+          if [ -n "$T1" ]; then HELD=$(( $(date -j -u -f %T "$T2" +%s) - $(date -j -u -f %T "$T1" +%s) )); fi
+          SPAN=$([ -n "$T1" ] && echo ", ${T1}-${T2} UTC" || echo "")
+          WAITED=$(( $(date +%s) - START ))
           if [ -z "$FREE" ]; then
             echo "> ❌ **The simulator, not the app or this PR:** its certificate service (trustd) kept its pinning database locked for 6 minutes (${SEEN} locked reads). Re-run the job." >> "$GITHUB_STEP_SUMMARY"
             echo "::error title=Simulator, not the app::trustd's pinning database stayed locked for 6 minutes (${SEEN} locked reads). Not the app or this PR: re-run the job."
             exit 1
           fi
           EARLY=$([ -f "$RUNNER_TEMP/trust-first-use" ] && echo "first check $(( LSTART - FIRST )) s before" || echo "no early first check")
-          echo "trustd's pinning database free after ${WAITED} s in all (locked reads ${SEEN}, for ${HELD} s; ${EARLY})."
-          echo "> Simulator trust check: answered after ${WAITED} s in all, try ${TRY} of 4, trustd restarted ${RESTARTS} times; its pinning database locked ${SEEN} reads over ${HELD} s (${EARLY})." >> "$GITHUB_STEP_SUMMARY"
+          echo "trustd's pinning database free after ${WAITED} s in all (locked reads ${SEEN}, over ${HELD} s${SPAN}; ${EARLY})."
+          echo "> Simulator trust check: free after ${WAITED} s in all, Safari answered on try ${TRY} of 4, trustd restarted ${RESTARTS} times; its pinning database locked ${SEEN} reads over ${HELD} s${SPAN} (${EARLY})." >> "$GITHUB_STEP_SUMMARY"
           echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
       # Journey 2's people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who joined by it.
       # The link and the kid's device key are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no secret, so
