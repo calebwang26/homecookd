@@ -213,7 +213,9 @@ signed in to that family.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
-  their ids, the same day. The step names are the sweep's keys: rename both or neither.
+  their ids, the same day. The step names are the sweep's keys: rename both or neither. A GitHub answer of 5xx, or no
+  answer, is tried again (three tries, 2 s then 5 s apart): run 42840432828, the first scheduled sweep, stopped on a
+  single 502 and deleted nothing.
 
 **Journey 3 (Master Agent, Nov 9).** `app/e2e/journeys/03-add-family-copy-link.yaml`: the path that froze 1.1 twice,
 #402 (an invisible sheet took every tap after Add family) and #410 (the screen stopped redrawing after Copy link).
@@ -265,16 +267,17 @@ signed in to that family.
   simctl's 10 s timeout fails the journey. 42851642925 (journey 4: the app got it at +16.4 s) had a clean gate with 0
   trustd restarts, so a restart isn't needed for it (the Master Agent withdrew that lead). All the failed opens fell
   between 15:58 and 16:26 UTC on Nov 10, while GitHub said macOS arm64 runners were under capacity pressure: a guess at
-  most. An `openLink` that throws while the link lands is queued as its own CI PR (`claude/openlink-lands`).
+  most. An `openLink` that throws while the link lands is handled in its own CI PR, #482 (`claude/openlink-lands`).
 - **"Copied" lasts 2 s, and an iOS tap waits for a still screen first** (Nov 10, not a simulator fault: a race in
   journey 3's check). ExternalRow shows "Copied" (label "Link copied") for `COPIED_MS` = 2000 ms. On iOS, Maestro's
   settle wait after every tap is a fixed 3 s check that the screen has stopped changing (`waitUntilScreenIsStatic`,
   IOSDriver.kt:505 and :694, Maestro 2.11). A flow's `waitToSettleTimeoutMs` applies only after that, so it can't
   shorten the first look (#477 tried, and was closed). The button's own animations keep the screen moving about 1.5 s,
   so the first look after the copy comes at about +1.5–2 s: +1.62, 1.68, 1.82, 1.84 and 1.61 s in passing runs, and
-  2.03 s in 42856745720, which failed with the copy done (pasteboard write completed). The fix is a longer `COPIED_MS`
-  (App screens & recording), which keeps the journey on the motion path phones run and still proves the copy. Until it
-  merges, a red journey 3 at "Copied" is this race: check the first look's offset in its kept log.
+  2.03 s in 42856745720, which failed with the copy done (pasteboard write completed). The fix: #478 (App screens &
+  recording) made `COPIED_MS` 3500 ms, which keeps the journey on the motion path phones run and still proves the copy,
+  with about 1.5 s to spare over the slowest first look seen. A red journey 3 at "Copied" from before #478 was this
+  race: check the first look's offset in its kept log.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
