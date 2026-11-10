@@ -13,6 +13,9 @@ name: A fresh install, signed out, on the first screen
 - launchApp:
     clearState: true
     clearKeychain: true
+# This also lets the fresh install settle: with no prompt up, allow-permissions waits its full 4 s. Right after
+# clearKeychain the simulator's daemons send a burst of account-change notices, and an openLink inside it timed out in
+# LaunchServices (Code=60, #473's run 42847823481 on flows without this wait; App screens' reading, unproven).
 - runFlow:
     file: allow-permissions.yaml
     env:
