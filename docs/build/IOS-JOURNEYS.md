@@ -218,7 +218,8 @@ signed in to that family.
   the recording uploads and makes a job exactly as a phone's does.
 - `flows/launch-fresh.yaml` grants camera and microphone up front, as a first recording on a phone would ask.
 - The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
-  recording" → the pre-record sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
+  recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
+  sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
   6 s → "I'm done" → "Done! Sending it to …" → her Home.
 - Staging runs no worker, so the job stays "Still being made": that row ("Journey dal", "Still being made.") on her
   Home is the proof the videos went up and the job exists. The cook, her family and what she sent go with the test
