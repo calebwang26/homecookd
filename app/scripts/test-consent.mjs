@@ -119,6 +119,23 @@ await test('"Not now": false, nothing saved, and the next use asks again', async
   assert.equal(await again, false);
 });
 
+await test('a sheet dropped unseen (held behind another for 30 s: BottomSheet onDropped, which is its onClose, "Not now") saves nothing; the next use asks as the first time', async () => {
+  // AiConsentSheet passes no onDropped, so a drop calls its onClose: answerAiConsent(false).
+  const ok = C.ensureAiConsent();
+  await settle();
+  const before = new Map(globalThis.__kv);
+  await C.answerAiConsent(false);
+  assert.equal(await ok, false, 'nothing is sent');
+  assert.deepEqual(new Map(globalThis.__kv), before, 'no key written: no time, no asked flag, no "don\'t ask again"');
+  assert.equal(C.getAiConsent(), 'needed');
+  const again = C.ensureAiConsent();
+  await settle();
+  assert.equal(asking(), true, 'Start recording asks again');
+  await C.answerAiConsent(true);
+  assert.equal(await again, true);
+  await C.forgetAiConsent();
+});
+
 await test('two asks at once share one sheet and its one answer', async () => {
   const a = C.ensureAiConsent();
   const b = C.ensureAiConsent();

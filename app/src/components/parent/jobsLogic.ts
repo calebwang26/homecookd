@@ -3,6 +3,8 @@
 //   stageHint(stage, t)                        the row's line for each stage still going
 //   uploadingView(live, received, expected, t) stage 'uploading': the worker is still waiting for the
 //                                              video, so the sending half of the bar isn't full
+//   uploadingRow(localState, live, …)          the same, unless this phone's own upload gave up: then
+//                                              the row says so ("Some videos didn't send")
 //   liveJobFinished(worker, libraryIds, ...)   'done' and its recipe is in the library: drop the row
 //   recipeIdsToLookUp(workers, known)          finished jobs whose library id isn't known yet
 //   liveJobCancelled(worker)                   stopped (on this phone or another): drop the row
@@ -40,6 +42,23 @@ export function uploadingView(live: number | null, received: number, expected: n
   const known = live ?? (expected > 0 && received > 0 ? received / expected : null);
   const hint = live !== null && live < 1 ? t('parent.processing.sendingPct', { pct: Math.round(live * 100) }) : stageHint('uploading', t);
   return { hint, send: Math.min(0.95, Math.max(0.05, known ?? 0.5)) };
+}
+
+/**
+ * The row while the worker still waits for the video. This phone's own upload gave up (every try failed:
+ * the stored job's local_state is 'failed'): it says so, as a row with no live stage does, instead of
+ * "Sending your videos · 0%" over an upload that has stopped (on 1.1 every job has a live stage from the
+ * start, so a failed upload never showed). Else the sending half (uploadingView).
+ */
+export function uploadingRow(
+  localState: string | undefined,
+  live: number | null,
+  received: number,
+  expected: number,
+  t: T = english,
+): { failed: true; hint: string } | { failed: false; hint: string; send: number } {
+  if (localState === 'failed') return { failed: true, hint: t('parent.processing.someFailed') };
+  return { failed: false, ...uploadingView(live, received, expected, t) };
 }
 
 /**

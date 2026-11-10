@@ -9,12 +9,13 @@
 //    SuccessBurst plays at the top-centre, holds 1.4 s, then `onSuccessDone` (default: onClose).
 // Renders in a transparent native Modal so it sits above tabs and navigators on iOS and web.
 // Its lifecycle is the table in lib/sheets/machine.ts (hidden, held, open, closing), held in one place by
-// lib/sheets/coordinator.ts. iOS: a sheet opening while another one is still animating out (or, created
-// already open, while any other sheet's Modal is up) waits for that one's Modal to go
-// (presenting a Modal mid-dismissal is a UIKit hazard), up to CLOSING_WAIT_MS, then SETTLE_MS more
-// so UIKit's dismissal finishes before the next presentViewController.
+// lib/sheets/coordinator.ts. iOS: a sheet that becomes visible while any other sheet's Modal is up (one
+// still sliding out included) waits until every one has gone, then SETTLE_MS more so UIKit's dismissal
+// finishes before the next presentViewController; presenting over a Modal that is up is refused, and the
+// screen then takes no taps (#402, iOS journey 4). A sheet rendered inside another sheet's content
+// presents over it and doesn't wait for it. Held for HELD_MAX_MS, it gives up (onDropped).
 import { BlurView } from 'expo-blur';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -29,8 +30,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useMachine } from '@/lib/machine';
-import { forgetSheet, othersClosing as othersClosingNow, reportSheet, upCount, useOthersClosing } from '@/lib/sheets/coordinator';
-import { heldWaitMs, initialSheetState, isUp, sheetMachine, showEvent } from '@/lib/sheets/machine';
+import { forgetSheet, holdSheet, modalGone, moveSheet, showEventFor } from '@/lib/sheets/coordinator';
+import { isUp, sheetMachine } from '@/lib/sheets/machine';
 import { alpha, colors, motion, radii } from '@/theme/tokens';
 
 import { CloseIcon } from './icons';
@@ -66,7 +67,16 @@ export type BottomSheetProps = {
   onTrace?: (what: string) => void;
   /** The native Modal finished presenting (Modal onShow). */
   onShown?: () => void;
+  /**
+   * It was held behind another sheet for HELD_MAX_MS and gave up without showing. Default: onClose. A sheet
+   * whose onClose records an answer (the push ask's 30-day snooze) passes one that records nothing.
+   */
+  onDropped?: () => void;
 };
+
+/** The sheets a sheet's content sits inside: a sheet rendered there presents over them, so they don't hold it. */
+const NO_ANCESTORS: readonly string[] = [];
+const SheetAncestors = createContext<readonly string[]>(NO_ANCESTORS);
 
 /** How many sheets have their Modal up right now (root hosts like the push ask wait for 0). */
 export { useSheetsUp } from '@/lib/sheets/coordinator';
@@ -88,13 +98,14 @@ export function BottomSheet({
   accessibilityLabel,
   onTrace,
   onShown,
+  onDropped,
 }: BottomSheetProps) {
   const sheetId = useId();
-  const othersClosing = useOthersClosing(sheetId);
-  // Created already visible, it waits while any other sheet's Modal is up: that one may be closing in
-  // this same tap ("New message" → "Add family") and only reports it from its effect. Presenting over a
-  // dismissing Modal on iOS showed nothing, and an invisible Modal took every tap (1.1, Nov 8).
-  const [state, send] = useMachine(sheetMachine, () => initialSheetState(visible, upCount(sheetId) > 0));
+  const ancestors = useContext(SheetAncestors);
+  const inside = useMemo(() => [...ancestors, sheetId], [ancestors, sheetId]);
+  // Every sheet starts hidden; one created visible opens from the layout effect below, exactly as one shown
+  // later, so both wait behind any other sheet's Modal ("New message" → "Add family", #402).
+  const [state, send] = useMachine(sheetMachine, 'hidden');
   const mounted = isUp(state);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -106,48 +117,75 @@ export function BottomSheet({
   const [sheetH, setSheetH] = useState(0);
   const [burst, setBurst] = useState(false);
 
-  // `visible` becomes an event before paint (the frame the sheet used to set its flags in during render).
-  const lastVisible = useRef(visible);
+  // Latest state and callbacks for the decisions below, set before the layout effects that read them
+  // (react-native-web re-fires onShow when its handler changes, so that one stays stable).
+  const stateRef = useRef(state);
+  const traceRef = useRef(onTrace);
+  const shownRef = useRef(onShown);
+  const closeRef = useRef(onClose);
+  const droppedRef = useRef(onDropped);
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    traceRef.current = onTrace;
+    shownRef.current = onShown;
+    closeRef.current = onClose;
+    droppedRef.current = onDropped;
+  });
+
+  // `visible` becomes an event before paint, on mount too: held while any other sheet's Modal is up (one
+  // hiding in this same tap included), else open. The move is recorded in the coordinator here (moveSheet),
+  // so a sheet deciding after this one in the same commit already sees it.
+  const lastVisible = useRef(false);
   useLayoutEffect(() => {
     if (visible === lastVisible.current) return;
     lastVisible.current = visible;
-    send(visible ? showEvent(othersClosingNow(sheetId)) : 'hide');
-  }, [visible, send, sheetId]);
+    const event = visible ? showEventFor(sheetId, ancestors) : 'hide';
+    moveSheet(sheetId, stateRef.current, event);
+    send(event);
+  }, [visible, send, sheetId, ancestors]);
 
-  // Held: present SETTLE_MS after the other sheet's Modal is gone, never later than CLOSING_WAIT_MS while
-  // it is still closing.
+  // Held: it presents SETTLE_MS after every other sheet's Modal is gone (coordinator.holdSheet), and after
+  // HELD_MAX_MS it gives up rather than present over one that is still up. The trace says only that.
   useEffect(() => {
     if (state !== 'held') return;
-    const t = setTimeout(() => send('settled'), heldWaitMs(othersClosing));
-    return () => clearTimeout(t);
-  }, [state, othersClosing, send]);
+    traceRef.current?.('waiting for another sheet to go');
+    return holdSheet(sheetId, ancestors, {
+      settle: () => {
+        traceRef.current?.('other sheets gone, presenting');
+        moveSheet(sheetId, 'held', 'settled');
+        send('settled');
+      },
+      drop: () => {
+        traceRef.current?.('still waiting after 30 s: dropped, not shown');
+        moveSheet(sheetId, 'held', 'drop');
+        send('drop');
+        (droppedRef.current ?? closeRef.current)();
+      },
+    });
+  }, [state, sheetId, ancestors, send]);
 
-  // The coordinator holds every sheet's state; this sheet is the only one that reports it.
-  useEffect(() => reportSheet(sheetId, state), [sheetId, state]);
+  // Every move is recorded where it's decided (moveSheet: the layout effect above, holdSheet's settle and
+  // drop), and its Modal's going in the commit that unmounts it (modalGone, below); never again from a passive
+  // effect: a render's passive effect can flush after a newer move (React flushes them before the next sync
+  // render) and would write a stale state back.
   useEffect(() => () => forgetSheet(sheetId), [sheetId]);
 
-  // Latest callbacks behind stable handlers (react-native-web re-fires onShow when it changes).
-  const traceRef = useRef(onTrace);
-  const shownRef = useRef(onShown);
-  useLayoutEffect(() => {
-    traceRef.current = onTrace;
-    shownRef.current = onShown;
-  });
   const handleShow = useCallback(() => {
     traceRef.current?.('modal shown');
     shownRef.current?.();
   }, []);
 
-  // Layout effect, so 'mounted' is logged before the Modal's onShow.
+  // Layout effect, so 'mounted' is logged before the Modal's onShow. Its cleanup runs in the very commit that
+  // unmounts the Modal (closeDone, or the owner unmounting): only then does the coordinator hear this sheet is
+  // gone, so a held sheet's SETTLE_MS never starts before UIKit is told to take this Modal away.
   useLayoutEffect(() => {
     if (!mounted) return;
     traceRef.current?.('modal mounted');
-    return () => traceRef.current?.('modal unmounted');
-  }, [mounted]);
-  useEffect(() => {
-    if (state === 'held') traceRef.current?.(othersClosing ? 'waiting for another sheet to close' : 'other sheet gone, settling');
-  }, [state, othersClosing]);
-
+    return () => {
+      modalGone(sheetId);
+      traceRef.current?.('modal unmounted');
+    };
+  }, [mounted, sheetId]);
   const closing = state === 'closing';
   useEffect(() => {
     if (!closing) return;
@@ -158,6 +196,7 @@ export function BottomSheet({
         : withTiming(sheetH || winH, { duration: motion.sheetCloseMs, easing: Easing.in(Easing.cubic) }),
     );
     const t = setTimeout(() => {
+      // Only the dispatch: the coordinator hears the sheet is gone from the commit that unmounts its Modal.
       send('closeDone');
       // Gone: the next opening starts with its content and no burst.
       setBurst(false);
@@ -222,64 +261,66 @@ export function BottomSheet({
       navigationBarTranslucent
       onRequestClose={onClose}
       onShow={handleShow}>
-      <GestureHandlerRootView style={styles.fill}>
-        <Animated.View style={[StyleSheet.absoluteFill, backStyle]}>
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha.backdrop }]} />
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={dismissOnBackdrop && !success ? onClose : undefined}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          />
-        </Animated.View>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.anchor} pointerEvents="box-none">
-          <Animated.View
-            accessibilityViewIsModal
-            accessibilityLabel={accessibilityLabel ?? title}
-            onLayout={(e) => {
-              const h = e.nativeEvent.layout.height;
-              // Ignore a NaN / zero first pass; the slide-in waits for a real height.
-              if (Number.isFinite(h) && h > 0) setSheetH(h);
-            }}
-            style={[
-              styles.sheet,
-              { backgroundColor: background, maxHeight: winH * maxHeightRatio, paddingBottom: Math.max(insets.bottom, 16) + 8 },
-              sheetStyle,
-            ]}>
-            <GestureDetector gesture={drag}>
-              <View style={styles.handleZone}>
-                {dismissOnDrag ? <View style={styles.grabber} /> : null}
-              </View>
-            </GestureDetector>
-            {showClose ? (
-              <IconButton
-                icon={(c) => <CloseIcon size={18} color={c} />}
-                tone="well"
-                size={40}
-                accessibilityLabel="Close"
-                onPress={onClose}
-                style={styles.close}
-              />
-            ) : null}
-            <Animated.View style={[styles.content, contentStyleA, contentStyle]} pointerEvents={success ? 'none' : 'auto'}>
-              {title ? (
-                <Txt variant="chatName" style={styles.title}>
-                  {title}
-                </Txt>
-              ) : null}
-              {children}
-              {footer ? <View style={styles.footer}>{footer}</View> : null}
-            </Animated.View>
-            {success && burst ? (
-              <View style={styles.burst} pointerEvents="none">
-                <SuccessBurst title={success.title} subtitle={success.subtitle} onDone={onSuccessDone ?? onClose} />
-              </View>
-            ) : null}
+      <SheetAncestors.Provider value={inside}>
+        <GestureHandlerRootView style={styles.fill}>
+          <Animated.View style={[StyleSheet.absoluteFill, backStyle]}>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha.backdrop }]} />
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={dismissOnBackdrop && !success ? onClose : undefined}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            />
           </Animated.View>
-        </KeyboardAvoidingView>
-        <ToastViewport position="top" inSheet sheetId={sheetId} />
-      </GestureHandlerRootView>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.anchor} pointerEvents="box-none">
+            <Animated.View
+              accessibilityViewIsModal
+              accessibilityLabel={accessibilityLabel ?? title}
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                // Ignore a NaN / zero first pass; the slide-in waits for a real height.
+                if (Number.isFinite(h) && h > 0) setSheetH(h);
+              }}
+              style={[
+                styles.sheet,
+                { backgroundColor: background, maxHeight: winH * maxHeightRatio, paddingBottom: Math.max(insets.bottom, 16) + 8 },
+                sheetStyle,
+              ]}>
+              <GestureDetector gesture={drag}>
+                <View style={styles.handleZone}>
+                  {dismissOnDrag ? <View style={styles.grabber} /> : null}
+                </View>
+              </GestureDetector>
+              {showClose ? (
+                <IconButton
+                  icon={(c) => <CloseIcon size={18} color={c} />}
+                  tone="well"
+                  size={40}
+                  accessibilityLabel="Close"
+                  onPress={onClose}
+                  style={styles.close}
+                />
+              ) : null}
+              <Animated.View style={[styles.content, contentStyleA, contentStyle]} pointerEvents={success ? 'none' : 'auto'}>
+                {title ? (
+                  <Txt variant="chatName" style={styles.title}>
+                    {title}
+                  </Txt>
+                ) : null}
+                {children}
+                {footer ? <View style={styles.footer}>{footer}</View> : null}
+              </Animated.View>
+              {success && burst ? (
+                <View style={styles.burst} pointerEvents="none">
+                  <SuccessBurst title={success.title} subtitle={success.subtitle} onDone={onSuccessDone ?? onClose} />
+                </View>
+              ) : null}
+            </Animated.View>
+          </KeyboardAvoidingView>
+          <ToastViewport position="top" inSheet sheetId={sheetId} />
+        </GestureHandlerRootView>
+      </SheetAncestors.Provider>
     </Modal>
   );
 }

@@ -2,52 +2,52 @@
 // One sheet's lifecycle (components/ui/BottomSheet), as a table. Its native Modal is up in `open` and
 // `closing`; the coordinator (./coordinator.ts) holds every sheet's state so they can wait on each other.
 //
-//   hidden   no Modal. `show`: open. `showBehind` (another sheet's Modal may still be going): held.
-//   held     waiting to present; `settled` (the wait timer) opens it, `hide` drops it unseen.
+//   hidden   no Modal. `show`: open. `showBehind` (another sheet's Modal is up): held.
+//   held     waiting to present. `settled` (every other Modal gone, then SETTLE_MS): open. `hide` drops it
+//            unseen. `drop` (still waiting after HELD_MAX_MS): hidden, and its owner hears onDropped.
 //   open     the Modal is up and the sheet slides in. `hide`: closing.
 //   closing  sliding out, the Modal still up. `closeDone` (sheetCloseMs later) unmounts it; shown again
 //            mid-way (`show` or `showBehind`) it's open again with no remount.
 //
-// The invariant: a sheet's Modal never presents while another sheet's Modal is still going away (iOS
-// refuses it, or leaves an invisible Modal that takes every tap: #402).
-// Which event `visible` becomes is decided outside the table (initialSheetState, showEvent), exactly as
-// BottomSheet did before the table: a sheet created already visible waits while any other Modal is up
-// (that one may be closing in the same tap); one shown later waits only while another is closing.
+// The invariant: a sheet's Modal never presents while another sheet's Modal is up or still going away (iOS
+// refuses it, and the refused Modal leaves the screen taking no taps: #402, and iOS journey 4 after the AI
+// consent sheet, run 42838822300). A sheet that becomes visible while any other sheet's Modal is up (a
+// sheet inside its content aside) is held, and a held sheet waits on the others' state, not on a timer
+// (coordinator.holdSheet). Every move is recorded in the coordinator when it's decided (moveSheet), so a
+// sheet deciding later in the same commit already sees it.
 import { machine } from '../machine';
 
-export const SHEET_EVENTS = ['show', 'showBehind', 'settled', 'hide', 'closeDone'] as const;
+export const SHEET_EVENTS = ['show', 'showBehind', 'settled', 'hide', 'closeDone', 'drop'] as const;
 export type SheetEvent = (typeof SHEET_EVENTS)[number];
 export type SheetState = 'hidden' | 'held' | 'open' | 'closing';
 
 export const sheetMachine = machine<SheetState, SheetEvent>('sheet', SHEET_EVENTS, {
   hidden: { show: 'open', showBehind: 'held' },
-  held: { settled: 'open', hide: 'hidden' },
+  held: { settled: 'open', hide: 'hidden', drop: 'hidden' },
   open: { hide: 'closing' },
   closing: { show: 'open', showBehind: 'open', closeDone: 'hidden' },
 });
 
-/** After another sheet's Modal is gone, a few frames before this one presents. */
+/** After every other sheet's Modal is gone, a few frames before a held sheet presents. */
 export const SETTLE_MS = 60;
-/** The longest a sheet waits while another one is still closing. */
+/**
+ * The longest afterClose waits behind a closing sheet, and how long a Modal that isn't a BottomSheet
+ * (coordinator.releaseModal: StepPlayerFull's fade) still counts as closing after it unmounts.
+ */
 export const CLOSING_WAIT_MS = 600;
+/**
+ * A held sheet gives up after this long (`drop`) instead of presenting over a Modal that is still up,
+ * which is what freezes the screen. Long enough for someone to read the sheet in front of it (two root
+ * asks at once), so it only ends a wait that a bug left behind.
+ */
+export const HELD_MAX_MS = 30_000;
 
 /** Its native Modal is up. */
 export const isUp = (s: SheetState | undefined): boolean => s === 'open' || s === 'closing';
 
-/** A sheet's first state: created visible, it waits when any other sheet's Modal is up. */
-export function initialSheetState(visible: boolean, othersUp: boolean): SheetState {
-  if (!visible) return 'hidden';
-  return othersUp ? 'held' : 'open';
-}
-
-/** `visible` turned true on a sheet that already exists: it waits only while another one is closing. */
-export function showEvent(othersClosing: boolean): SheetEvent {
-  return othersClosing ? 'showBehind' : 'show';
-}
-
-/** How long a held sheet waits before `settled`: the cap while another is closing, else a few frames. */
-export function heldWaitMs(othersClosing: boolean): number {
-  return othersClosing ? CLOSING_WAIT_MS : SETTLE_MS;
+/** `visible` turned true (on mount too): it waits while any other sheet's Modal is up. */
+export function showEvent(othersUp: boolean): SheetEvent {
+  return othersUp ? 'showBehind' : 'show';
 }
 
 /**
