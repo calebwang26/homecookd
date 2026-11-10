@@ -2,3 +2,5 @@
 # A fake S3 key in a test fixture (audioKey: private/dish/k) that generic-api-key mistakes for a key.
 2c82bcb0a75621852313c204efb750f891c7c56d:app/scripts/test-aws-jobs.mjs:generic-api-key:284
 2c82bcb0a75621852313c204efb750f891c7c56d:app/scripts/test-aws-jobs.mjs:generic-api-key:294
+# A made-up AWS key id (ASIA + EXAMPLE…) in the scrub test's fake presigned URL; the file now builds it at runtime.
+ed7404c7cf4375b9169d063316576cffc5720c22:scripts/journey-scrub.test.mjs:aws-access-token:17

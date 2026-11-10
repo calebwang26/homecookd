@@ -1,0 +1,24 @@
+appId: ${APP_ID}
+name: Answer iOS's camera and microphone prompts
+---
+# iOS asks "homecookd would like to access the Camera" (then the Microphone) the first time the app films. The
+# journeys answer Allow, as a cook would; a prompt that isn't up is skipped. Waits briefly, since a prompt can follow
+# the screen by a moment.
+- extendedWaitUntil:
+    visible: ".*would like to access the (Camera|Microphone).*"
+    timeout: 4000
+    optional: true
+- repeat:
+    while:
+      visible: ".*would like to access the (Camera|Microphone).*"
+    times: 3
+    commands:
+      # SHOT names the screenshot: leftover-prompt-N at a fresh launch (a prompt an earlier journey left: the summary
+      # warns), permission-prompt-N in journey 4 (her own first recording asking: expected, no warning).
+      - evalScript: ${output.prompts = (output.prompts || 0) + 1}
+      - takeScreenshot: ${SHOT}-${output.prompts}
+      - tapOn: "Allow"
+      - extendedWaitUntil:
+          visible: ".*would like to access the (Camera|Microphone).*"
+          timeout: 3000
+          optional: true
