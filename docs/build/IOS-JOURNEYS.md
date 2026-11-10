@@ -224,7 +224,10 @@ signed in to that family.
 **The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
 `CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
 Journey 4's recording never uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid
-29891 does not have a bundle ID, rejecting connection". expo-file-system's background upload then failed ("failed to
+29891 does not have a bundle ID, rejecting connection". Just before each refusal it logs "Evaluating new XPC connection …
+from pid … with client bundle identifier (null)"; for Apple's own daemons that line names a bundle id (42859652079, the
+app's pid 46975: (null) four times). So the proof is that line naming `com.salik.homecookd` in journey 4's kept log,
+with 0 refusals. expo-file-system's background upload then failed ("failed to
 create a background NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in
 35 s, and the row stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines. securityd
 refused every keychain call too ("Client has neither application-identifier nor keychain-access-groups entitlements",
