@@ -76,14 +76,17 @@ follows it, and it wins over the docs below on UI/UX and flows.
   the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`,
   or whose draft was superseded by a merged PR. Never delete `main`, a branch with an
   open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
-  `claude/pipeline-times-cover-8be573`, and any other a chat works from). Never delete an OTA line either: the source of
+  `claude/pipeline-times-cover-8be573`, `claude/bug-hunt`, and any other a chat works from). Never delete an OTA line either: the source of
   what phones run, the only record of it when it isn't on main (`claude/ota-1-1-0-sheets-composer` for runtime 1.1.0,
   `claude/ota-1-1-1-roles` for 1.1.1; Master Agent, Nov 9). Deleting is remote-only; a merged PR's branch
   can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
-- **Section chats (Oct 26):** since Nov 5 they run in Terminal tabs, not the desktop app; `~/homecookd-chats.command`
+- **Section chats (Oct 26):** since Nov 7 they run in cmux, one workspace each; `~/homecookd-chats.command`
   (on Caleb's Mac, untracked) reopens the Master Agent, every section chat and a text copy of the work tracker. Each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
   Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
+- **Bug hunt (Caleb, Nov 9):** a permanent chat that walks the live app and site daily and after every release, and sends
+  each bug it proves to the chat that owns the files (urgent ones to the Master Agent too). It fixes none. A bug report
+  from Bug hunt is work for the owner, like one from the Master Agent. Brief: `docs/agents/BUG-HUNT.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Code session titled **Master Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
