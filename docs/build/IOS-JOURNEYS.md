@@ -112,8 +112,10 @@ subflow's retries didn't help. Now:
   keyed run approved up to #467 re-opened the sign-in link once in each signed-in journey (42803587900, 42807178364,
   42811383192). **That re-open isn't a stall:** the simulator-only sign-in hook (#435) adopts the key and the family
   loads (GET /family 200), but the app isn't routed off the first screen until the link opens again. Scratch run
-  42820907631 had zero certificate FAILs and still one re-open each in journeys 2, 3 and 4. App screens is fixing the
-  hook (route once after the E2E adopt); until then, each signed-in journey shows one "Journey retry". The certificate
+  42820907631 had zero certificate FAILs and still one re-open each in journeys 2, 3 and 4. The link's own `/` came
+  while still signed out, so SessionGate sent it back to the first screen, which decides only once. Now the hook goes
+  in to "Who's in the kitchen?" once its adopt settles, as a real sign-in does (session.tsx, test builds only), so an
+  `open-again-N` in a signed-in journey again means a link that didn't land or a stall. The certificate
   stall is a separate thing (runs 42815821906, 42786504171, 42790025629). In 42811383192 both happened: journey 3's
   sign-in sat inside a real one (13 certificate FAILs, 12:17:56–12:18:53, first true check 12:19:04), while journey 2's
   re-open came with no FAIL at all. A journey that passed only after a tap gets a warning and a line in the job summary
