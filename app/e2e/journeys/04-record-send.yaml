@@ -1,0 +1,91 @@
+# Journey 4 (docs/build/IOS-JOURNEYS.md): Record → film → send, as the cook. A simulator has no camera, so this build
+# (EXPO_PUBLIC_E2E=1) films with the stand-in camera (components/record/useInAppCamera e2eCamera): when filming stops,
+# each file is a real 5 s clip from staging media (EXPO_PUBLIC_E2E_CLIP_URL), so the recording uploads and makes a job
+# exactly as a phone's does. Staging runs no worker, so the job stays "Still being made": seeing that row on her Home
+# is the proof the videos went up and the job exists. The cook and everything she sent go with the test people.
+# Signed in as the cook ("Asha (test)", with the kid "Leo (test)") through the simulator-only sign-in hook; COOK_KEY
+# is her masked device key. Without TEST_SIGNIN_KEY (a fork's PR) the workflow leaves this journey out.
+appId: ${APP_ID}
+name: Record, film, send
+tags:
+  - needs-key
+---
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: homecookd://e2e/sign-in?key=${COOK_KEY}
+      EXPECT: ".*Your language.*"
+# A new cook's first time in: her language, then her welcome, whose second door is "Start recording now" (/record).
+- tapOn: "English"
+- extendedWaitUntil:
+    visible: "Start recording now"
+    timeout: 20000
+- tapOn: "Start recording now"
+# Record ("What will you teach today?"), then the pre-record sheet: the dish, who it's for (Leo starts ticked), and
+# how she films.
+- extendedWaitUntil:
+    visible: ".*What will you teach today.*"
+    timeout: 20000
+- tapOn: "Start recording"
+# A new cook's first recording asks for AI consent first (the App Review path, run 42820907631): its title must show,
+# and the test cook says OK, continue. The sheet is exercised, never changed.
+- extendedWaitUntil:
+    visible: ".*homecookd uses AI for this.*"
+    timeout: 20000
+- assertVisible: "OK, continue"
+- takeScreenshot: 04-ai-consent
+- tapOn: "OK, continue"
+- extendedWaitUntil:
+    visible: ".*What are you cooking.*"
+    timeout: 20000
+- tapOn: ".*The dish.s name.*"
+- inputText: "Journey dal"
+- pressKey: Enter
+- takeScreenshot: 04-before-you-start
+- tapOn: "Phone camera"
+# The recording screen asks iOS for the camera (and the microphone) the first time, as a phone does: she allows it
+# (run 42839865165: the prompt covered the red button). Each prompt is tapped only if it shows.
+- extendedWaitUntil:
+    notVisible: ".*What are you cooking.*"
+    timeout: 20000
+- runFlow:
+    file: ../flows/allow-permissions.yaml
+    env:
+      SHOT: permission-prompt
+# The stand-in camera card and the red button ("Tap to start"). Filming starts only on her tap.
+- extendedWaitUntil:
+    visible: "Start recording"
+    timeout: 30000
+- takeScreenshot: 04-ready
+- tapOn: "Start recording"
+- extendedWaitUntil:
+    visible: ".*Tap when you.re done.*"
+    timeout: 15000
+- takeScreenshot: 04-filming
+# About 6 s of filming (nothing is waited for: a pause), then "I'm done".
+- extendedWaitUntil:
+    visible: "this text never appears"
+    timeout: 6000
+    optional: true
+- tapOn: ".*Tap when you.re done.*"
+# The done view says it's sending, then her Home shows the dish being made: uploaded, and the job made.
+- extendedWaitUntil:
+    visible: ".*Done! Sending it to.*"
+    timeout: 30000
+- takeScreenshot: 04-done
+- extendedWaitUntil:
+    visible: ".*Journey dal.*"
+    timeout: 90000
+- takeScreenshot: 04-sending
+# The row says "Still being made." for every busy state, sending included (its label, components/parent/ProcessingRow),
+# so that proves nothing. The upload is done and the job exists once its hint moves past "Sending your videos" to the
+# server's own stage: "Writing it down · …" (processing) or "Waiting its turn" (queued). Staging runs no worker, so it
+# stays there. Run 42847961184 showed "Sending your videos · 0%" when the old check passed.
+- extendedWaitUntil:
+    visible: "(?s).*Journey dal.*(Writing it down|Waiting its turn).*"
+    timeout: 120000
+- assertNotVisible: ".*Sending your videos.*"
+- takeScreenshot: 04-being-made

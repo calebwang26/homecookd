@@ -17,7 +17,7 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 3. **Journeys 2–5 and the gate.**
    - Messages → New message → Add family → Copy link → X → a chat → Home (journey 3, `03-add-family-copy-link.yaml`;
      "Journey 3" below).
-   - Record → film 5 s → send.
+   - Record → film 5 s → send (journey 4, `04-record-send.yaml`; "Journey 4" below).
    - Family link → name → sign in (journey 2, `02-family-link.yaml`; "Test people" below).
    - A shared recipe's video plays.
    - Kid Home.
@@ -243,6 +243,14 @@ signed in to that family.
   `***`: that log is what shows a stall's cause (Master Agent, Nov 9). `report.xml` stays. On a fork's PR the launch
   journey keeps its files: its made-up link is no secret. Then any file still holding a device key or the token goes,
   with a warning.
+- **It fails closed (Master Agent, Nov 10).** `scripts/journey-scrub.mjs` (tested) masks each kept log in place: the
+  exact values, everything after "?" on any amazonaws.com address, and any X-Amz value, percent-encoded ones too
+  (`X-Amz-Credential%3D…`, a URL logged inside another). A presigned upload URL carries a
+  temporary key id and session token. Run 42852281034 logged one in a failed PUT's error, cut short by iOS, and the
+  mask must not depend on that. A log it can't read and rewrite, or that still holds a value afterwards, is deleted with
+  a warning. Then a last check drops any file in the output still holding a key, the token or an unmasked X-Amz value.
+  Any other error in the step removes every `logs/` folder (an ERR trap), and "Keep Maestro's screenshots and report"
+  runs only when the step succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
@@ -261,7 +269,9 @@ signed in to that family.
   `flows/launch-fresh.yaml`: a fresh install with `clearState` and `clearKeychain` (the keychain holds the session, and
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
-  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste. The prompt can
+  come 8 s after the launch (#483's run 42908446753, past a single 3 s look), so it's answered in rounds of up to 10 s
+  each, until a round with no prompt (3 at most).
 
 **The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
 `CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
@@ -290,6 +300,61 @@ The keychain works now too: 0 of securityd's -34018 in every journey, where an u
 really is kept in the keychain between launches, and `launch-fresh`'s `clearKeychain` is what starts each journey
 signed out. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way about
 phones.
+
+**Journey 4 (Master Agent, Nov 10).** `app/e2e/journeys/04-record-send.yaml`: Record → film → send, as the cook.
+- A simulator has no camera, so this build films with the stand-in camera (`useInAppCamera` `e2eCamera`, #435). When
+  filming stops, each file is a real 5 s clip from staging media (`EXPO_PUBLIC_E2E_CLIP_URL`, set in the workflow), so
+  the recording uploads and makes a job exactly as a phone's does.
+- The recording screen asks iOS for the camera (and the microphone) the first time, as on a phone, and the cook taps
+  Allow (`flows/allow-permissions.yaml`, screenshot `permission-prompt-N`: expected, no warning). `launchApp`'s
+  `permissions: camera: allow` didn't pre-grant it (run 42839865165), most likely because `simctl privacy`, which the
+  grant goes through, has no camera service (not verified on the runner). A prompt left up by a journey that stopped
+  on it stays over the next launch (journeys 2 and 0 in that run), so `flows/launch-fresh.yaml` answers it first and
+  saves `leftover-prompt-N`; the summary then warns "started by answering N camera/microphone prompts an earlier
+  journey left up".
+- The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
+  recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
+  sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
+  6 s → "I'm done" → "Done! Sending it to …" → her Home.
+- Staging runs no worker, so the job stays queued on the server. The proof the videos went up and the job exists is
+  the row's hint moving past "Sending your videos · N%" to the server's stage ("Writing it down · …" or "Waiting its
+  turn"). The row's "Still being made." shows while it's still sending too, so it proves nothing (run 42847961184 passed
+  an older check that way with the upload at 0%). The cook, her family and what she sent go with the test
+  people.
+
+**Simulator faults seen so far (none is the app).** Each one has its own name, so a red run can be read at a glance:
+- **The certificate stall** (open, Nov 10): trustd stops answering every process's certificate checks for minutes.
+  Apple's own NewsToday2 and NewsTag failed the same boringssl check alongside the app in 42846241678, and staging's
+  /health answered 200 in 0.17 s meanwhile, so it's simulator-wide. Seen in 42815821906, 42811383192 (journey 3) and
+  42846241678 (43 FAILs, 15:50:03–15:56:37Z). The two causes found so far are fixed (#460's push storm, #466's pinning
+  lock); this one isn't explained. It also starts after a clean gate: 42866506647 (40 s after), 42872308399 attempt 1
+  (2 m 25 s), 42887110283 attempt 2 (journey 3 clean, then journeys 2 and 0), and 42898927696, where the app's first
+  handshake failed 80 s after the gate and all three journeys ended on a "We can't reach" card. The list in STATE.md
+  (#482's line) has the times.
+- **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
+  deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600, 42887110283 attempt 1,
+  42872308399 attempt 3). In the last two the driver's own log says why: "Failed to get screenshot: Timed out while
+  requesting screenshot." (on two runners within 90 s), with no app or staging error in either simulator log.
+- **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out"
+  (`_LSDispatchWithTimeout`, 10 s after the open) and Maestro says "Unknown error" at `openLink`, which throws, so
+  open-link.yaml's retry never runs. 0 certificate FAILs. Seen in #473's run 42847823481: attempt 1 journey 2, attempt
+  2 journeys 2 and 0. SpringBoard logged the request within 30 ms, then took 19.3, 1.8 and 4.0 s to start the open,
+  and the app got the link 53, 15.8 and 21.5 s later and showed the right screen. So the link lands late, and only
+  simctl's 10 s timeout fails the journey. 42851642925 (journey 4: the app got it at +16.4 s) had a clean gate with 0
+  trustd restarts, so a restart isn't needed for it (the Master Agent withdrew that lead). All the failed opens fell
+  between 15:58 and 16:26 UTC on Nov 10, while GitHub said macOS arm64 runners were under capacity pressure: a guess at
+  most. Since #482, an `openLink` that throws while the link lands within 30 s passes with a warning ("A link open iOS
+  gives up on", above).
+- **"Copied" lasts 2 s, and an iOS tap waits for a still screen first** (Nov 10, not a simulator fault: a race in
+  journey 3's check). ExternalRow shows "Copied" (label "Link copied") for `COPIED_MS` = 2000 ms. On iOS, Maestro's
+  settle wait after every tap is a fixed 3 s check that the screen has stopped changing (`waitUntilScreenIsStatic`,
+  IOSDriver.kt:505 and :694, Maestro 2.11). A flow's `waitToSettleTimeoutMs` applies only after that, so it can't
+  shorten the first look (#477 tried, and was closed). The button's own animations keep the screen moving about 1.5 s,
+  so the first look after the copy comes at about +1.5–2 s: +1.62, 1.68, 1.82, 1.84 and 1.61 s in passing runs, and
+  2.03 s in 42856745720, which failed with the copy done (pasteboard write completed). The fix: #478 (App screens &
+  recording) made `COPIED_MS` 3500 ms, which keeps the journey on the motion path phones run and still proves the copy,
+  with about 1.5 s to spare over the slowest first look seen. A red journey 3 at "Copied" from before #478 was this
+  race: check the first look's offset in its kept log.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
