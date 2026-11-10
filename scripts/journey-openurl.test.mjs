@@ -36,6 +36,14 @@ test('run 42851642925: iOS gave up after 10.0 s and the link reached the app at 
 
 test('a link that reached the app after the wait fails (42847823481 attempt 1: 53.0 s)', () => {
   assert.deepEqual(decide(REAL, OPEN, { wait: 15 }), { gaveUpS: 10, landedS: null, passed: false });
+  const at53 = [HEADER, GAVE_UP, LANDED.replace('16:25:40.315841', '16:26:16.887000')].join('\n');
+  assert.deepEqual(decide(at53, OPEN), { gaveUpS: 10, landedS: null, passed: false });
+});
+
+test("the 30 s limit is on the app's own line, counted from the open: 29.9 s passes, 30.2 s fails", () => {
+  const at = (s) => [HEADER, GAVE_UP, LANDED.replace('16:25:40.315841', new Date(OPEN + s * 1000).toISOString().slice(11, 23) + '000')].join('\n');
+  assert.deepEqual(decide(at(29.9), OPEN), { gaveUpS: 10, landedS: 29.9, passed: true });
+  assert.deepEqual(decide(at(30.2), OPEN), { gaveUpS: 10, landedS: null, passed: false });
 });
 
 test("a link that landed with no lsd timeout isn't this fault: it fails as before, unless simulated", () => {
@@ -82,11 +90,18 @@ test('every other xcrun call goes straight through: arguments, output and exit c
   assert.equal(existsSync(s.log), false);
 });
 
-test('a link open that works is left alone, and nothing is written', () => {
-  const s = setup(`process.exit(0);`);
+test('a link open that works goes straight through, with one line saying how long simctl took (no link)', () => {
+  const s = setup(`setTimeout(() => process.exit(0), 600);`);
   const r = spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://e2e/sign-in?key=SECRET'], { env: s.env, encoding: 'utf8' });
   assert.equal(r.status, 0);
-  assert.equal(existsSync(s.log), false);
+  assert.equal(r.stderr, '');
+  const log = readFileSync(s.log, 'utf8');
+  assert.doesNotMatch(log, /SECRET|homecookd:/);
+  const rec = JSON.parse(log);
+  assert.equal(rec.exit, 0);
+  assert.equal(rec.passed, true);
+  assert.equal(rec.gaveUpS, null);
+  assert.ok(rec.simctlS >= 0.6 && rec.simctlS < 5, JSON.stringify(rec));
 });
 
 test('a timed-out open whose link lands passes, says nothing to Maestro, and writes one line without the link', () => {
@@ -154,9 +169,10 @@ process.exit(0);`);
   assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 0);
   assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 0);
   const recs = readFileSync(s.log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  assert.equal(recs.length, 1);
+  assert.equal(recs.length, 2);
   assert.equal(recs[0].simulated, true);
   assert.equal(recs[0].passed, true);
+  assert.deepEqual([recs[1].simulated, recs[1].exit, recs[1].passed], [false, 0, true]);
 });
 
 test('without JOURNEY_OPENURL_STREAM (outside the Journeys step) even openurl goes straight through', () => {

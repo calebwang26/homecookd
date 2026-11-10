@@ -191,6 +191,7 @@ kept simulator logs:
 | 42847823481 (2), #473 | Family link, name, sign in | 16:18:37 | +10.0 s | +15.8 s | 1 |
 | 42847823481 (2), #473 | Launch, then a link that doesn't work | 16:19:46 | +10.0 s | +21.5 s | 1 |
 | 42851642925, #471 | Record, film, send | 16:25:24 | +10.0 s | +16.4 s | 0 |
+| 42872308399 (2), #476 | Family link, name, sign in | 19:36:28 | +10.0 s | +14.2 s | 0 |
 
 A fifth slow open in 42851642925 didn't throw: journey 3's sign-in link (16:20:53) first reached SpringBoard 64 s later,
 and the journey passed after two re-opens. So a trustd restart in the gate isn't needed for it (0 in 42851642925).
@@ -203,9 +204,16 @@ lsd's Code=60 timeout and the app receiving a link (its own `UIOpenURLAction` li
 `open-link.yaml` would wait for its screen anyway. Then the flow goes on, and its own wait for that screen is still the
 proof. Anything else fails as before, with simctl's own error. Each failed open, passed or not, gets a "Journey retry"
 warning naming the journey, when iOS gave up and when the link landed (`journey-retries.mjs`, from report.xml's times).
-Of the four above, the three that landed within 30 s would have passed with a warning, and 42847823481's first would
-still fail. The stream keeps only those two kinds of line, neither holds the link, and it stays on the runner. The
-`openurl_fault` input treats the first open as one iOS gave up on, to check the landing check on a real simulator.
+The 30 s run from the open to the app's own line, not to simctl returning, and a link that never arrives fails as before.
+Of the five above, the four that landed within 30 s would have passed with a warning, and 42847823481's first would
+still fail. A link that starts the app arrives at launch, without that line, so a failed open of one isn't excused.
+
+Every open is logged, not only the failed ones, so a slow open shows even when nothing threw (the 64 s one above). The
+job summary's "Link opens" table lists each: the journey, when, how long simctl took or how it failed, and when the app
+got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
+the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
+keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
+the first open as one iOS gave up on, to check the landing check on a real simulator.
 
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.

@@ -5,8 +5,11 @@
 // "UIOpenURLAction" lines (the app receiving a link). Neither kind holds the link.
 //   node scripts/journey-openurl.mjs --since <ms> --stream <file> [--log <file>] [--exit <code>] [--wait <s>] [--simulated]
 // Exits 0 when iOS gave up on the open and the app still received a link within --wait s (30: what open-link.yaml waits
-// for its screen anyway) of --since, the moment the open started; else 1. Either way it adds one JSON line to --log for
-// the job summary (journey-retries.mjs): { at, exit, gaveUpS, landedS, passed, simulated }.
+// for its screen anyway) of --since, the moment the open started; else 1. The 30 s are counted to the app's own line,
+// not to simctl returning. Either way it adds one JSON line to --log for the job summary (journey-retries.mjs):
+// { at, exit, simctlS, gaveUpS, landedS, passed, simulated, wait }.
+// --exit 0 (an open that worked) only adds its line, with how long simctl took, and exits 0 at once: the Times step reads
+// when the app got that link from the same stream, so a slow open shows even when nothing failed.
 // --simulated (the openurl_fault input) skips lsd's line: the open didn't really time out, the check of the landing did.
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -57,7 +60,15 @@ async function main() {
   }
   const wait = Number(arg('wait', LAND_S));
   const simulated = process.argv.includes('--simulated');
+  const exit = Number(arg('exit', 1));
+  const log = arg('log');
   const started = Date.now();
+  const simctlS = Math.round((started - since) / 100) / 10;
+  const write = (d) => log && appendFileSync(log, `${JSON.stringify({ at: new Date(since).toISOString(), exit, simctlS, ...d, simulated, wait })}\n`);
+  if (exit === 0 && !simulated) {
+    write({ gaveUpS: null, landedS: null, passed: true });
+    process.exit(0);
+  }
   let d;
   for (;;) {
     d = decide(existsSync(stream) ? readFileSync(stream, 'utf8') : '', since, { wait, simulated });
@@ -67,9 +78,7 @@ async function main() {
     if (now > since + wait * 1000 + 1000) break; // the link didn't land in time (1 s for the stream to catch up)
     await new Promise((r) => setTimeout(r, 250));
   }
-  const log = arg('log');
-  const record = { at: new Date(since).toISOString(), exit: Number(arg('exit', 1)), ...d, simulated, wait };
-  if (log) appendFileSync(log, `${JSON.stringify(record)}\n`);
+  write(d);
   process.exit(d.passed ? 0 : 1);
 }
 

@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Which iOS journeys needed open-link.yaml's "Try again" (app/e2e/flows/open-link.yaml), for ios-journeys' job summary:
 // a green run that only passed after one says so, so a real api outage can't hide behind it.
-//   node scripts/journey-retries.mjs <maestro test-output dir> [<journey-xcrun.sh's open log>]
-// The second file has one JSON line per link open simctl failed (journey-openurl.mjs): each becomes a line too, on the
-// journey that was running then (report.xml's timestamp and time), whether the link still landed or not.
+//   node scripts/journey-retries.mjs [--table] <maestro test-output dir> [<journey-xcrun.sh's open log> [<its stream>]]
+// The open log has one JSON line per link open (journey-openurl.mjs), and the stream is the Journeys step's log stream,
+// where the app's own line says when it received each link. Every open simctl failed becomes a line too, on the journey
+// that was running then (report.xml's timestamp and time), whether the link still landed or not, and so does an open that
+// worked but whose link reached the app more than 30 s after it. --table prints, instead, the job summary's table of
+// every open: how long simctl took and when the app got the link.
 // Prints one line per journey that needed a retry, nothing when none did. A Try again tap saves
 // takeScreenshot/try-again-N.png on "We can't reach homecookd." and try-again-kitchen-N.png on "We can't reach your
 // kitchen." (a family that didn't load after a sign-in); opening the link again with no card to tap saves
@@ -11,6 +14,8 @@
 // (<dir>/<run>/<journey name>/). report.xml (JUnit) says whether the journey passed.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { events, LAND_S } from './journey-openurl.mjs';
 
 const unescape = (s) => s.replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
@@ -27,18 +32,68 @@ export function windows(xml) {
   return out;
 }
 
-/** One line per link open simctl failed (journey-xcrun.sh), on the journey that was running then. */
+/**
+ * Each open with gotS: seconds from the open to the app's first "received a link" line in the stream before the next
+ * open (null when there's none, as for a link that starts the app: it arrives at launch, without that line). Unlike the
+ * check's own landedS, it isn't cut off at 30 s.
+ */
+export function landings(records, stream = '') {
+  const got = events(stream).filter((e) => e.kind === 'landed');
+  const starts = records.filter((r) => !r.unreadable).map((r) => Date.parse(r.at)).sort((a, b) => a - b);
+  return records.map((r) => {
+    if (r.unreadable) return r;
+    const at = Date.parse(r.at);
+    const next = starts.find((t) => t > at) ?? Infinity;
+    const e = got.find((x) => x.ms >= at && x.ms < next);
+    return { ...r, gotS: e ? Math.round((e.ms - at) / 100) / 10 : null };
+  });
+}
+
+const journeyAt = (win, at) => win.find(([, [a, b]]) => at >= a && at <= b)?.[0] ?? 'A journey (no report.xml entry for its time)';
+
+/**
+ * One line per link open simctl failed (journey-xcrun.sh), on the journey that was running then, and per open that
+ * worked but reached the app more than 30 s later.
+ */
 export function opens(records, xml) {
   const win = [...windows(xml)];
-  return records.map((r) => {
-    if (r.unreadable) return 'A journey: a link open failed, and its line in the open log can’t be read';
-    const at = Date.parse(r.at);
-    const name = win.find(([, [a, b]]) => at >= a && at <= b)?.[0] ?? 'A journey (no report.xml entry for its time)';
+  return records.flatMap((r) => {
+    if (r.unreadable) return ['A journey: a link open failed, and its line in the open log can’t be read'];
+    const name = journeyAt(win, Date.parse(r.at));
+    if (r.exit === 0 && !r.simulated) {
+      return r.gotS > LAND_S ? [`${name}: the link opened, but the app received it only ${r.gotS} s after the open (more than ${LAND_S} s)`] : [];
+    }
     const why = r.simulated ? 'simulated by the openurl_fault input' : r.gaveUpS !== null ? `iOS gave up on it after ${r.gaveUpS} s, Code=60` : `simctl exit ${r.exit}, not iOS's 10 s timeout`;
-    if (r.passed) return `${name}: the link open threw (${why}), but the app received the link ${r.landedS} s after the open, so the journey went on to check its screen`;
-    if (r.gaveUpS !== null || r.simulated) return `${name}: the link open threw (${why}), and the app hadn’t received the link ${r.wait ?? 30} s after the open: the journey failed on it`;
-    return `${name}: the link open failed (${why}): the journey failed on it`;
+    if (r.passed) return [`${name}: the link open threw (${why}), but the app received the link ${r.landedS} s after the open, so the journey went on to check its screen`];
+    const late = r.gotS !== null && r.gotS !== undefined ? ` (it got it ${r.gotS} s after)` : '';
+    if (r.gaveUpS !== null || r.simulated) return [`${name}: the link open threw (${why}), and the app hadn’t received the link ${r.wait ?? LAND_S} s after the open${late}: the journey failed on it`];
+    return [`${name}: the link open failed (${why}): the journey failed on it`];
   });
+}
+
+/** The job summary's table of every link open: when, how simctl did, and when the app got the link. */
+export function table(records, xml) {
+  const rows = records.filter((r) => !r.unreadable);
+  if (!rows.length) return [];
+  const win = [...windows(xml)];
+  const s = (n) => (typeof n === 'number' ? `${n} s` : '?');
+  return [
+    `### Link opens: from the open to the app's own "received a link" line (iOS's Open dialog and Maestro's tap on it included, when iOS asked); more than ${LAND_S} s is a warning`,
+    '| Journey | Open (UTC) | simctl | App got the link |',
+    '|---|---|---|---|',
+    ...rows.map((r) => {
+      const how = r.simulated
+        ? `worked in ${s(r.simctlS)}, treated as failed (openurl_fault)`
+        : r.exit === 0
+          ? `opened in ${s(r.simctlS)}`
+          : r.gaveUpS !== null
+            ? `failed after ${s(r.simctlS)}: iOS gave up at ${r.gaveUpS} s (Code=60)`
+            : `failed after ${s(r.simctlS)}: exit ${r.exit}`;
+      const got = r.gotS ?? r.landedS;
+      const gotText = got === null || got === undefined ? 'not in the log' : `${got} s${got > LAND_S ? ' ⚠️' : ''}`;
+      return `| ${journeyAt(win, Date.parse(r.at)).replace(/\|/g, '\\|')} | ${r.at.slice(11, 19)} | ${how} | ${gotText} |`;
+    }),
+  ];
 }
 
 /** Journey name -> passed (true), failed (false), from Maestro's JUnit report. */
@@ -76,16 +131,25 @@ export function taps(dir) {
   return out;
 }
 
-export function lines(dir, openLog) {
+function read(dir, openLog, stream) {
   const xml = path.join(dir, 'report.xml');
   const report = existsSync(xml) ? readFileSync(xml, 'utf8') : '';
-  const passed = results(report);
   const records = openLog && existsSync(openLog)
     ? readFileSync(openLog, 'utf8').split('\n').filter((l) => l.trim()).map((l) => {
       try { return JSON.parse(l); } catch { return { unreadable: true }; }
     })
     : [];
-  return [...retries(dir, passed), ...opens(records, report)];
+  return { report, records: landings(records, stream && existsSync(stream) ? readFileSync(stream, 'utf8') : '') };
+}
+
+export function lines(dir, openLog, stream) {
+  const { report, records } = read(dir, openLog, stream);
+  return [...retries(dir, results(report)), ...opens(records, report)];
+}
+
+export function tableFor(dir, openLog, stream) {
+  const { report, records } = read(dir, openLog, stream);
+  return table(records, report);
 }
 
 function retries(dir, passed) {
@@ -108,10 +172,11 @@ function retries(dir, passed) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
-  const dir = process.argv[2];
+  const asTable = process.argv[2] === '--table';
+  const [dir, openLog, stream] = process.argv.slice(asTable ? 3 : 2);
   if (!dir) {
-    console.error('usage: node scripts/journey-retries.mjs <maestro test-output dir> [<open log>]');
+    console.error('usage: node scripts/journey-retries.mjs [--table] <maestro test-output dir> [<open log> [<stream>]]');
     process.exit(2);
   }
-  for (const line of lines(dir, process.argv[3])) console.log(line);
+  for (const line of (asTable ? tableFor : lines)(dir, openLog, stream)) console.log(line);
 }

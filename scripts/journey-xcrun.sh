@@ -1,7 +1,8 @@
 #!/bin/bash
 # `xcrun` for Maestro in ios-journeys: the Journeys step puts a link to this file first on Maestro's PATH. Every call
-# goes straight to the real xcrun (exec: the same process, so Maestro's log streams stop as before), except a
-# `simctl openurl` that fails.
+# goes straight to the real xcrun (exec: the same process, so Maestro's log streams stop as before), except
+# `simctl openurl`: an open that works only gets a line in the open log (when it started, how long simctl took), and one
+# that fails is checked as below.
 #
 # Why: iOS sometimes gives up on a link open after 10 s (lsd: _LSDispatchWithTimeout, Code=60) while SpringBoard still
 # delivers it seconds later (docs/build/IOS-JOURNEYS.md, "A link open iOS gives up on"). simctl then fails, Maestro's
@@ -26,6 +27,8 @@ if [ "$CODE" -eq 0 ] && [ "${JOURNEY_OPENURL_FAKE:-}" = first ] && [ -n "${JOURN
 fi
 if [ "$CODE" -eq 0 ]; then
   [ -z "$ERR" ] || printf '%s\n' "$ERR" >&2
+  node "$HERE/journey-openurl.mjs" --since "$SINCE" --stream "$JOURNEY_OPENURL_STREAM" --log "${JOURNEY_OPENURL_LOG:-/dev/null}" \
+    --exit 0 >/dev/null 2>&1 || true
   exit 0
 fi
 if node "$HERE/journey-openurl.mjs" --since "$SINCE" --stream "$JOURNEY_OPENURL_STREAM" --log "${JOURNEY_OPENURL_LOG:-/dev/null}" \

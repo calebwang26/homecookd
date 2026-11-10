@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { lines, opens, results, windows } from './journey-retries.mjs';
+import { landings, lines, opens, results, table, windows } from './journey-retries.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'journey-retries.mjs');
 const LAUNCH = "Launch, then a link that doesn't work";
@@ -166,4 +166,63 @@ test('the CLI adds the open log after the Try again lines, and an unreadable lin
   ]);
   const none = spawnSync(process.execPath, [SCRIPT, dir, path.join(dir, 'no-such-log')], { encoding: 'utf8' });
   assert.equal(none.stdout, '');
+});
+
+// The Journeys step's stream: the app's own line for each link it received, at a time.
+const gotAt = (iso) => `${iso.replace('T', ' ').replace('Z', '000+0000')}  localhost homecookd[24691]: (FrontBoardServices) [com.apple.FrontBoard:SceneClient] Received action(s) in scene-update: UIOpenURLAction`;
+const ok = (at, simctlS = 0.4) => ({ at, exit: 0, simctlS, gaveUpS: null, landedS: null, passed: true, simulated: false, wait: 30 });
+
+test("each open's landing is the app's first line before the next open, not cut off at 30 s", () => {
+  const recs = [ok('2026-11-10T16:20:53.000Z'), rec({ at: '2026-11-10T16:22:00.000Z', passed: false, landedS: null }), ok('2026-11-10T16:23:30.000Z')];
+  const stream = [gotAt('2026-11-10T16:21:57.000Z'), gotAt('2026-11-10T16:22:53.000Z')].join('\n');
+  assert.deepEqual(landings(recs, stream).map((r) => r.gotS), [64, 53, null]);
+});
+
+test('an open that worked is a warning only when its link reached the app more than 30 s later (42851642925: 64 s)', () => {
+  const recs = landings([ok('2026-11-10T16:20:53.000Z'), ok('2026-11-10T16:23:40.000Z')], [gotAt('2026-11-10T16:21:57.000Z'), gotAt('2026-11-10T16:23:52.600Z')].join('\n'));
+  assert.deepEqual(opens(recs, REPORT), [`${J3}: the link opened, but the app received it only 64 s after the open (more than 30 s)`]);
+});
+
+test("a failed open that landed after the 30 s says when it did land (42847823481 attempt 1)", () => {
+  const recs = landings([rec({ at: '2026-11-10T16:21:00.000Z', passed: false, landedS: null })], gotAt('2026-11-10T16:21:53.000Z'));
+  assert.deepEqual(opens(recs, REPORT), [
+    `${J3}: the link open threw (iOS gave up on it after 10 s, Code=60), and the app hadn’t received the link 30 s after the open (it got it 53 s after): the journey failed on it`,
+  ]);
+});
+
+test('the summary table lists every open: simctl, and when the app got the link', () => {
+  const recs = landings([
+    ok('2026-11-10T16:20:53.000Z', 0.6),
+    rec({ simctlS: 10.1 }),
+    rec({ at: '2026-11-10T16:23:30.000Z', simulated: true, gaveUpS: null, landedS: 0.4, simctlS: 0.3 }),
+    rec({ at: '2026-11-10T16:24:00.000Z', exit: 148, gaveUpS: null, landedS: null, passed: false, simctlS: 0.2 }),
+    { unreadable: true },
+  ], [gotAt('2026-11-10T16:21:57.000Z'), gotAt('2026-11-10T16:23:30.400Z'), gotAt('2026-11-10T16:25:40.300Z')].join('\n'));
+  const t = table(recs, REPORT);
+  assert.match(t[0], /^### Link opens/);
+  assert.deepEqual(t.slice(1), [
+    '| Journey | Open (UTC) | simctl | App got the link |',
+    '|---|---|---|---|',
+    `| ${J3} | 16:20:53 | opened in 0.6 s | 64 s ⚠️ |`,
+    `| ${J4} | 16:25:23 | failed after 10.1 s: iOS gave up at 10 s (Code=60) | 16.4 s |`,
+    `| ${J4} | 16:23:30 | worked in 0.3 s, treated as failed (openurl_fault) | 0.4 s |`,
+    `| ${J4} | 16:24:00 | failed after 0.2 s: exit 148 | not in the log |`,
+  ]);
+  assert.deepEqual(table([], REPORT), []);
+});
+
+test('the CLI: --table with the stream, and the warnings read the stream too', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'journeys-'));
+  writeFileSync(path.join(dir, 'report.xml'), REPORT);
+  const log = path.join(dir, 'openurl.jsonl');
+  const stream = path.join(dir, 'stream.log');
+  writeFileSync(log, `${JSON.stringify(ok('2026-11-10T16:20:53.000Z'))}\n`);
+  writeFileSync(stream, `Filtering the log data using "…"\n${gotAt('2026-11-10T16:21:57.000Z')}\n`);
+  const t = spawnSync(process.execPath, [SCRIPT, '--table', dir, log, stream], { encoding: 'utf8' });
+  assert.equal(t.status, 0);
+  assert.match(t.stdout, /\| 16:20:53 \| opened in 0\.4 s \| 64 s ⚠️ \|/);
+  const w = spawnSync(process.execPath, [SCRIPT, dir, log, stream], { encoding: 'utf8' });
+  assert.equal(w.stdout.trim(), `${J3}: the link opened, but the app received it only 64 s after the open (more than 30 s)`);
+  const noStream = spawnSync(process.execPath, [SCRIPT, dir, log, path.join(dir, 'none')], { encoding: 'utf8' });
+  assert.equal(noStream.stdout, '');
 });
