@@ -33,12 +33,13 @@ tags:
 - pressKey: Enter
 - assertVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 02-name-typed
-# Signed in as the kid, as the Apple button would: the app lands in Asha's family.
+# Signed in as the kid, as the Apple button would: the app lands on his Home in Asha's family (run 42744607038).
 - runFlow:
     file: ../flows/open-link.yaml
     env:
       LINK: homecookd://e2e/sign-in?key=${KID_KEY}
-      EXPECT: "(?s).*(Who.s in the kitchen|Leo \\(test\\)).*"
+      EXPECT: ".*Hi, Leo \\(test\\).*"
 - assertNotVisible: ".*sent this.*"
 - assertNotVisible: ".*Sign in with Apple.*"
+- assertVisible: "Recipes"
 - takeScreenshot: 02-signed-in
