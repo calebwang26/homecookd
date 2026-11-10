@@ -580,6 +580,18 @@ await test('push: the kid moments never on the first launch; the next launch may
   assert.equal(await second.shouldAskPush('kid-first-made', '', NOW), false);
 });
 
+await test('push: an ask dropped unseen (held behind another sheet for 30 s) stores nothing and asks again; "Not now" snoozes 30 days', async () => {
+  kv.clear();
+  const P = await launch();
+  const before = new Map(kv);
+  await P.endPushAsk('kid-a', 'dropped', NOW);
+  assert.deepEqual(new Map(kv), before, 'a drop writes nothing: it never counted as asked');
+  assert.equal(await P.shouldAskPush('kid-card-saved', 'kid-a', NOW + 1000), true, 'the next moment asks as if for the first time');
+  await P.endPushAsk('kid-a', 'notNow', NOW);
+  assert.equal(await P.shouldAskPush('kid-card-saved', 'kid-a', NOW + DAY), false, '"Not now": no ask for 30 days');
+  assert.equal(await P.shouldAskPush('kid-card-saved', 'kid-a', NOW + 30 * DAY), true);
+});
+
 await test('push: v2’s two moments and the cook’s first send ask even on the first launch, and keep the other rules', async () => {
   // A new cook films and sends on her first day (build 11 phone run, Nov 3: never asked).
   const V2 = ['kid-card-saved', 'cook-craving-sent', 'cook-first-send'];
