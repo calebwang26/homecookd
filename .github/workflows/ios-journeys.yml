@@ -227,7 +227,8 @@ jobs:
           ccache --zero-stats >/dev/null
           set +e
           xcodebuild -workspace homecookd.xcworkspace -scheme homecookd -configuration Release -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf \
             C_COMPILER_LAUNCHER="$(command -v ccache)" CLANG_ENABLE_EXPLICIT_MODULES=NO \
             -showBuildTimingSummary build > "$LOG" 2>&1
@@ -278,11 +279,14 @@ jobs:
             || { tail -40 "$RUNNER_TEMP/maestro-out/hermesc.log"; exit 1; }
           echo "T_BUILD=$(date +%s)" >> "$GITHUB_ENV"
           echo "NATIVE=reused" >> "$GITHUB_ENV"
-      # The build is unsigned (CODE_SIGNING_ALLOWED=NO, cached that way), so iOS can't tell the app's bundle id from its
-      # process: nsurlsessiond refused its background upload session ("does not have a bundle ID, rejecting connection",
-      # run 42852281034), and a recording never left "Sending your videos · 0%". An ad-hoc signature, after the JS swap and
-      # before the install on both paths, binds the bundle id, as Xcode's "Sign to Run Locally" does. No certificate, no
-      # entitlements: a store build is signed by EAS and none of this reaches it.
+      # Built unsigned (CODE_SIGNING_ALLOWED=NO, until Nov 10), the app had no entitlements, and on a simulator iOS reads
+      # an app's identity from them: nsurlsessiond refused its background upload ("does not have a bundle ID, rejecting
+      # connection", run 42852281034) and securityd every keychain call ("neither application-identifier nor
+      # keychain-access-groups entitlements"). A codesign after the build didn't help (run 42859652079): the simulator
+      # reads the "simulated entitlements" Xcode links into the binary (__TEXT,__entitlements) when it signs during the
+      # build. So the build signs to run locally (identity "-", no team, no certificate), as Xcode does for a simulator;
+      # this step re-signs after the JS swap (the section stays), prints the identifier and the simulated
+      # application-identifier, and fails without them. A store build is signed by EAS; none of this reaches it.
       - name: Sign the app for the simulator (ad-hoc)
         run: |
           APP="$RUNNER_TEMP/built/homecookd.app"
@@ -290,6 +294,11 @@ jobs:
           ID=$(codesign -dv "$APP" 2>&1 | grep '^Identifier=' || true)
           echo "$ID"
           [ "$ID" = "Identifier=$APP_ID" ] || { echo "::error title=Signing::the app's signed identifier isn't $APP_ID"; exit 1; }
+          ENT="$RUNNER_TEMP/simulated-entitlements.plist"; rm -f "$ENT"
+          xcrun segedit "$APP/homecookd" -extract __TEXT __entitlements "$ENT" 2>/dev/null || true
+          AID=$( [ -s "$ENT" ] && plutil -extract application-identifier raw -o - "$ENT" 2>/dev/null || true)
+          echo "Simulated application-identifier=${AID:-none}"
+          case "$AID" in *".$APP_ID"|"$APP_ID") ;; *) echo "::error title=Signing::the app has no simulated application-identifier for $APP_ID"; exit 1 ;; esac
       - name: Wait for the simulator and install the app
         run: |
           cat "$RUNNER_TEMP/simctl-boot.log" || true

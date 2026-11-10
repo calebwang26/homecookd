@@ -221,17 +221,22 @@ signed in to that family.
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
 
-**The app is signed ad-hoc before it's installed (Master Agent, Nov 10).** The build has `CODE_SIGNING_ALLOWED=NO`, and
-the cached app stays that way. Unsigned, its process has no bundle id that iOS can read, and journey 4's recording never
-uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid 29891 does not have a
-bundle ID, rejecting connection". expo-file-system's background upload then failed ("failed to create a background
-NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in 35 s, and the row
-stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines, so their uploads never happened
-either. The same log has securityd's "Client has neither application-identifier nor keychain-access-groups
-entitlements" for the app. "Sign the app for the simulator (ad-hoc)" runs after the JS swap and before `simctl install`
-on both paths: `codesign --force --deep --sign -`, no certificate and no entitlements, like Xcode's "Sign to Run Locally".
-It prints the signed identifier and fails unless it's `APP_ID`. A store or TestFlight build is signed by EAS with its
-bundle id, so this says nothing either way about phones.
+**The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
+`CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
+Journey 4's recording never uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid
+29891 does not have a bundle ID, rejecting connection". expo-file-system's background upload then failed ("failed to
+create a background NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in
+35 s, and the row stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines. securityd
+refused every keychain call too ("Client has neither application-identifier nor keychain-access-groups entitlements",
+16 a journey).
+
+The first fix, a `codesign --sign -` after the build (run 42859652079), gave the right identifier and changed neither
+count. A simulator reads the "simulated entitlements" that Xcode links into the binary (`__TEXT,__entitlements`) when
+it signs during the build, and a later codesign can't add them. So the build signs to run locally (`CODE_SIGN_IDENTITY=-`,
+manual, no team, no certificate), as Xcode does for any simulator build. "Sign the app for the simulator (ad-hoc)"
+re-signs after the JS swap (the section stays) and prints the identifier and the simulated `application-identifier`. It
+fails without them. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way
+about phones.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
