@@ -20,4 +20,10 @@ without waiting for the next launch's automatic resend or filming again.
 - It runs on Send's own machine, one per recording (`components/parent/sendAgain`): one tap, one send. The button is
   disabled while it sends, and a failure says so and brings the button back.
 - If the videos aren't on the phone any more, the row says so plainly and offers no button; the x still clears it.
+- A recording whose resend failed before a new upload existed keeps a row: the same failed row with Send again (its
+  note's `didntSend`, until a send of it makes a job). The launch's automatic give-up (three tries, her Send again
+  included, or a week) stops sending by itself but never drops a note a row still shows, so Send again stays until she
+  clears the row. (Master Agent, Nov 10: bugs under this decision, not new design.)
+- The row says the videos aren't on the phone only when they really aren't: from the note's kept videos, or, with no
+  note left, from the recording's own folder (documents/recordings/<id>/), never from why the note went.
 - Changing the wording or the button needs Caleb's word.
