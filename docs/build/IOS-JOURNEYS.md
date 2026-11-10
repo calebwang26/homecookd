@@ -5,7 +5,7 @@ before it reaches a phone. Workflow: `.github/workflows/ios-journeys.yml`. Journ
 Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 
 1. **The spike (this file's first PR).** The workflow builds the app for the simulator from the PR's own commit
-   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no signing and no EAS; no ccache until a build passes)
+   (`expo prebuild`, `pod install`, `xcodebuild -configuration Release -sdk iphonesimulator`, no certificate and no EAS; no ccache until a build passes)
    against AWS staging. It boots an iPhone simulator, installs Maestro (a pinned release whose sha256 is checked) and runs
    one journey: a fresh install opens on the first screen, and a made-up family link opens the dead-link card from
    staging. Each phase's time goes into the run's summary. Three runs, cold then warm, report the real times. The gate is
@@ -179,6 +179,46 @@ So the journeys have these lines of defense, in this order:
 4. **Try again** in `open-link.yaml` (above), for anything that still slips through. A journey that needed it gets a
    warning, never a silent pass.
 
+**A link open iOS gives up on (fault four, Master Agent, Nov 10).** Maestro's `openLink` runs `xcrun simctl openurl`.
+Sometimes lsd stops waiting for SpringBoard after exactly 10 s (`_LSDispatchWithTimeout`, Code=60). simctl then fails,
+but SpringBoard still delivers the link seconds later. Maestro's `retry` and `optional` catch only Maestro's own errors,
+so this throw ends the journey ("Unknown error" in report.xml) on a link that landed. Every one seen on Nov 10, from the
+kept simulator logs:
+
+| Run (attempt) | Journey | Open (UTC) | iOS gave up | App got the link | Gate: trustd restarts |
+|---|---|---|---|---|---|
+| 42847823481 (1), #473 | Family link, name, sign in | 15:58:14 | +10.0 s | +53.0 s | 1 |
+| 42847823481 (2), #473 | Family link, name, sign in | 16:18:37 | +10.0 s | +15.8 s | 1 |
+| 42847823481 (2), #473 | Launch, then a link that doesn't work | 16:19:46 | +10.0 s | +21.5 s | 1 |
+| 42851642925, #471 | Record, film, send | 16:25:24 | +10.0 s | +16.4 s | 0 |
+| 42872308399 (2), #476 | Family link, name, sign in | 19:36:28 | +10.0 s | +14.2 s | 0 |
+
+A fifth slow open in 42851642925 didn't throw: journey 3's sign-in link (16:20:53) first reached SpringBoard 64 s later,
+and the journey passed after two re-opens. So a trustd restart in the gate isn't needed for it (0 in 42851642925).
+GitHub's notice on these jobs said macOS arm64 runners were under capacity pressure, and all of them fall between
+15:58 and 16:26 UTC; that is a guess at a cause, not a finding.
+
+The fix: `scripts/journey-xcrun.sh` is Maestro's `xcrun` in the Journeys step (first on its PATH). Every call goes straight
+to the real one, except a `simctl openurl` that fails. That open counts as opened only when the step's log stream shows
+lsd's Code=60 timeout and the app receiving a link (its own `UIOpenURLAction` line) within 30 s of the open, the time
+`open-link.yaml` would wait for its screen anyway. Then the flow goes on, and its own wait for that screen is still the
+proof. Anything else fails as before, with simctl's own error. Each failed open, passed or not, gets a "Journey retry"
+warning naming the journey, when iOS gave up and when the link landed (`journey-retries.mjs`, from report.xml's times).
+The 30 s run from the open to the app's own line, not to simctl returning, and a link that never arrives fails as before.
+Of the five above, the four that landed within 30 s would have passed with a warning, and 42847823481's first would
+still fail. A link that starts the app arrives at launch, without that line, so a failed open of one isn't excused.
+
+Every open is logged, not only the failed ones, so a slow open shows even when nothing threw (the 64 s one above). The
+"Link opens" table, in the job summary and the job log (`gh run view --log`; a summary needs a signed-in browser), lists each: the journey, when, how long simctl took or how it failed, and when the app
+got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
+the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
+keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
+the first open whose link the app received on its own (within 3 s) as one iOS gave up on, to check the landing check on
+a real simulator. Not an open iOS asks about ("Open in homecookd?"): its link lands only after Maestro taps Open, which
+can't happen while the stand-in holds `openLink`. Dispatch 42889278704 faked such an open, and its dialog stayed up and
+failed the two journeys after it. For the same reason a real Code=60 on an open waiting on that dialog would fail as
+before; none of the five above had the dialog (their links landed with no tap).
+
 **Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
 signed in to that family.
 - Before Maestro starts, the step "Seed the journey test people" runs `scripts/journey-people.mjs setup` on AWS staging.
@@ -230,6 +270,34 @@ signed in to that family.
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
 
+**The app is signed to run locally, with its simulated entitlements (Master Agent, Nov 10).** Until Nov 10 the build had
+`CODE_SIGNING_ALLOWED=NO`, so the app had no entitlements, and on a simulator iOS reads an app's identity from them.
+Journey 4's recording never uploaded. In run 42852281034 (16:29:14) nsurlsessiond answered the app with "Process with pid
+29891 does not have a bundle ID, rejecting connection". Just before each refusal it logs "Evaluating new XPC connection …
+from pid … with client bundle identifier (null)"; for Apple's own daemons that line names a bundle id (42859652079, the
+app's pid 46975: (null) four times). So the proof is that line naming `com.salik.homecookd` in journey 4's kept log,
+with 0 refusals. expo-file-system's background upload then failed ("failed to
+create a background NSURLSessionUploadTask, as remote session is unavailable", NSURLErrorDomain -1), tried twice more in
+35 s, and the row stayed at "Sending your videos · 0%". 42846553438 and 42847961184 show the same lines. securityd
+refused every keychain call too ("Client has neither application-identifier nor keychain-access-groups entitlements",
+16 a journey).
+
+The first fix, a `codesign --sign -` after the build (run 42859652079), gave the right identifier and changed neither
+count. A simulator reads the "simulated entitlements" that Xcode links into the binary (`__TEXT,__entitlements`) when
+it signs during the build, and a later codesign can't add them. So the build signs to run locally (`CODE_SIGN_IDENTITY=-`,
+manual, no team, no certificate), as Xcode does for any simulator build. "Sign the app for the simulator (ad-hoc)"
+re-signs after the JS swap (the section stays) and prints the identifier and the simulated `application-identifier`. It
+fails without them. Xcode writes `FAKETEAMID.com.salik.homecookd` when there's no team. Proof, run 42866506647 (journey 4
+on main's app/src at 1289653c1):
+- nsurlsessiond logged "client bundle identifier com.salik.homecookd" for the app's pid (17:59:16.400), with 0 refusals.
+- The background upload sent 725,974 bytes to staging's uploads bucket and got 200 (17:59:17.410).
+- The row moved on to "Writing it down · about 1 hr left".
+
+The keychain works now too: 0 of securityd's -34018 in every journey, where an unsigned app had 16 each. So a session
+really is kept in the keychain between launches, and `launch-fresh`'s `clearKeychain` is what starts each journey
+signed out. A store or TestFlight build is signed by EAS with its bundle id, so this says nothing either way about
+phones.
+
 **Journey 4 (Master Agent, Nov 10).** `app/e2e/journeys/04-record-send.yaml`: Record → film → send, as the cook.
 - A simulator has no camera, so this build films with the stand-in camera (`useInAppCamera` `e2eCamera`, #435). When
   filming stops, each file is a real 5 s clip from staging media (`EXPO_PUBLIC_E2E_CLIP_URL`, set in the workflow), so
@@ -252,13 +320,18 @@ signed in to that family.
   people.
 
 **Simulator faults seen so far (none is the app).** Each one has its own name, so a red run can be read at a glance:
-- **The certificate stall** (parked, Nov 10): trustd stops answering every process's certificate checks for minutes.
+- **The certificate stall** (open, Nov 10): trustd stops answering every process's certificate checks for minutes.
   Apple's own NewsToday2 and NewsTag failed the same boringssl check alongside the app in 42846241678, and staging's
   /health answered 200 in 0.17 s meanwhile, so it's simulator-wide. Seen in 42815821906, 42811383192 (journey 3) and
   42846241678 (43 FAILs, 15:50:03–15:56:37Z). The two causes found so far are fixed (#460's push storm, #466's pinning
-  lock); this one isn't explained.
+  lock); this one isn't explained. It also starts after a clean gate: 42866506647 (40 s after), 42872308399 attempt 1
+  (2 m 25 s), 42887110283 attempt 2 (journey 3 clean, then journeys 2 and 0), and 42898927696, where the app's first
+  handshake failed 80 s after the gate and all three journeys ended on a "We can't reach" card. The list in STATE.md
+  (#482's line) has the times.
 - **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
-  deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600).
+  deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600, 42887110283 attempt 1,
+  42872308399 attempt 3). In the last two the driver's own log says why: "Failed to get screenshot: Timed out while
+  requesting screenshot." (on two runners within 90 s), with no app or staging error in either simulator log.
 - **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out"
   (`_LSDispatchWithTimeout`, 10 s after the open) and Maestro says "Unknown error" at `openLink`, which throws, so
   open-link.yaml's retry never runs. 0 certificate FAILs. Seen in #473's run 42847823481: attempt 1 journey 2, attempt
@@ -267,7 +340,8 @@ signed in to that family.
   simctl's 10 s timeout fails the journey. 42851642925 (journey 4: the app got it at +16.4 s) had a clean gate with 0
   trustd restarts, so a restart isn't needed for it (the Master Agent withdrew that lead). All the failed opens fell
   between 15:58 and 16:26 UTC on Nov 10, while GitHub said macOS arm64 runners were under capacity pressure: a guess at
-  most. An `openLink` that throws while the link lands is handled in its own CI PR, #482 (`claude/openlink-lands`).
+  most. Since #482, an `openLink` that throws while the link lands within 30 s passes with a warning ("A link open iOS
+  gives up on", above).
 - **"Copied" lasts 2 s, and an iOS tap waits for a still screen first** (Nov 10, not a simulator fault: a race in
   journey 3's check). ExternalRow shows "Copied" (label "Link copied") for `COPIED_MS` = 2000 ms. On iOS, Maestro's
   settle wait after every tap is a fixed 3 s check that the screen has stopped changing (`waitUntilScreenIsStatic`,
