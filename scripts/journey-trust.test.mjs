@@ -8,7 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { journeyLines, pinningLines, summary, trustd, verdicts } from './journey-trust.mjs';
+import { journeyLines, pinningLines, STALL_GAP_MS, summary, trustd, verdicts } from './journey-trust.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'journey-trust.mjs');
 const at = (t) => `2026-11-10 ${t}000+0000  localhost`;
@@ -51,12 +51,36 @@ test("trustd evaluating while only the app fails points at the api's certificate
   assert.match(journeyLines([{ name: 'J', log: othersToo }], trustd(stream), GATE)[0], /other processes failed too: the simulator, not the app$/);
 });
 
+test('one app failure while trustd keeps evaluating is the api, not a stall (the check that failed was 0.1 s before)', () => {
+  const stream = [EVAL('21:00:00.000'), EVAL('21:00:05.900'), EVAL('21:00:07.000'), EVAL('21:00:08.000')].join('\n');
+  assert.deepEqual(journeyLines([{ name: 'J', log: CHECK('21:00:06.000', 'homecookd', false) }], trustd(stream), GATE), [
+    "J: the app's certificate checks failed 1 time, 21:00:06–21:00:06 UTC (other processes: 0 failed, 0 passed); trustd kept evaluating and only the app's checks failed: look at the api's certificate",
+  ]);
+});
+
+test("no trustd line anywhere can't tell: no stall named, no re-run advice", () => {
+  const log = [CHECK('21:00:06.000', 'homecookd', false), CHECK('21:00:07.000', 'homecookd', false), CHECK('21:00:09.000', 'homecookd', false), CHECK('21:00:08.000', 'nsurlsessiond', true)].join('\n');
+  const [line] = journeyLines([{ name: 'J', log }], trustd(''), GATE);
+  assert.equal(line, "J: the app's certificate checks failed 3 times, 21:00:06–21:00:09 UTC (other processes: 0 failed, 1 passed); there's no trustd log for this run, so it can't tell whether the simulator stopped checking certificates");
+  assert.doesNotMatch(line, /re-run|the simulator,/);
+});
+
+test('trustd lines with no evaluation among them still read as the simulator', () => {
+  const stream = [XPC('21:09:23.044'), XPC('21:11:01.157')].join('\n');
+  assert.match(journeyLines([{ name: 'J', log: CHECK('21:09:32.114', 'homecookd', false) }], trustd(stream), GATE)[0],
+    /; trustd logged but evaluated nothing in this run: the simulator, not the app \(re-run the job\)$/);
+});
+
 test('a stall that began mid-run, before the gate is known, and a journey with no failed check', () => {
   const stream = [EVAL('20:27:07.000'), LOCKED('20:27:50.000')].join('\n');
   const log = CHECK('20:28:02.000', 'homecookd', false);
   assert.deepEqual(journeyLines([{ name: 'J2', log }, { name: 'J3', log: CHECK('20:27:00.000', 'homecookd', true) }], trustd(stream), null), [
     "J2: the app's certificate checks failed 1 time, 20:28:02–20:28:02 UTC (other processes: 0 failed, 0 passed); trustd evaluated nothing after 20:27:07; its pinning database was locked 1 time: the simulator stopped checking certificates, not the app (re-run the job)",
   ]);
+});
+
+test('the stall gap is the 5 s the docs and the workflow state', () => {
+  assert.equal(STALL_GAP_MS, 5000);
 });
 
 test("pinning lines: the update, when trustd evaluated again (or that it didn't), and the locked reads", () => {
