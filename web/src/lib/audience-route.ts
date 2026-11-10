@@ -37,7 +37,7 @@ export const EVENTS_URL = `${API_URL}/web-events`;
 
 export type Signal = 'aud' | 'link' | 'saved' | 'snapchat' | 'default' | 'switch';
 export type SwitchUi = 'hero' | 'footer';
-/** the hero's buttons ("Get early access", "See it work", the kid's "Send this to {R}") and the
+/** the hero's buttons ("Get the app now", "See it work", the kid's "Send this to {R}") and the
  *  kid page's sticky "Send this to {R}" */
 export type TapUi = 'cta' | 'see' | 'send' | 'sticky';
 

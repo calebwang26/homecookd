@@ -51,7 +51,7 @@ export const copy = {
     // h1Accent (one whole line) sits on the highlighter.
     h1Fixed: "",
     h1Accent: "",
-    cta: "Get early access",
+    cta: "Get the app now",
     // the hero's second button: the other version of the page (switchHref)
     switchLabel: "Are you the cook?",
     // read after the label by screen readers, so the question says where it goes

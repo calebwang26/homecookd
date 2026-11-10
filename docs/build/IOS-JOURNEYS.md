@@ -206,7 +206,9 @@ signed in to that family.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
-  their ids, the same day. The step names are the sweep's keys: rename both or neither.
+  their ids, the same day. The step names are the sweep's keys: rename both or neither. A GitHub answer of 5xx, or no
+  answer, is tried again (three tries, 2 s then 5 s apart): run 42840432828, the first scheduled sweep, stopped on a
+  single 502 and deleted nothing.
 
 **Journey 3 (Master Agent, Nov 9).** `app/e2e/journeys/03-add-family-copy-link.yaml`: the path that froze 1.1 twice,
 #402 (an invisible sheet took every tap after Add family) and #410 (the screen stopped redrawing after Copy link).
