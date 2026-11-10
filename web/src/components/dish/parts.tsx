@@ -12,8 +12,8 @@ import { LangSwitch, useLang } from './lang';
 import ui from './ui.module.css';
 import s from './dish.module.css';
 
-/** The App Store page; NEXT_PUBLIC_APP_STORE_URL wins, so no Vercel change is needed. */
-export const STORE_URL = APP_STORE_URL ?? 'https://apps.apple.com/app/id6825621614';
+/** The App Store page (lib/app-links). */
+export const STORE_URL = APP_STORE_URL;
 
 /** Straight to the store (Caleb, Oct 31: no sheet in between). A page with its own link copies it first, so the app can pick up the same dish. */
 export function goToStore() {

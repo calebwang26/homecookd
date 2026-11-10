@@ -1,43 +1,65 @@
-// Links from the web handoff pages (/i invites, the /r "Get the app" sheet) into the homecookd app.
-// See docs/build/FEEDBACK-OCT16c.md section C. Everything here is a public value.
-//
-// TODO(caleb): two values only you have:
-//   - NEXT_PUBLIC_APP_STORE_URL: a public TestFlight or App Store link (set it in Vercel). Without
-//     it, "Get the app" says homecookd is in early testing; no link is ever made up.
-//   - web/public/.well-known/apple-app-site-association lists the app as "TEAMID.BUNDLEID" (JSON
-//     has no comments). Put in <Apple Team ID>.<bundle id> once the bundle id is in the repo, or
-//     universal links (tapping homecookd.app/i in Messages opens the app) stay off.
+// Links from the web handoff pages (/i invites, the /r "Get the app" sheet, the dish pages) into the
+// homecookd app. See docs/build/FEEDBACK-OCT16c.md section C. Everything here is a public value.
 
 const httpsOnly = (v: string | undefined): string | null => {
   const s = (v ?? '').trim();
   return /^https:\/\/\S+$/.test(s) ? s : null;
 };
 
-/** The iPhone app's store link (TestFlight while testing, the App Store after launch), or null. */
-export const APP_STORE_URL: string | null = httpsOnly(process.env.NEXT_PUBLIC_APP_STORE_URL);
+/**
+ * The iPhone app's App Store page (public since Nov 7, 2026). NEXT_PUBLIC_APP_STORE_URL replaces it
+ * when it is set, so "Get the app" never depends on a setting someone has to remember.
+ */
+export const APP_STORE_URL: string = httpsOnly(process.env.NEXT_PUBLIC_APP_STORE_URL) ?? 'https://apps.apple.com/app/id6825621614';
 
 /**
- * The link "Get the app" opens on this device, or null when there is none to offer yet. The store
- * link is iPhone-only, so Android gets null (the early-testing note) instead of an Apple page.
+ * An Android phone or tablet. There is no homecookd app for it yet, so the hand-off says so there
+ * instead of offering an Apple page and a link nothing can open.
  * TODO(caleb): an Android link once there is a Play or test build.
  */
-export function storeUrlForThisDevice(): string | null {
-  if (typeof navigator === 'undefined') return APP_STORE_URL;
-  return /Android/i.test(navigator.userAgent) ? null : APP_STORE_URL;
+export function isAndroid(): boolean {
+  return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 }
 
-/**
- * homecookd://<path>?<params> (the app's scheme, app/app.json). A universal link never opens the
- * app from a page on its own domain, so "Open homecookd" on homecookd.app has to use the scheme.
- */
+/** homecookd://<path>?<params>: the app's own scheme (app/app.json). Only a phone with the app can open it. */
 export function appSchemeUrl(path: 'i' | 'r' | 'miss' | 'a', params: Record<string, string>): string {
   const q = new URLSearchParams(params).toString();
   return `homecookd://${path}${q ? `?${q}` : ''}`;
 }
 
 /**
- * The domain the app's "Paste invite" recognises. Copied links always use it, so a link copied on
- * a preview deployment still pastes.
+ * The two hosts the site answers on. The app claims both (app/app.config.ts, associatedDomains) and
+ * both serve /.well-known/apple-app-site-association.
+ */
+const SITE_HOSTS = ['homecookd.app', 'www.homecookd.app'];
+
+/** On a page's address: "Open homecookd" on the other host sent them here, so the app didn't take the link. */
+const OPENED = 'o';
+
+type At = { hostname: string; search: string };
+const here = (): At | null => (typeof window === 'undefined' ? null : window.location);
+
+/** This page was reached by "Open homecookd" on the site's other host: the app isn't on this phone, or didn't open. */
+export function arrivedFromOpen(at: At | null = here()): boolean {
+  return !!at && new URLSearchParams(at.search).get(OPENED) === '1';
+}
+
+/**
+ * Where "Open homecookd" goes, for the pages the app claims (/i and /r in the association file).
+ * iPhone never opens the app from a link to the page's own host, and the scheme alone is an "address
+ * is invalid" error on a phone without the app. So the first tap is the same page on the site's
+ * other host: with the app, iPhone opens the app; without it, that page loads and says to get the
+ * app. On that page (and on any other host: a preview, localhost) the link is the scheme.
+ */
+export function openAppUrl(path: 'i' | 'r', params: Record<string, string>, at: At | null = here()): string {
+  const i = at ? SITE_HOSTS.indexOf(at.hostname) : -1;
+  if (i < 0 || arrivedFromOpen(at)) return appSchemeUrl(path, params);
+  return `https://${SITE_HOSTS[1 - i]}/${path}?${new URLSearchParams({ ...params, [OPENED]: '1' })}`;
+}
+
+/**
+ * The domain the app reads a copied link from. Copied links always use it, so a link copied on a
+ * preview deployment is still picked up.
  */
 export const WEB_ORIGIN = 'https://homecookd.app';
 

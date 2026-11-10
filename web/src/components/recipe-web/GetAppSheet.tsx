@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Handoff } from '@/components/invite/Handoff';
 import { EggMascot } from '@/components/primitives/EggMascot';
-import { appSchemeUrl, isPhoneOrTablet, WEB_ORIGIN } from '@/lib/app-links';
+import { isPhoneOrTablet, openAppUrl, WEB_ORIGIN } from '@/lib/app-links';
 import { midSentence, possessive } from '@/lib/recipe-web/recipe';
 import type { Share } from '@/lib/recipe-web/types';
 import { Avatar } from './Avatar';
@@ -77,8 +77,7 @@ export function GetAppSheet({ onClose, share, reduced }: { onClose: () => void; 
             </h2>
             <Handoff
               link={`${WEB_ORIGIN}/r?s=${encodeURIComponent(token)}`}
-              openUrl={appSchemeUrl('r', { s: token })}
-              askName={sender?.name ?? null}
+              openUrl={openAppUrl('r', { s: token })}
               phone={isPhoneOrTablet()}
               // The app doesn't pick up a copied /r link, so the way back in is Open homecookd here.
               // No-break spaces keep the button name whole when the line wraps.
