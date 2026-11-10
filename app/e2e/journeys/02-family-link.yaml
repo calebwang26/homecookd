@@ -1,0 +1,44 @@
+# Journey 2 (docs/build/IOS-JOURNEYS.md, "Test people"): a family link, a name, then signed in to that family.
+# Before Maestro starts, scripts/journey-people.mjs made a cook on staging ("Asha (test)") and a kid who joined her
+# family by its link ("Leo (test)"); FAMILY_LINK is that link and KID_KEY the kid's device key. TEST_SIGNIN_KEY itself
+# never reaches Maestro. A simulator can't do Sign in with Apple, so the flow goes as far as the Apple button and then
+# opens homecookd://e2e/sign-in (the simulator-only hook, +native-intent.tsx), which signs in as the kid as Apple would.
+# Both values are masked in the job's log, and this journey's commands.json and logs are never uploaded: they echo the
+# link. Without TEST_SIGNIN_KEY (a fork's PR) the workflow leaves this journey out (--exclude-tags needs-key).
+appId: ${APP_ID}
+name: Family link, name, sign in
+tags:
+  - needs-key
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: ".*Cook your family.s food.*"
+    timeout: 60000
+# The join card, from staging's peek of the cook's real link.
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: ${FAMILY_LINK}
+      EXPECT: ".*Asha \\(test\\) sent this.*"
+# The title wraps ("Join Asha / (test)'s family"), and `.` stops at a line break without (?s).
+- assertVisible: "(?s).*Join Asha.*family.*"
+- assertVisible: ".*What do they call you.*"
+- assertVisible: "I miss the food"
+- assertVisible: "I cook"
+- takeScreenshot: 02-join-card
+- tapOn: "Mom, Leo, Auntie Lin.*"
+- inputText: "Leo"
+# The keyboard's Done closes it (the field has no submit action); Maestro's hideKeyboard can't on this field.
+- pressKey: Enter
+- assertVisible: ".*Sign in with Apple.*"
+- takeScreenshot: 02-name-typed
+# Signed in as the kid, as the Apple button would: the app lands on the kid's Home in Asha's family (run 42744607038).
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: homecookd://e2e/sign-in?key=${KID_KEY}
+      EXPECT: ".*Hi, Leo \\(test\\).*"
+- assertNotVisible: ".*sent this.*"
+- assertNotVisible: ".*Sign in with Apple.*"
+- takeScreenshot: 02-signed-in

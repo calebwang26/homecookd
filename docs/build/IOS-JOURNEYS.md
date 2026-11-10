@@ -17,7 +17,7 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 3. **Journeys 2–5 and the gate.**
    - Messages → New message → Add family → Copy link → X → a chat → Home.
    - Record → film 5 s → send.
-   - Family link → name → sign in.
+   - Family link → name → sign in (journey 2, `02-family-link.yaml`; "Test people" below).
    - A shared recipe's video plays.
    - Kid Home.
 
@@ -82,13 +82,13 @@ of them. Its jobs:
 Pushes to main still run only on `app/` or workflow changes, and a newer push still cancels an older run.
 
 Rules for the public repo: never `pull_request_target`, so a fork's PR gets no secrets and skips what needs them. The logs
-never print a family link, a test id or a key (`::add-mask::`). A seeded family (`app/scripts/aws-phone-run.mjs setup`) is
-deleted in `if: always()`. `TEST_SIGNIN_KEY` is an Actions secret, set by Caleb.
+never print a family link, a test id or a key (`::add-mask::`). Journey 2's test people (`scripts/journey-people.mjs`) are
+deleted in `if: always()`. `TEST_SIGNIN_KEY` is an Actions secret, set by Caleb on Nov 9.
 
 A link from outside goes through `app/e2e/flows/open-link.yaml`. iOS asks "Open in homecookd?" first, and a tap on its
 Open sometimes closes the dialog without handing the link to the app (runs 5 and 7 tapped the same point, and only run 5's
 link arrived). The subflow tries open, tap and wait up to three times. A link that carries a key is echoed in Maestro's
-own logs, so those journeys never upload `commands.json` or `maestro.log`.
+own files, so only screenshots and `report.xml` are kept from those journeys (see "Test people").
 
 **The trust-check stall and Try again (Master Agent, Nov 9).** Twice on Nov 9 (runs 42592011253 and 42614847250) the
 journey ended on "We can't reach homecookd." The app's request reached CloudFront and got its certificate within about
@@ -107,6 +107,32 @@ subflow's retries didn't help. Now:
   `first-try` brings it back 15 s after the app's first try.
 - If the stall comes back with the retry in place, the next fix is on the simulator's side (reset trustd, or warm the
   certificate check before the journeys), not more taps.
+
+**Test people (journey 2, Master Agent, Nov 9).** `app/e2e/journeys/02-family-link.yaml`: a family link, a name, then
+signed in to that family.
+- Before Maestro starts, the step "Seed the journey test people" runs `scripts/journey-people.mjs setup` on AWS staging.
+  It makes a cook, "Asha (test)", and her family link, then signs in a kid, "Leo (test)", who joins by that link.
+- Test ids are `j<run id>-<attempt>-cook|kid`. They're written to `$RUNNER_TEMP/journey-people.json` before the first
+  sign-in, never under /tmp.
+- The family link (in the app's `homecookd://i?t=` form) and the kid's device key are masked first. They reach Maestro as
+  `FAMILY_LINK` and `KID_KEY`. `TEST_SIGNIN_KEY` itself never reaches Maestro or the app.
+- The journey opens the link, checks the join card ("Join Asha (test)'s family", the two chips), types a name and stops at
+  the Apple button: a simulator can't do Sign in with Apple. Then it opens `homecookd://e2e/sign-in?key=…`, the
+  simulator-only hook (#435), and the app lands in Asha's family as the kid. The workflow builds with
+  `EXPO_PUBLIC_E2E=1` for that hook; without it the link falls through to the first screen (run 42741853080).
+- **A fork's PR** has no `TEST_SIGNIN_KEY`: the seed step says so in the job summary and Maestro runs without journey 2
+  (`--exclude-tags needs-key`). The run passes. To check that path: `gh workflow run ios-journeys.yml --ref <branch> -f
+  no_key=true`.
+- **A key that's set but refused** (rotated, or staging lost it) fails the seed step with "TEST_SIGNIN_KEY was refused by
+  staging", so it can't pass as a fork's skip. Fix: set the repo secret again from `.env`.
+- **What's kept:** Maestro writes every `-e` value into each flow's `commands.json`, not only journey 2's (run
+  42736006425). So when journey 2 ran, "Drop what echoes a key or a link" removes every flow's `commands.json`, `logs/`
+  and screen dumps, and only screenshots and `report.xml` stay. On a fork's PR the launch journey keeps its files: its
+  made-up link is no secret. Then any file still holding the link's token or the device key goes, with a warning.
+- **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
+  entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
+  ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
+  their ids, the same day. The step names are the sweep's keys: rename both or neither.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
