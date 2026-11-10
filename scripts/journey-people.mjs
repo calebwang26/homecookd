@@ -101,12 +101,30 @@ export function leftovers(attempts) {
   return out;
 }
 
-async function gh(path) {
-  const res = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}${path}`, {
-    headers: { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json' },
-  });
-  if (!res.ok) throw new Error(`GitHub ${path.split('?')[0]} answered ${res.status}`);
-  return res.json();
+/** Waits before the 2nd and 3rd try of a GitHub call that answered 5xx or didn't answer at all. */
+export const GH_WAITS_MS = [2_000, 5_000];
+
+/**
+ * One GitHub API call for the sweep. A 5xx or a dropped connection is tried again, three tries in all: run 42840432828's
+ * one 502 on a jobs list stopped the whole sweep, and it deleted nothing. Any other answer (a 404, a 403) fails at once.
+ */
+export async function gh(path, f = fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  const where = `GitHub ${path.split('?')[0]}`;
+  for (let i = 0; ; i++) {
+    let res;
+    try {
+      res = await f(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}${path}`, {
+        headers: { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json' },
+      });
+    } catch (e) {
+      if (i >= GH_WAITS_MS.length) throw new Error(`${where} didn't answer: ${e.message}`);
+      await wait(GH_WAITS_MS[i]);
+      continue;
+    }
+    if (res.ok) return res.json();
+    if (res.status < 500 || i >= GH_WAITS_MS.length) throw new Error(`${where} answered ${res.status}`);
+    await wait(GH_WAITS_MS[i]);
+  }
 }
 
 async function sweep(key) {
