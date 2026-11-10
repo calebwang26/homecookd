@@ -43,6 +43,9 @@ env:
   EXPO_PUBLIC_BACKEND: aws
   EXPO_PUBLIC_AWS_URL: https://d2zh46br3dalyf.cloudfront.net
   EXPO_PUBLIC_BUCKET_URL: https://d1l67cvw778iu0.cloudfront.net
+  # The simulator-only hooks (#435): journey 2's homecookd://e2e/sign-in. Store builds never set it, and
+  # scripts/check-e2e-stripped.mjs (ci.yml's e2e-stripped) proves their exports hold none of the hook.
+  EXPO_PUBLIC_E2E: '1'
   APP_ID: com.salik.homecookd
   # Pinned, and over two weeks old when chosen; the zip's sha256 is checked before it runs.
   MAESTRO_VERSION: cli-2.11.0

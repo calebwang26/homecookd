@@ -118,7 +118,8 @@ signed in to that family.
   `FAMILY_LINK` and `KID_KEY`. `TEST_SIGNIN_KEY` itself never reaches Maestro or the app.
 - The journey opens the link, checks the join card ("Join Asha (test)'s family", the two chips), types a name and stops at
   the Apple button: a simulator can't do Sign in with Apple. Then it opens `homecookd://e2e/sign-in?key=…`, the
-  simulator-only hook (#435), and the app lands in Asha's family as the kid.
+  simulator-only hook (#435), and the app lands in Asha's family as the kid. The workflow builds with
+  `EXPO_PUBLIC_E2E=1` for that hook; without it the link falls through to the first screen (run 42741853080).
 - **A fork's PR** has no `TEST_SIGNIN_KEY`: the seed step says so in the job summary and Maestro runs without journey 2
   (`--exclude-tags needs-key`). The run passes. To check that path: `gh workflow run ios-journeys.yml --ref <branch> -f
   no_key=true`.
