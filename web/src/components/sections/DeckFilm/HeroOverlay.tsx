@@ -20,7 +20,9 @@
 // so it works before hydration; the pick rides in the URL).
 //
 // Kid version: the main button opens /miss (MISS_HREF), where the kid names the dish and the real
-// "Ask Mom" sends it home (PRD-V2 section 1), and "Get early access" is the text link under the switch.
+// "Ask Mom" sends it home (PRD-V2 section 1), and "Get the app now" is the text link under the switch.
+// "Get the app now" (Caleb, Nov 10) opens the App Store, on both versions; on Android, which has no homecookd app yet,
+// the iPhone-only line stands where it was, never a link nothing can open (#465).
 // No motion imports here: this is a first-screen file (FEEDBACK-OCT16 E).
 import { motionNow } from '@/lib/motion/lazy';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
@@ -30,6 +32,8 @@ import { Button } from '@/components/primitives/Button';
 import { useRelation } from '@/components/providers/RelationProvider';
 import { fill } from '@/lib/relation';
 import { MISS_HREF, logTap, switchHref } from '@/lib/audience-route';
+import { APP_STORE_URL, IPHONE_ONLY } from '@/lib/app-links';
+import { useAndroid } from '@/lib/useAndroid';
 import { usePause } from '@/components/providers/PauseProvider';
 import { useMotionOK } from '@/components/providers/MotionProvider';
 import { EASE } from '@/lib/motion/tokens';
@@ -201,6 +205,7 @@ export function HeroOverlay() {
   const h1Word = explicit ? fill(copy.hero.explicitWord, relation) : copy.hero.relationDefault;
   const h1Label = fixed ? fixed.split('\n').join(' ') : `${copy.hero.h1Before} ${h1Word} ${copy.hero.h1After}`;
   const kid = audience === 'kid';
+  const android = useAndroid();
 
   return (
     <div className={s.overlay} data-f="overlay" data-theme="dark">
@@ -232,8 +237,10 @@ export function HeroOverlay() {
             <Button href={MISS_HREF} variant="hero" size="lg" arrow className={s.heroCta} onClick={() => logTap(audience, 'send')}>
               {fill(copy.finalCta.shareButton, relation)}
             </Button>
+          ) : android ? (
+            <p className={s.sub}>{IPHONE_ONLY}</p>
           ) : (
-            <Button href="#early-access" variant="hero" size="lg" arrow className={s.heroCta} onClick={() => logTap(audience, 'cta')}>
+            <Button href={APP_STORE_URL} variant="hero" size="lg" arrow className={s.heroCta} onClick={() => logTap(audience, 'cta')}>
               {copy.hero.cta}
             </Button>
           )}
@@ -250,8 +257,12 @@ export function HeroOverlay() {
             <span className="sr-only"> {copy.hero.switchSr}</span>
           </Button>
         </div>
-        {kid ? (
-          <a className={`${s.seeLink} ${s.ctaLink}`} href="#early-access" data-hero-item="" onClick={() => logTap(audience, 'cta')}>
+        {kid && android ? (
+          <p className={s.sub} data-hero-item="">
+            {IPHONE_ONLY}
+          </p>
+        ) : kid ? (
+          <a className={`${s.seeLink} ${s.ctaLink}`} href={APP_STORE_URL} data-hero-item="" onClick={() => logTap(audience, 'cta')}>
             <span className={s.seeLabel}>{copy.hero.cta}</span>
           </a>
         ) : null}

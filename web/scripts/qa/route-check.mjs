@@ -372,15 +372,19 @@ try {
   });
 
   // The hero's "See it work" link was cut (Caleb, Oct 18), so the only hero tap is the CTA.
-  await run('beacon: tapping the hero "Get early access" → tap cta', async () => {
+  // "Get the app now" opens the App Store (#480), so the tap's beacon has to go out as the page leaves the site
+  // (sendBeacon). Apple's page is answered locally here, never fetched.
+  await run('beacon: tapping the hero "Get the app now" (the App Store) → tap cta', async () => {
     const { ctx, page, beacons } = await visit('/?log=1', '/');
+    await ctx.route('https://apps.apple.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>App Store (stub)</title>' }));
+    check('no "See it work" link in the hero', (await page.locator('#top a[href="#see-it-work"]').count()) === 0);
     const before = beacons.length;
-    await page.locator('#top a[href="#early-access"]').first().click();
+    await page.locator('#top a[href^="https://apps.apple.com/"]').first().click();
     await page.waitForTimeout(800);
     const taps = beacons.slice(before).map((b) => b.body);
+    check('the tap left for the App Store', page.url().startsWith('https://apps.apple.com/'), page.url());
     check('one tap', taps.length === 1 && taps[0]?.event === 'tap', JSON.stringify(taps));
     check('ui cta, aud parent, signal default', taps[0]?.ui === 'cta' && taps[0]?.aud === 'parent' && taps[0]?.signal === 'default', JSON.stringify(taps));
-    check('no "See it work" link in the hero', (await page.locator('#top a[href="#see-it-work"]').count()) === 0);
     await ctx.close();
   });
 
