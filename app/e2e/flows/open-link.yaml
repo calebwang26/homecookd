@@ -5,13 +5,15 @@ name: Open a link from outside the app
 # handing the link over: spike runs 5 and 7 (Nov 9) tapped the same point, and only run 5's link reached the app. So the
 # whole step runs again until the screen the link leads to shows (EXPECT).
 #
-# A later attempt that finds "We can't reach homecookd." taps the card's own Try again instead of opening the link again:
+# A later attempt that finds "We can't reach homecookd." (or, after a sign-in, "We can't reach your kitchen") taps the
+# card's own Try again instead of opening the link again:
 # the same link doesn't ask the api again, Try again does. The card came from the simulator's certificate check (trustd)
 # freezing for a minute or more right after boot (runs 42592011253 and 42614847250, docs/build/IOS-JOURNEYS.md). The tap
 # needs the card and a link this subflow opened, never a blind tap. Each one saves a try-again-N screenshot, and the job
 # summary names a journey that passed only after one. If the card is still up after the last attempt, the flow fails.
 #
-# A link that carries a key (the sign-in journeys) is echoed in Maestro's own logs: those journeys never upload them.
+# A link that carries a key (the sign-in journeys) is echoed in Maestro's own files: ios-journeys.yml keeps only the
+# screenshots, report.xml and the simulator's log with every key and token replaced by ***.
 - evalScript: ${output.openedLink = false}
 - retry:
     maxRetries: 2
@@ -25,6 +27,17 @@ name: Open a link from outside the app
             - evalScript: ${output.tappedTryAgain = true}
             - evalScript: ${output.tryAgainTaps = (output.tryAgainTaps || 0) + 1}
             - takeScreenshot: try-again-${output.tryAgainTaps}
+            - tapOn: "Try again"
+      # The same stall after a sign-in: the family's load fails ("We can't reach your kitchen", run 42759943404), and its
+      # card's Try again loads it again. A separate screenshot name, so the summary says which card it was.
+      - runFlow:
+          when:
+            true: ${output.openedLink === true && output.tappedTryAgain !== true}
+            visible: ".*We can.t reach your kitchen.*"
+          commands:
+            - evalScript: ${output.tappedTryAgain = true}
+            - evalScript: ${output.tryAgainTaps = (output.tryAgainTaps || 0) + 1}
+            - takeScreenshot: try-again-kitchen-${output.tryAgainTaps}
             - tapOn: "Try again"
       - runFlow:
           when:

@@ -4,11 +4,9 @@
 appId: ${APP_ID}
 name: Launch, then a link that doesn't work
 ---
-- launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible: ".*Cook your family.s food.*"
-    timeout: 60000
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
 - assertVisible: ".*Got a link from your family.*"
 - assertVisible: ".*Sign in with Apple.*"
 - takeScreenshot: 00-first-screen

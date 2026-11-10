@@ -10,11 +10,9 @@ name: Family link, name, sign in
 tags:
   - needs-key
 ---
-- launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible: ".*Cook your family.s food.*"
-    timeout: 60000
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
 # The join card, from staging's peek of the cook's real link.
 - runFlow:
     file: ../flows/open-link.yaml

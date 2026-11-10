@@ -15,7 +15,8 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
    route (404). A fake camera films a bundled clip, because a simulator has none. `check-app-export.mjs` refuses a
    production-aws export holding `e2e/sign-in`.
 3. **Journeys 2–5 and the gate.**
-   - Messages → New message → Add family → Copy link → X → a chat → Home.
+   - Messages → New message → Add family → Copy link → X → a chat → Home (journey 3, `03-add-family-copy-link.yaml`;
+     "Journey 3" below).
    - Record → film 5 s → send.
    - Family link → name → sign in (journey 2, `02-family-link.yaml`; "Test people" below).
    - A shared recipe's video plays.
@@ -99,9 +100,14 @@ subflow's retries didn't help. Now:
   again, and waits for the expected screen. Without the card, the attempt opens the link as before. So the three attempts
   cover about a minute.
 - The card still up after the last attempt fails the journey.
-- Each tap saves a `try-again-N` screenshot. A journey that passed only after a tap gets a warning and a line in the job
-  summary ("passed after 1 "Try again" retry, trust-check stall"), so a real api outage can't hide behind a green run
-  (`scripts/journey-retries.mjs`).
+- After a sign-in the same stall shows as the family's load failing: "Who's in the kitchen?" with "We can't reach your
+  kitchen" (journey 3, run 42759943404). Its card's Try again loads the family again, under the same rules: only with
+  that card up, on a link this subflow opened, and the card still up after the last attempt fails the journey (Master
+  Agent, Nov 9).
+- Each tap saves a screenshot naming its card: `try-again-N` on "We can't reach homecookd.", `try-again-kitchen-N` on
+  "We can't reach your kitchen.". A journey that passed only after a tap gets a warning and a line in the job summary
+  that names the card ("passed after 1 "Try again" retry on "We can't reach your kitchen.", trust-check stall"), so a
+  real api outage can't hide behind a green run (`scripts/journey-retries.mjs`).
 - To check it: `gh workflow run ios-journeys.yml --ref <branch> -f stall_api=first-try` must pass with that line, and
   `-f stall_api=all` must fail. Both point the api's host at 192.0.2.1 (an address that never answers) on the runner;
   `first-try` brings it back 15 s after the app's first try.
@@ -178,13 +184,29 @@ signed in to that family.
 - **A key that's set but refused** (rotated, or staging lost it) fails the seed step with "TEST_SIGNIN_KEY was refused by
   staging", so it can't pass as a fork's skip. Fix: set the repo secret again from `.env`.
 - **What's kept:** Maestro writes every `-e` value into each flow's `commands.json`, not only journey 2's (run
-  42736006425). So when journey 2 ran, "Drop what echoes a key or a link" removes every flow's `commands.json`, `logs/`
-  and screen dumps, and only screenshots and `report.xml` stay. On a fork's PR the launch journey keeps its files: its
-  made-up link is no secret. Then any file still holding the link's token or the device key goes, with a warning.
+  42736006425). So when the keyed journeys ran, "Drop what echoes a key or a link" removes every flow's `commands.json`,
+  Maestro's own logs and the screen dumps. Each flow keeps its screenshots and the simulator's log
+  (`logs/device-simulator.log`), where each exact value (both device keys, the link's token, the two test ids) becomes
+  `***`: that log is what shows a stall's cause (Master Agent, Nov 9). `report.xml` stays. On a fork's PR the launch
+  journey keeps its files: its made-up link is no secret. Then any file still holding a device key or the token goes,
+  with a warning.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
   their ids, the same day. The step names are the sweep's keys: rename both or neither.
+
+**Journey 3 (Master Agent, Nov 9).** `app/e2e/journeys/03-add-family-copy-link.yaml`: the path that froze 1.1 twice,
+#402 (an invisible sheet took every tap after Add family) and #410 (the screen stopped redrawing after Copy link).
+- The cook from the seed ("Asha (test)") signs in through the hook with `COOK_KEY`, her masked device key.
+- A new cook first picks her language ("Your language": English) and passes her one-time welcome ("Not now").
+- Then: Messages → New message (the family, with Leo) → Add family → Copy link ("Copied", the link from staging) →
+  Close → New message → Message Leo (test) → the chat ("Say hello to Leo (test).") → Back → Home.
+- Every step after a sheet closes taps something and waits for the next screen, so a frozen screen fails the journey.
+- Maestro runs the journeys in no fixed order (run 42763382649: 03, 02, then 00), so every journey starts with
+  `flows/launch-fresh.yaml`: a fresh install with `clearState` and `clearKeychain` (the keychain holds the session, and
+  `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
+  clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
+  over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 
