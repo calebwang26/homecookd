@@ -17,7 +17,7 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 3. **Journeys 2–5 and the gate.**
    - Messages → New message → Add family → Copy link → X → a chat → Home (journey 3, `03-add-family-copy-link.yaml`;
      "Journey 3" below).
-   - Record → film 5 s → send.
+   - Record → film 5 s → send (journey 4, `04-record-send.yaml`; "Journey 4" below).
    - Family link → name → sign in (journey 2, `02-family-link.yaml`; "Test people" below).
    - A shared recipe's video plays.
    - Kid Home.
@@ -190,6 +190,10 @@ signed in to that family.
   `***`: that log is what shows a stall's cause (Master Agent, Nov 9). `report.xml` stays. On a fork's PR the launch
   journey keeps its files: its made-up link is no secret. Then any file still holding a device key or the token goes,
   with a warning.
+- **It fails closed (Master Agent, Nov 10).** `perl -pi` exits 0 even on a file it can't open, so each log is checked
+  before (readable and writable, or it's removed) and after (still holding any value: removed). Any other error in the
+  step removes every `logs/` folder (an ERR trap), and "Keep Maestro's screenshots and report" runs only when the step
+  succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
 - **Deleting them:** "Delete the journey test people" runs in `if: always()` (after a `stall_api` run takes its hosts
   entry out). A runner that dies never gets there, so `.github/workflows/journey-people-sweep.yml` runs every 6 hours on
   ubuntu. It finds the last day's runs that started seeding and didn't finish deleting, and deletes their people by
@@ -207,6 +211,18 @@ signed in to that family.
   `clearState` leaves it), then the signed-out first screen. Journey 3's Copy link leaves a homecookd link on the
   clipboard, and the next fresh app's first screen picks it up: iOS asks "homecookd would like to paste from homecookd"
   over the screen (run 42778668467). That's the app working, so the subflow answers Don't Allow Paste.
+
+**Journey 4 (Master Agent, Nov 10).** `app/e2e/journeys/04-record-send.yaml`: Record → film → send, as the cook.
+- A simulator has no camera, so this build films with the stand-in camera (`useInAppCamera` `e2eCamera`, #435). When
+  filming stops, each file is a real 5 s clip from staging media (`EXPO_PUBLIC_E2E_CLIP_URL`, set in the workflow), so
+  the recording uploads and makes a job exactly as a phone's does.
+- `flows/launch-fresh.yaml` grants camera and microphone up front, as a first recording on a phone would ask.
+- The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
+  recording" → the pre-record sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
+  6 s → "I'm done" → "Done! Sending it to …" → her Home.
+- Staging runs no worker, so the job stays "Still being made": that row ("Journey dal", "Still being made.") on her
+  Home is the proof the videos went up and the job exists. The cook, her family and what she sent go with the test
+  people.
 
 If Maestro is flaky on the sheets after three runs, the journeys move to an XCUITest target (approved without asking).
 

@@ -46,6 +46,8 @@ env:
   # The simulator-only hooks (#435): journey 2's homecookd://e2e/sign-in. Store builds never set it, and
   # scripts/check-e2e-stripped.mjs (ci.yml's e2e-stripped) proves their exports hold none of the hook.
   EXPO_PUBLIC_E2E: '1'
+  # Journey 4's stand-in camera films this 5 s clip (staging media) for each file: a simulator has no camera.
+  EXPO_PUBLIC_E2E_CLIP_URL: https://d1l67cvw778iu0.cloudfront.net/e2e/clip-5s.mp4
   APP_ID: com.salik.homecookd
   # Pinned, and over two weeks old when chosen; the zip's sha256 is checked before it runs.
   MAESTRO_VERSION: cli-2.11.0
@@ -392,16 +394,16 @@ jobs:
           echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
       # The signed-in journeys' people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who
       # joined by it. The link and both device keys are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no
-      # secret, so the journeys tagged needs-key (2 and 3) are left out and say so; a key that's set but refused fails
-      # here, so a rotated key can't pass as a skip.
+      # secret, so the journeys tagged needs-key (2, 3 and 4) are left out and say so; a key that's set but refused
+      # fails here, so a rotated key can't pass as a skip.
       # The step's name is the sweep's (journey-people-sweep.yml): rename both or neither.
       - name: Seed the journey test people
         env:
           TEST_SIGNIN_KEY: ${{ !inputs.no_key && secrets.TEST_SIGNIN_KEY || '' }}
         run: |
           if [ -z "$TEST_SIGNIN_KEY" ]; then
-            echo "Journeys 2 and 3 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
-            echo "> Journeys 2 and 3 (family link sign-in; New message, Add family, Copy link) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
+            echo "Journeys 2, 3 and 4 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
+            echo "> Journeys 2, 3 and 4 (family link sign-in; New message, Add family, Copy link; record and send) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           node scripts/journey-people.mjs setup "$RUNNER_TEMP/journey-people.json"
@@ -456,9 +458,13 @@ jobs:
       # each exact value (both device keys, the link's token, the test ids) becomes ***. Without a key (a fork's PR) the
       # launch journey keeps everything: its made-up link is no secret. Then any file still holding a key or the token
       # goes, with a warning: that would be a leak this step didn't expect.
+      # It fails closed (Master Agent, Nov 10): any error in it removes every logs/ folder, and the upload runs only
+      # when this step succeeded, so a log the scrub didn't finish never reaches the artifact on a public repo.
       - name: Drop what echoes a key or a link
+        id: scrub
         if: always()
         run: |
+          trap 'rm -rf "$RUNNER_TEMP"/maestro-out/*/*/logs; echo "::warning title=Journey files::the scrub failed, so every log was removed and nothing is uploaded"' ERR
           shopt -s nullglob
           for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
             if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
@@ -467,8 +473,14 @@ jobs:
           done
           SECRETS=("${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-cook" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-kid")
           for f in "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log; do
+            # perl -pi says nothing to the shell about a file it couldn't open (exit 0), so check first, and after:
+            # a log that can't be read and rewritten, or that still holds any value, is removed, never kept as is.
+            if [ ! -r "$f" ] || [ ! -w "$f" ]; then rm -f "$f"; continue; fi
             for v in "${SECRETS[@]}"; do
               if [ -n "$v" ]; then V="$v" perl -pi -e 's/\Q$ENV{V}\E/***/g' "$f"; fi
+            done
+            for v in "${SECRETS[@]}"; do
+              if [ -n "$v" ] && grep -qF -- "$v" "$f"; then rm -f "$f"; break; fi
             done
           done
           for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}"; do
@@ -478,7 +490,7 @@ jobs:
             done
           done
       - name: Keep Maestro's screenshots and report
-        if: always()
+        if: always() && steps.scrub.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: maestro-${{ github.run_id }}-${{ github.run_attempt }}
