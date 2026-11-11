@@ -60,6 +60,15 @@ tags:
     visible: "Start recording"
     timeout: 30000
 - takeScreenshot: 04-ready
+# "I'm done" downloads the stand-in clip, then uploads it: both need trustd. A rebuild under way (42939750084: the clip
+# download hung in one, and the app went back to Record) is waited out here, before filming starts, watching only
+# (Safari would take the app's place). Not on the filming screen: filming cuts a new file every 5 minutes (CHUNK_MS),
+# and each cut makes the stand-in download its clip again. This screen keeps the phone awake (recording.tsx).
+- runFlow:
+    file: ../flows/trustd-ready.yaml
+    env:
+      MODE: watch
+      WHY: journey 4's filming
 - tapOn: "Start recording"
 - extendedWaitUntil:
     visible: ".*Tap when you.re done.*"
@@ -70,14 +79,6 @@ tags:
     visible: "this text never appears"
     timeout: 6000
     optional: true
-# "I'm done" downloads the stand-in clip, then uploads it: both need trustd. A rebuild under way here (42939750084: the
-# clip download hung in one, and the app went back to Record) is waited out first, watching only: Safari would take the
-# app's place mid-filming.
-- runFlow:
-    file: ../flows/trustd-ready.yaml
-    env:
-      MODE: watch
-      WHY: journey 4's I'm done
 - tapOn: ".*Tap when you.re done.*"
 # The done view says it's sending, then her Home shows the dish being made: uploaded, and the job made.
 - extendedWaitUntil:

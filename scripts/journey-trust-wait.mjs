@@ -11,7 +11,8 @@
 //   with no rebuild open: no "Pinning database should update" line, or trustd has checked something SETTLED_MS or more
 //   after the latest one began.
 // - launch mode (before the app is up) provokes a check, as the readiness gate does: Safari opens the api's address
-//   every PROBE_EVERY_MS and is closed again, so a healthy but idle trustd shows it is checking.
+//   every PROBE_EVERY_MS and is closed again 4 s later, and once more when the wait ends, so a healthy but idle trustd
+//   shows it is checking and Safari isn't left over the app.
 // - watch mode (inside a journey: Safari would take the app's place) only watches, and stops waiting on a rebuild
 //   WATCH_MAX_MS old.
 // - One budget for the whole job (BUDGET_MS, kept in --budget across steps), so the worst case stays inside the job's
@@ -66,8 +67,12 @@ export function decide(stream, now, { mode = 'launch', why = 'a journey', wait =
 /** A label safe to print: letters, digits, spaces and a few marks, at most 40 characters. */
 export const label = (s) => (String(s ?? '').replace(/[^A-Za-z0-9 '",.-]/g, '').slice(0, 40) || 'a journey');
 
-/** The server. `probe` provokes a check (Safari to the api); `now` and `sleep` are injectable for tests. */
-export function server({ stream, log, budget, probe = () => {}, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+/**
+ * The server. `probe` provokes a check (Safari to the api); `settle` closes Safari once more when a wait that probed ends
+ * (a probe's open can land late, the same fault as the link opens, and Safari would then sit over the app); `now` and
+ * `sleep` are injectable for tests.
+ */
+export function server({ stream, log, budget, probe = () => {}, settle = async () => {}, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const waits = new Map();
   let lastProbe = 0;
   let saidNoStream = false;
@@ -104,6 +109,7 @@ export function server({ stream, log, budget, probe = () => {}, now = Date.now, 
         if (wait) {
           writeFileSync(budget, JSON.stringify({ spentMs: spent() + (now() - wait.start) }));
           waits.delete(why);
+          if (wait.probed) await settle();
         }
         res.writeHead(200, { 'content-type': 'text/plain' }).end('ready');
         return;
@@ -111,6 +117,7 @@ export function server({ stream, log, budget, probe = () => {}, now = Date.now, 
       if (!wait) waits.set(why, { start: now(), update: openUpdate(trustd(text), now()) });
       if (d.probe && now() - lastProbe >= PROBE_EVERY_MS) {
         lastProbe = now();
+        waits.get(why).probed = true;
         probe();
       }
       if (now() >= until) { res.writeHead(200, { 'content-type': 'text/plain' }).end('wait'); return; }
@@ -133,6 +140,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url
     execFile('/usr/bin/xcrun', ['simctl', 'openurl', udid, `https://${host}/?trustd-wait=${Date.now()}`], () => {});
     setTimeout(() => execFile('/usr/bin/xcrun', ['simctl', 'terminate', udid, 'com.apple.mobilesafari'], () => {}), 4000);
   };
-  const s = server({ stream: arg('stream'), log: arg('log', '/dev/null'), budget: arg('budget', '/dev/null'), probe });
+  // Safari closed once more as a wait that probed ends, before the flow launches the app.
+  const settle = () => new Promise((r) => {
+    if (!udid) return r();
+    execFile('/usr/bin/xcrun', ['simctl', 'terminate', udid, 'com.apple.mobilesafari'], () => r());
+  });
+  const s = server({ stream: arg('stream'), log: arg('log', '/dev/null'), budget: arg('budget', '/dev/null'), probe, settle });
   s.listen(Number(arg('port', PORT)), '127.0.0.1', () => console.log(`trustd wait: listening on ${s.address().address}:${s.address().port}`));
 }

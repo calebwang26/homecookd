@@ -207,3 +207,11 @@ test('without JOURNEY_OPENURL_STREAM (outside the Journeys step) even openurl go
   assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 60);
   assert.equal(existsSync(s.log), false);
 });
+
+test("the stand-in's own default allowance is 45 s (LAND_S) when JOURNEY_OPENURL_WAIT_S isn't set", () => {
+  const s = setup(`console.error('Invalid device: UDID'); process.exit(148);`);
+  const env = { ...s.env };
+  delete env.JOURNEY_OPENURL_WAIT_S;
+  assert.equal(spawnSync(s.xcrun, ['simctl', 'openurl', 'UDID', 'homecookd://x'], { env }).status, 148);
+  assert.equal(JSON.parse(readFileSync(s.log, 'utf8')).wait, 45);
+});

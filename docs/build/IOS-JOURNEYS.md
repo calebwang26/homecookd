@@ -372,14 +372,22 @@ video plays.
   A failed journey with no failed check counted is named too, by its failure time, when that falls where trustd had
   checked nothing for 5 s with a rebuild still open: a download that hangs counts nothing (42939750084's journey 4: its
   stand-in clip download hung after the rebuild began at 01:50:21, trustd's last check was 01:50:39, and it failed at
-  01:51). Only a failed journey gets that line, with "re-run the job".
+  01:51). The line gives the gap's length and other processes' checks in it. It says "the simulator, not the app
+  (re-run the job)" only when another process's check failed in the gap (a check wanted and not given, as 42939750084
+  had); otherwise it hedges ("It may be the stall: re-run once, and if the same step fails again, it's the app"), because
+  a quiet trustd is also what an app making no requests looks like. A journey that passed never gets either.
   **The wait** (Master Agent, Nov 10; `scripts/journey-trust-wait.mjs`, `flows/trustd-ready.yaml`): before each fresh
-  launch and before journey 4's "I'm done", the flow asks a server on the runner (127.0.0.1 only, started and stopped
+  launch and before journey 4 starts filming, the flow asks a server on the runner (127.0.0.1 only, started and stopped
   with each round's Maestro) whether a rebuild is open, that is, "Pinning database should update" with no check 60 s or
   more after it began (in 42939750084 trustd still checked 18 s in, then nothing; the two seen to end took 1 m 54 s and
   6 m 20 s). None open: it answers at once. Open: before a launch, Safari provokes a check every 15 s, as the readiness
-  gate does, so a healthy idle trustd shows it's checking; inside journey 4 it only watches (Safari would take the
-  app's place) and gives up on a rebuild 10 minutes old. One budget of 12 minutes for the whole job, across both rounds,
+  gate does, so a healthy idle trustd shows it's checking, and Safari is closed 4 s after each probe and once more when
+  the wait ends. Left over: a probe's open can land late (the link-open fault), and if one lands after that last close,
+  Safari covers the app's first screen and that journey fails on it. Inside journey 4 it only watches (Safari would take
+  the app's place) and gives up on a rebuild 10 minutes old. Journey 4 waits on its ready screen, before filming, not
+  on the filming screen: filming cuts a new file every 5 minutes (CHUNK_MS), and each cut makes the stand-in download
+  its clip again, the very request a rebuild breaks. The ready screen keeps the phone awake (recording.tsx), and nothing
+  on it times out. One budget of 12 minutes for the whole job, across both rounds,
   keeps the worst case inside the 75 min timeout (about 56 min without waits). Each wait that held is a "Trust wait"
   warning with how long and why; a spent budget, a missing stream or an error answers at once and says so, never as a
   silent "ready". A wait never changes a journey's result: it only delays the next step.

@@ -99,14 +99,21 @@ export function journeyLines(journeys, t, gate) {
     if (!failed.length) {
       // A failed journey with no failed check counted can still have died in a stall: a download that hangs counts
       // nothing (42939750084's journey 4: its clip download hung after the rebuild began at 01:50:21, trustd's last
-      // check was 01:50:39, and the journey failed at 01:51). Named only for a failed journey whose failure time falls
-      // where trustd had checked nothing for STALL_GAP_MS, with a rebuild still open.
+      // check was 01:50:39, and the journey failed at 01:51). Considered only for a failed journey whose failure time
+      // falls where trustd had checked nothing for STALL_GAP_MS, with a rebuild still open. Quiet alone proves nothing
+      // (an app making no requests is quiet too), so it says "the simulator, not the app" only when another process's
+      // check failed in that gap (a check wanted and not given, as 42939750084 had); otherwise it hedges.
       if (passed !== false || !endMs) continue;
       const evals = [...t.evals, ...trustd(log).evals].sort((a, b) => a - b);
       const stop = evals.filter((ms) => ms < endMs).pop();
       const u = openUpdate({ updates: t.updates, evals }, endMs);
       if (!u || stop === undefined || endMs - stop < STALL_GAP_MS) continue;
-      out.push(`${name}: failed at ${hms(endMs)} with no failed certificate check counted, while trustd had checked nothing since ${hms(stop)}${after(stop, gate)}, during a pinning database update (${u.from} → ${u.to}) from ${hms(u.ms)}: the simulator stopped checking certificates, not the app (re-run the job)`);
+      const inGap = v.filter((x) => x.proc !== APP && x.ms > stop && x.ms <= endMs);
+      const gapFailed = inGap.filter((x) => !x.ok).length;
+      const said = `${name}: failed at ${hms(endMs)} with no failed check of its own counted; trustd had checked nothing for ${ago(Math.round((endMs - stop) / 1000))} (since ${hms(stop)}${after(stop, gate)}), during a pinning database update (${u.from} → ${u.to}) from ${hms(u.ms)}; other processes' checks in that gap: ${gapFailed} failed, ${inGap.length - gapFailed} passed`;
+      out.push(gapFailed
+        ? `${said}: the simulator stopped checking certificates, not the app (re-run the job)`
+        : `${said}. It may be the stall: re-run once, and if the same step fails again, it's the app`);
       continue;
     }
     const first = failed[0].ms;

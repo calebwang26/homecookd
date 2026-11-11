@@ -67,8 +67,9 @@ test('watch mode stops waiting on a rebuild 10 minutes old (it can\'t provoke a 
   assert.match(d.line, /with no check for 10 m 0 s; went on after holding 0 s \(it can't be provoked mid-journey\)$/);
 });
 
-test('the label a flow sends is cut to plain words', () => {
+test('the label a flow sends is cut to plain words, 40 characters at most', () => {
   assert.equal(label("journey 4's I'm done"), "journey 4's I'm done");
+  assert.equal(label('x'.repeat(60)), 'x'.repeat(40));
   assert.equal(label('a <b>https://x.test/?key=SECRET&t=1</b>'), 'a bhttpsx.testkeySECRETt1b');
   assert.equal(label(''), 'a journey');
 });
@@ -82,10 +83,11 @@ async function start(streamText, opts = {}) {
   const budget = path.join(dir, 'budget.json');
   let clock = opts.now ?? at('01:51:00');
   const probes = [];
-  const s = server({ stream, log, budget, probe: () => probes.push(clock), now: () => clock, sleep: async (ms) => { clock += ms; if (opts.onSleep) opts.onSleep(clock, stream); } });
+  const settled = [];
+  const s = server({ stream, log, budget, probe: () => probes.push(clock), settle: async () => { settled.push(clock); }, now: () => clock, sleep: async (ms) => { clock += ms; if (opts.onSleep) opts.onSleep(clock, stream); } });
   await new Promise((r) => s.listen(0, '127.0.0.1', r));
   const ask = async (q) => (await fetch(`http://127.0.0.1:${s.address().port}/trustd-ready?${q}`)).text();
-  return { s, ask, log, budget, probes, dir, setClock: (ms) => { clock = ms; } };
+  return { s, ask, log, budget, probes, settled, dir, setClock: (ms) => { clock = ms; } };
 }
 
 test('the server listens on 127.0.0.1 only, and answers "ready" at once with no stream, logging that once', async () => {
@@ -115,6 +117,10 @@ test('in a stall it holds each request at most HOLD_MS, probing in launch mode o
     assert.match(logged, /^trustd wait \(a fresh launch\): held 1 m 40 s for a pinning database update \(121 → 131\) from 01:50:21; trustd checked again at 01:52:30\n$/);
     assert.doesNotMatch(logged, /cloudfront|SECRET|key=/);
     assert.ok(JSON.parse(readFileSync(w.budget, 'utf8')).spentMs >= 100_000, 'the wait is taken off the job\'s budget');
+    assert.equal(w.settled.length, 1, 'Safari closed once more as the probing wait ended');
+    // The watch wait ends too, with no probe of its own: Safari isn't touched again for it.
+    assert.equal(await w.ask('mode=watch&why=watching'), 'ready');
+    assert.equal(w.settled.length, 1);
   } finally { w.s.close(); }
 });
 
