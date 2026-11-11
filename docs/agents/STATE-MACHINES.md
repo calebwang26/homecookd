@@ -56,6 +56,7 @@ test merged), **retired** (code goes with the old stack).
 | 35 | Dinner invite, invite page, shared recipe, clip playback | App Store, web & builds | `web/src/components/dinner-invite/`, `invite/`, `recipe-web/`, `dish/parts.tsx` | implicit | 3 |
 | 36 | A sheet torn down with its screen while its Modal is up (iOS: RN Fabric's `prepareForRecycle` never dismisses the presented Modal, so an empty one can stay over the app) | App screens | `react-native` `RCTModalHostViewComponentView.mm`; seen from `components/ui/BottomSheet.tsx` | implicit | 1.1.2 native |
 | 37 | Account & privacy: "Email the team a report" with `machineHistory()` and the device and app version (no Sentry in the app) | App screens | `app/src/app/index.tsx` Account sheet, `lib/machine.ts` | to build | 3 |
+| 38 | "Update homecookd" card (one App Store check per launch, Later) | App screens | `app/src/lib/appUpdate.ts` (the table, `runCheck`, `lookupEvent`, `snoozed`), `components/update/AppUpdateCard.tsx` (held for the launch, shared by both Homes); test `app/scripts/test-app-update.mjs` | explicit (built explicit, Nov 10) | 3 |
 
 **The invariant sweep (Nov 9).** Every 5 minutes `platform.invariants` (`api/src/modules/platform/invariants.ts`) counts the states that must never be
 true: a queued job with no wake-up owed for 3 h, a running job silent for 15 min, a push queued an hour past its time or sending for an hour, a dish ask merging for 10 min, an

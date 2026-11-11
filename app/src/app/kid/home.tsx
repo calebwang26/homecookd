@@ -1,5 +1,6 @@
 // Kid Home (round-2 note 1): a portal and nothing else. Top to bottom: yolk-tint wash -> "Hi, Leo" +
-// Leo's face ▾ (tap = "Who’s in the kitchen?", to switch people; no second "Leo") -> a swipeable row of every dish
+// Leo's face ▾ (tap = "Who’s in the kitchen?", to switch people; no second "Leo") -> "Update homecookd", only when the
+// App Store has a newer homecookd than this phone's build (components/update/AppUpdateCard) -> a swipeable row of every dish
 // (RecipeDeck, in the Recipes tab's Everyone order; tap a dish = open it in the Recipes tab) -> green "Start cooking"
 // (the Recipes tab) -> outline "Have a question about a dish?" (the Ask sheet: dish -> person -> that
 // chat). The row takes whatever height is left above the buttons, so everything clears the tab bar
@@ -14,6 +15,7 @@ import { RecipeDeck } from '@/components/kid-home/RecipeDeck';
 import { AskSheet } from '@/components/messages';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { cookOrder } from '@/components/recipes/RecipeList';
+import { AppUpdateCard } from '@/components/update/AppUpdateCard';
 import { ActionButton, EmptyState, LargeHeader, listEnter, ScreenWash, Skeleton, StickyHeader, useScrollY } from '@/components/ui';
 import { openRecipe } from '@/lib/navigation';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
@@ -59,6 +61,7 @@ export default function KidHome() {
         <ScreenWash tone="kid" height={360} />
         <LargeHeader title={name ? `Hi, ${name}` : 'Hi there'} right={<ProfileButton faceOnly homieRoom />} scrollY={scrollY} fadeEnd={56} />
         <ActingAsBar />
+        <AppUpdateCard style={styles.update} />
 
         {dishes.length ? (
           <>
@@ -100,6 +103,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
   content: { flexGrow: 1, paddingBottom: CONTENT_BOTTOM },
   gutter: { marginHorizontal: space.gutter },
+  update: { marginHorizontal: space.gutter, marginTop: space.lg },
   deck: { minHeight: DECK_MIN, marginTop: space.lg },
   actions: { marginTop: space.xxl, paddingHorizontal: space.gutter, gap: space.md },
 });

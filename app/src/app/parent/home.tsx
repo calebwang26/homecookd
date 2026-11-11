@@ -2,6 +2,8 @@
 // "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Switch family and Sign out)
 // + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
+//     Under it, only when the App Store has a newer homecookd than this phone's build: "Update homecookd" with
+//     Update / Later (components/update/AppUpdateCard)
 //     Under it, only when it happened: "Your recording stopped early. Send what was filmed?" (the app
 //     closed while she was filming, before "I'm done"; components/record/StoppedEarlyCard)
 //  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
@@ -15,7 +17,7 @@
 // ask comes. One CravingSheet serves both cards.
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
 // month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
-// `?preview=stopped` the stopped-early card.
+// `?preview=stopped` the stopped-early card, `?preview=update` the update card.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -27,6 +29,7 @@ import { CravingSheet } from '@/components/craving/CravingSheet';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
 import { useCravingSent } from '@/components/craving/useCravingSent';
 import { InviteButton } from '@/components/invite/InviteButton';
+import { AppUpdateCard } from '@/components/update/AppUpdateCard';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
@@ -132,6 +135,7 @@ export default function ParentHome() {
                 accessibilityHint={t('parent.home.recordHint')}
               />
             </Animated.View>
+            <AppUpdateCard enterIndex={1} />
             {open.map((a, i) => (
               <Animated.View key={a.id} entering={listEnter(i + 1)}>
                 <AskCard ask={a} />
