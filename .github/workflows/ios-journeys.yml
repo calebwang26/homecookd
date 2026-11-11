@@ -432,7 +432,7 @@ jobs:
           echo "T_WARM=$(date +%s)" >> "$GITHUB_ENV"
       # The signed-in journeys' people on staging (scripts/journey-people.mjs): a cook, her family link, and a kid who
       # joined by it. The link and both device keys are masked, then reach Maestro by $GITHUB_ENV. A fork's PR has no
-      # secret, so the journeys tagged needs-key (2, 3 and 4) are left out and say so; a key that's set but refused
+      # secret, so the journeys tagged needs-key (2, 3, 4 and 5) are left out and say so; a key that's set but refused
       # fails here, so a rotated key can't pass as a skip.
       # The step's name is the sweep's (journey-people-sweep.yml): rename both or neither.
       - name: Seed the journey test people
@@ -440,8 +440,8 @@ jobs:
           TEST_SIGNIN_KEY: ${{ !inputs.no_key && secrets.TEST_SIGNIN_KEY || '' }}
         run: |
           if [ -z "$TEST_SIGNIN_KEY" ]; then
-            echo "Journeys 2, 3 and 4 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
-            echo "> Journeys 2, 3 and 4 (family link sign-in; New message, Add family, Copy link; record and send) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
+            echo "Journeys 2, 3, 4 and 5 skipped: no TEST_SIGNIN_KEY (a fork's PR gets no secrets)."
+            echo "> Journeys 2, 3, 4 and 5 (family link sign-in; New message, Add family, Copy link; record and send; a kid opens a recipe and its video plays) skipped: no TEST_SIGNIN_KEY, as on a fork's PR." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           node scripts/journey-people.mjs setup "$RUNNER_TEMP/journey-people.json"
@@ -509,7 +509,7 @@ jobs:
         run: |
           # The same simulator, still booted, or no second attempt: this PR never boots another one.
           xcrun simctl list devices booted | grep -q "$UDID" || { echo "::error title=Journeys again::the simulator isn't booted any more, so there's no second attempt"; exit 1; }
-          FAMILY_LINK=${FAMILY_LINK_2:-} KID_KEY=${KID_KEY_2:-} COOK_KEY=${COOK_KEY_2:-} \
+          FAMILY_LINK=${FAMILY_LINK_2:-} KID_KEY=${KID_KEY_2:-} COOK_KEY=${COOK_KEY_2:-} KID5_KEY=${KID5_KEY_2:-} \
             scripts/journey-maestro.sh "$RUNNER_TEMP/maestro-out/attempt-2" "$RUNNER_TEMP/openurl-stream-2.log" "$RUNNER_TEMP/openurl-2.jsonl"
       # Before the scrub removes commands.json: the driver dropping at the same journey and step in both attempts is not
       # chance, so the job fails naming that point.
@@ -603,8 +603,12 @@ jobs:
             rm -rf "$d/commands.json" "$d/screen-hierarchy"
             find "$d/logs" -type f ! -name device-simulator.log -delete 2>/dev/null || true
           done
-          SECRETS=("${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-cook" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-kid"
-            "${KID_KEY_2:-}" "${COOK_KEY_2:-}" "${FAMILY_LINK_2#*t=}" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-r2-cook" "j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-r2-kid")
+          # Each round's people: Asha and Leo, and journey 5's Meera and Kabir (Kabir's key, Meera's link's token).
+          R="j${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SECRETS=("${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "${KID5_KEY:-}" "${FAMILY5_LINK#*t=}"
+            "$R-cook" "$R-kid" "$R-cook5" "$R-kid5"
+            "${KID_KEY_2:-}" "${COOK_KEY_2:-}" "${FAMILY_LINK_2#*t=}" "${KID5_KEY_2:-}" "${FAMILY5_LINK_2#*t=}"
+            "$R-r2-cook" "$R-r2-kid" "$R-r2-cook5" "$R-r2-kid5")
           # Each kept log (scripts/journey-scrub.mjs, tested): every value above, an S3 address's query string (a presigned
           # upload URL holds a temporary key id and session token: run 42852281034 logged one, cut short by iOS) and any
           # X-Amz value become ***. A log it can't read and rewrite, or that still holds one, is deleted with a warning.
@@ -613,7 +617,8 @@ jobs:
             "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log "$RUNNER_TEMP"/maestro-out/attempt-2/*/*/logs/device-simulator.log \
             "$RUNNER_TEMP"/maestro-out/trustd-summary.tx[t])
           while IFS= read -r LINE; do [ -z "$LINE" ] || echo "::warning title=Journey files::$LINE"; done <<< "$DROPS"
-          for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "${KID_KEY_2:-}" "${COOK_KEY_2:-}" "${FAMILY_LINK_2#*t=}"; do
+          for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}" "${KID5_KEY:-}" "${FAMILY5_LINK#*t=}" \
+            "${KID_KEY_2:-}" "${COOK_KEY_2:-}" "${FAMILY_LINK_2#*t=}" "${KID5_KEY_2:-}" "${FAMILY5_LINK_2#*t=}"; do
             [ -n "$v" ] || continue
             { grep -rlF -- "$v" "$RUNNER_TEMP/maestro-out" 2>/dev/null || true; } | while IFS= read -r f; do
               echo "::warning title=Journey files::dropped $(basename "$f"): it held a key or a link"; rm -f "$f"

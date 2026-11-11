@@ -322,6 +322,23 @@ phones.
   an older check that way with the upload at 0%). The cook, her family and what she sent go with the test
   people.
 
+**Journey 5 (Master Agent, Nov 10).** `app/e2e/journeys/05-kid-recipe.yaml`: a kid opens a recipe on his Home and its
+video plays.
+- Its own family, seeded beside Asha's by `scripts/journey-people.mjs`: "Meera (test)", whose family gets staging's
+  made-up test recipe (`POST /v1/test/recipe`, "Masala chai (test recipe)": three steps over a 24 s silent video, a still,
+  a silent voice track; no model call, no AI spend), and "Kabir (test)", who joins by her link. Not Asha's: a family with
+  a recipe doesn't show a new cook the two doors journeys 3 and 4 go through. Kabir's key (`KID5_KEY`) is the only value
+  that reaches Maestro; Meera's link token is masked and scrubbed too.
+- Kabir signs in through the hook and lands on "Hi, Kabir (test)"; his Home's row of dishes holds the recipe; it opens
+  ("Boil the water" is step 1), "Start cooking" goes to step 1, and "Watch this step" plays its 8 s clip.
+- The proof the video plays from staging's media host is the player's elapsed time reaching 0:01-0:07 (ProgressRow,
+  from expo-video's own time updates, shown only once the video moves; the clip's total reads 0:08). "Pause" alone
+  wouldn't do: the app shows it as soon as Play is tapped, before a frame arrives (`useClipVideo`'s `resume()`).
+- All four people of a round (eight with a second attempt) are deleted in "Delete the journey test people", each tried
+  even if one fails and each name logged; the step fails if any couldn't be, so the sweep tries them again. Meera's
+  recipe row and its `test-recipe-<id>/` media folder go with her account: the row at once, the folder after the same
+  7 h grace as journey 4's uploads.
+
 **Simulator faults seen so far (none is the app).** Each one has its own name, so a red run can be read at a glance:
 - **The certificate stall** (open, Nov 10): trustd stops answering every process's certificate checks for minutes.
   Apple's own NewsToday2 and NewsTag failed the same boringssl check alongside the app in 42846241678, and staging's
