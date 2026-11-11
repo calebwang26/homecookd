@@ -14,7 +14,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { windows } from './journey-retries.mjs';
+import { results, windows } from './journey-retries.mjs';
 
 // syslog style: 2026-11-10 21:09:10.190123+0000  localhost trustd[25642]: [com.apple.securityd:pinningDb] Pinning …
 const LINE = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d\.\d+)([+-]\d\d)(\d\d)\s+\S+\s+([^\s[]+)\[(\d+)\]: (.*)$/;
@@ -80,7 +80,9 @@ const after = (ms, gate) => {
  */
 export function journeyLines(journeys, t, gate) {
   const out = [];
-  for (const { name, log } of journeys) {
+  for (const { name, log, passed } of journeys) {
+    // "Re-run the job" only when this journey failed; one that got through the stall says so (run 42926262894).
+    const end = passed === true ? '; the journey got through it' : ' (re-run the job)';
     const v = verdicts(log);
     const failed = v.filter((x) => x.proc === APP && !x.ok);
     if (!failed.length) continue;
@@ -103,11 +105,11 @@ export function journeyLines(journeys, t, gate) {
       line += `; trustd evaluated nothing after ${hms(stop)}${after(stop, gate)}`;
       if (update && update.ms >= stop - 60_000) line += `, and started a pinning database update (${update.from} → ${update.to}) at ${hms(update.ms)}`;
       if (locked) line += `; its pinning database was locked ${locked} ${locked === 1 ? 'time' : 'times'}`;
-      line += ': the simulator stopped checking certificates, not the app (re-run the job)';
+      line += `: the simulator stopped checking certificates, not the app${end}`;
     } else if (!evals.length) {
-      line += '; trustd logged but evaluated nothing in this run: the simulator, not the app (re-run the job)';
+      line += `; trustd logged but evaluated nothing in this run: the simulator, not the app${end}`;
     } else if (otherFailed) {
-      line += '; other processes failed too: the simulator, not the app';
+      line += `; other processes failed too: the simulator, not the app${passed === true ? end : ''}`;
     } else {
       line += "; trustd kept evaluating and only the app's checks failed: look at the api's certificate";
     }
@@ -153,16 +155,18 @@ export function summary(t, journeys, gate) {
   return `${lines.join('\n')}\n`;
 }
 
-/** Each journey's name and its own device-simulator.log, in report.xml's order. */
+/** Each journey's name, its own device-simulator.log and whether it passed (report.xml), in report.xml's order. */
 export function journeyLogs(dir) {
   const out = [];
   if (!existsSync(dir)) return out;
   const xml = path.join(dir, 'report.xml');
-  const order = existsSync(xml) ? [...windows(readFileSync(xml, 'utf8')).keys()] : [];
+  const report = existsSync(xml) ? readFileSync(xml, 'utf8') : '';
+  const order = [...windows(report).keys()];
+  const passed = results(report);
   for (const run of readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory())) {
     for (const flow of readdirSync(path.join(dir, run.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
       const f = path.join(dir, run.name, flow.name, 'logs', 'device-simulator.log');
-      if (existsSync(f)) out.push({ name: flow.name, log: readFileSync(f, 'utf8') });
+      if (existsSync(f)) out.push({ name: flow.name, log: readFileSync(f, 'utf8'), passed: passed.get(flow.name) });
     }
   }
   return out.sort((a, b) => (order.indexOf(a.name) + 1 || Infinity) - (order.indexOf(b.name) + 1 || Infinity));
