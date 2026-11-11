@@ -59,6 +59,7 @@ export const alpha = {
   dashed: 'rgba(24,34,29,0.28)', // "Add family" dashed tile
   grabber: 'rgba(24,34,29,0.18)',
   backdrop: 'rgba(24,34,29,0.35)', // sheet backdrop (motion spec 4)
+  glass: 'rgba(24,34,29,0.08)', // over the light blur behind a centred popup: frosted glass, not a grey-out
   recordHalo: 'rgba(154,79,71,0.18)',
   yolkGlow: 'rgba(242,162,58,0.28)', // a soft yolk ring or halo (homie lit, the "you" dot)
   photoShadeTop: 'rgba(17,25,21,0)',
@@ -78,6 +79,7 @@ export const shadows = {
   card: '0 8px 24px rgba(24,34,29,0.06)', // list cards, panels
   cardRaised: '0 10px 30px rgba(24,34,29,0.08)', // "Leo asked you" / "Waiting for your answer"
   hero: '0 16px 40px rgba(24,34,29,0.16)', // Kid-Home hero card
+  popup: '0 20px 50px rgba(24,34,29,0.22)', // a centred popup over blurred glass ("Update homecookd")
   button: '0 4px 14px rgba(24,34,29,0.08)', // round white back / close buttons
   field: '0 4px 14px rgba(24,34,29,0.06)', // search field, voice search button
   chip: '0 2px 8px rgba(24,34,29,0.05)', // filter chips, "About ..." pill
