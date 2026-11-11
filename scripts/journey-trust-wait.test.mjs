@@ -84,7 +84,8 @@ async function start(streamText, opts = {}) {
   let clock = opts.now ?? at('01:51:00');
   const probes = [];
   const settled = [];
-  const s = server({ stream, log, budget, probe: () => probes.push(clock), settle: async () => { settled.push(clock); }, now: () => clock, sleep: async (ms) => { clock += ms; if (opts.onSleep) opts.onSleep(clock, stream); } });
+  const settle = opts.settle ?? (async () => {});
+  const s = server({ stream, log, budget, probe: () => probes.push(clock), settle: () => { settled.push(clock); return settle(); }, now: () => clock, sleep: async (ms) => { clock += ms; if (opts.onSleep) opts.onSleep(clock, stream); } });
   await new Promise((r) => s.listen(0, '127.0.0.1', r));
   const ask = async (q) => (await fetch(`http://127.0.0.1:${s.address().port}/trustd-ready?${q}`)).text();
   return { s, ask, log, budget, probes, settled, dir, setClock: (ms) => { clock = ms; } };
@@ -121,6 +122,28 @@ test('in a stall it holds each request at most HOLD_MS, probing in launch mode o
     // The watch wait ends too, with no probe of its own: Safari isn't touched again for it.
     assert.equal(await w.ask('mode=watch&why=watching'), 'ready');
     assert.equal(w.settled.length, 1);
+  } finally { w.s.close(); }
+});
+
+test('"ready" goes out only after Safari is closed: a slow settle holds the answer until it finishes', async () => {
+  // Answering first would let the flow launch the app while Safari still sits over it.
+  let closeSafari;
+  const closed = new Promise((r) => { closeSafari = r; });
+  const w = await start(STALL_488, { settle: () => closed });
+  try {
+    assert.equal(await w.ask('mode=launch&why=a%20fresh%20launch'), 'wait');
+    assert.equal(w.probes.length, 1);
+    writeFileSync(path.join(w.dir, 'stream.log'), `${STALL_488}\n${EVAL('01:52:30.000')}`);
+    w.setClock(at('01:52:40'));
+    let answered = null;
+    const asked = w.ask('mode=launch&why=a%20fresh%20launch').then((a) => { answered = a; return a; });
+    const waitFor = async (ok) => { for (let i = 0; i < 200 && !ok(); i += 1) await new Promise((r) => setTimeout(r, 10)); };
+    await waitFor(() => w.settled.length === 1);
+    assert.equal(w.settled.length, 1, 'the wait ended and began closing Safari');
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(answered, null, 'no answer while Safari is still closing');
+    closeSafari();
+    assert.equal(await asked, 'ready');
   } finally { w.s.close(); }
 });
 
