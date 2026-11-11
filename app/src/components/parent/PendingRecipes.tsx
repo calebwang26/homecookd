@@ -16,17 +16,21 @@
 // writes no status file, so a job is also done once its live stage is 'done' and its recipe (the
 // job's Convex recipeId, mapped to a library id through recipes.list) is in the library.
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, AppState, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { ensureJob, jobCreated } from '@/components/record/sendDraft';
+import { ensureJob, jobCreated, MAX_TITLE, NO_DISH } from '@/components/record/sendDraft';
+import { sendNoteAgain } from '@/components/record/useResendUnsent';
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
+import { errorMessage } from '@/lib/api';
 import { requestCancel } from '@/lib/deletes';
 import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
-import { dropUnsentFor } from '@/lib/unsentRecordings';
+import { failedNotes, noteForRow, sendAgainOffer } from '@/lib/unsentLogic';
+import { clipsHere, dropUnsentFor, loadUnsent, recordingFilesHere, subscribeUnsent, unsentUri, unsentVersion } from '@/lib/unsentRecordings';
 import { useWords } from '@/lib/words/useWords';
 import type { T } from '@/lib/words/words';
 import {
@@ -41,8 +45,9 @@ import {
   type StoredJob,
 } from '@/lib/uploads';
 
-import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
+import { isNoteRow, liveJobCancelled, liveJobFinished, noteRow, recipeIdsToLookUp, sendAgainRow, withNoteRows } from './jobsLogic';
 import { describeJob, ProcessingRow, stoppedView, type ProcessingView } from './ProcessingRow';
+import { sendAgain, sendAgainLook, useSendAgainVersion } from './sendAgain';
 import { flushStops, inTime, markGone, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
 
 const POLL_MS = 60_000;
@@ -90,11 +95,13 @@ export type PendingState = {
   views: Record<string, ProcessingView>;
   /** Stop (Undo for a few seconds), undo that, or clear, per the row's action. */
   act: (job: StoredJob) => void;
+  /** Her Send again on a row whose upload gave up (view.again): its kept videos, sent again (sendAgain). */
+  again: (job: StoredJob) => void;
   poll: () => Promise<void>;
 };
 
 export function usePendingRecipes(): PendingState {
-  const { me } = useSession();
+  const { me, family, profiles, learners } = useSession();
   const { entries } = useLibrary();
   const toast = useToast();
   const { t } = useWords();
@@ -104,6 +111,9 @@ export function usePendingRecipes(): PendingState {
   const [now, setNow] = useState(() => Date.now());
   const stops = useStops();
   const liveJobs = useLiveJobs(me?.role === 'cook');
+  // The kept recordings (Send again needs a row's note and its videos on the phone), and each one's Send again.
+  const notesVersion = useSyncExternalStore(subscribeUnsent, unsentVersion, unsentVersion);
+  const againVersion = useSendAgainVersion();
 
   // Re-read jobs and progress whenever an upload reports in.
   useEffect(
@@ -153,6 +163,19 @@ export function usePendingRecipes(): PendingState {
     const mine = new Set(jobs.map((j) => j.job_id));
     return liveJobs.filter((l) => RUNNING.has(l.stage) && !mine.has(uploadIdOf(l)) && stops.get(uploadIdOf(l)) !== 'gone');
   }, [liveJobs, jobs, stops]);
+
+  // A recording whose resend failed with no upload row left keeps a row of its own: the failed one, with Send
+  // again, until a send of it makes a job or she clears it (Caleb, Nov 10: "if he'll upload, should say send again").
+  const noteRows = useMemo(
+    () =>
+      failedNotes(loadUnsent(), { cookId: me?.id, familyId: family?.id, rows: jobs }).map((u) => {
+        const first = clipsHere(u)[0];
+        return noteRow(u, (u.dish ?? '').trim().slice(0, MAX_TITLE) || NO_DISH, first ? unsentUri(first) : null);
+      }),
+    // notesVersion: the kept recordings, read from their store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [jobs, me?.id, family?.id, notesVersion],
+  );
 
   // Every row sent from this phone gets its Convex job: jobs.create again until Convex lists it (jobRetry).
   useEffect(() => {
@@ -244,10 +267,23 @@ export function usePendingRecipes(): PendingState {
         }),
       ),
       ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l, t), undefined, now, l, undefined, t)])),
+      ...Object.fromEntries(noteRows.map((r) => [r.job_id, describeJob(r, undefined, now, undefined, undefined, t)])),
     };
     for (const [id, state] of stops) if (all[id] && state !== 'gone') all[id] = stoppedView(state, t);
+    // A row whose upload from this phone gave up: Send again when its videos are still here (Caleb, Nov 10). With
+    // no note left, its line comes from whether the recording's files are still here, never from why the note went.
+    const notes = loadUnsent();
+    for (const j of [...jobs, ...noteRows]) {
+      const v = all[j.job_id];
+      if (!v?.uploadFailed || stops.has(j.job_id)) continue;
+      const note = noteForRow(notes, j);
+      const offer = sendAgainOffer(note, note ? clipsHere(note).length : 0, !note && recordingFilesHere(j.recording_id));
+      all[j.job_id] = sendAgainRow(v, offer, note ? sendAgainLook(note.recordingId) : 'offer', t);
+    }
     return all;
-  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops, t]);
+    // notesVersion and againVersion: the kept recordings and each Send again, read above from their stores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, noteRows, stops, t, notesVersion, againVersion]);
 
   const act = useCallback(
     (job: StoredJob) => {
@@ -262,8 +298,9 @@ export function usePendingRecipes(): PendingState {
         return;
       }
       if (action === 'remove') {
-        // A stalled or half-sent upload is still open on the server: close it there too, quietly.
-        if ((statuses[job.job_id]?.status ?? 'uploading') === 'uploading') {
+        // A stalled or half-sent upload is still open on the server: close it there too, quietly. (A note's own row
+        // has no upload: its x only lets the recording go.)
+        if (!isNoteRow(job) && (statuses[job.job_id]?.status ?? 'uploading') === 'uploading') {
           cancelJobUploads(job.job_id);
           requestCancel(job.job_id).catch((err) => console.warn('[uploads] quiet cancel failed', err));
         }
@@ -278,18 +315,50 @@ export function usePendingRecipes(): PendingState {
     [views, statuses, stop, t],
   );
 
-  // Only this cook's recordings (another profile on this phone has their own list), then every other job of
-  // the family still in the pipeline, so nothing is ever processing out of sight. A stopped one is gone.
+  // One tap, one send (Send's own machine, per recording): her yes to the AI companies, then that note sent again
+  // the way a launch does; a failure says why and the button comes back. The old row goes once the new send starts.
+  const again = useCallback(
+    (job: StoredJob) => {
+      const note = noteForRow(loadUnsent(), job);
+      if (!note) return;
+      void sendAgain(note.recordingId, {
+        consent: () => ensureAiConsent(),
+        send: async (started) => {
+          let begun = false;
+          const r = await sendNoteAgain(note.recordingId, profiles, learners, () => {
+            begun = true;
+            started();
+          });
+          if (r === 'unreachable') throw new Error(t('parent.processing.cantReach'));
+          if (r === 'gone') throw new Error(t('parent.processing.videosGone'));
+          // The server already has it (queued or claimed): say so, not a quiet tap.
+          if (r === 'waiting' || r === 'busy') toast.show(t('parent.send.onItsWay'));
+          // Nothing was left to send (the server has the files, or it's already on its way): the row moves on by itself.
+          if (!begun) started();
+          setJobs(loadJobs());
+        },
+        failed: (e) => toast.show(errorMessage(e, t('parent.stopped.didntSend')), { tone: 'error' }),
+      });
+    },
+    [profiles, learners, t, toast],
+  );
+
+  // Only this cook's recordings (another profile on this phone has their own list), with her recordings that
+  // didn't send and have no upload row, then every other job of the family still in the pipeline, so nothing is
+  // ever processing out of sight. A stopped one is gone.
   const visible = useMemo(
     () =>
       [
-        ...jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
+        ...withNoteRows(
+          jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
+          noteRows,
+        ),
         ...liveOnly.map((l) => liveOnlyJob(l, t)),
       ].filter((j) => stops.get(j.job_id) !== 'gone'),
-    [jobs, statuses, me, liveOnly, stops, t],
+    [jobs, statuses, me, noteRows, liveOnly, stops, t],
   );
 
-  return { jobs: visible, views, act, poll };
+  return { jobs: visible, views, act, again, poll };
 }
 
 /** The rows for `jobs` (a filtered subset of pending.jobs is fine). */
@@ -308,6 +377,7 @@ export function PendingList({ pending, jobs = pending.jobs, startIndex = 0 }: { 
               onAction={() => pending.act(job)}
               onOpen={(id) => router.push({ pathname: '/my-recipe/[id]', params: { id } })}
               onRetry={() => router.push('/record')}
+              onSendAgain={() => pending.again(job)}
             />
           </Animated.View>
         );

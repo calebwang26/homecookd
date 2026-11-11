@@ -34,6 +34,11 @@ export type Unsent = {
   /** Sends (or jobs.create calls) started after a relaunch. */
   resends: number;
   /**
+   * A resend of it failed before its new upload existed (the rows of the job it replaced already gone, or it never
+   * had one): Home shows its own failed row, with Send again, until a send of it makes a job (failedNotes).
+   */
+  didntSend?: boolean;
+  /**
    * 'filming': written each time a 5-minute file is saved while she films, before "I'm done". Never
    * sent by itself: Home asks her (stoppedEarly). Unset: being sent (from "I'm done", Send, or Home).
    */
@@ -158,10 +163,75 @@ export function withoutUnsent(list: Unsent[], recordingId: string): Unsent[] {
   return list.filter((u) => u.recordingId !== recordingId);
 }
 
-/** Stopped or cleared on Home (that upload row): its note goes, found by the row's job, recording or note. */
-export function withoutUnsentFor(list: Unsent[], row: { job_id: string; recording_id?: string | null; unsent_id?: string | null }): Unsent[] {
+type RowIds = { job_id: string; recording_id?: string | null; unsent_id?: string | null };
+const rowHas = (row: RowIds) => {
   const ids = [row.recording_id, row.unsent_id].filter(Boolean);
-  return list.filter((u) => u.jobId !== row.job_id && !ids.includes(u.recordingId));
+  return (u: Unsent) => u.jobId === row.job_id || ids.includes(u.recordingId);
+};
+
+/** Stopped or cleared on Home (that upload row): its note goes, found by the row's job, recording or note. */
+export function withoutUnsentFor(list: Unsent[], row: RowIds): Unsent[] {
+  const has = rowHas(row);
+  return list.filter((u) => !has(u));
+}
+
+/** The note an upload row on Home came from (found the same way), if this phone still has it. */
+export function noteForRow(list: Unsent[], row: RowIds): Unsent | undefined {
+  return list.find(rowHas(row));
+}
+
+/**
+ * Her "Send again" on a row whose upload gave up (Caleb, Nov 10: "if he'll upload, should say send again"):
+ * 'send' when its note and some of its videos are still on this phone. With no note, 'kept' when the recording's
+ * own files still are (`filesHere`: a note dropped before Nov 10 left them in documents/recordings/), so the row
+ * never says they're gone, with no button (nothing is left to send them with). Else 'gone': the row says so
+ * plainly, with no button that can't work.
+ */
+export function sendAgainOffer(note: Unsent | undefined, clipsHere: number, filesHere = false): 'send' | 'kept' | 'gone' {
+  if (note) return clipsHere > 0 ? 'send' : 'gone';
+  return filesHere ? 'kept' : 'gone';
+}
+
+/**
+ * The launch's give-up (too many tries, or too old) stops sending it by itself. While a row of it is on Home (an
+ * upload row, or its own failed row: `didntSend`) the note stays, so her Send again still works, and it goes when
+ * she clears that row. With no row nothing shows it, so it goes (the in-app videos stay in documents/recordings/).
+ */
+export function keepAfterGiveUp(u: Pick<Unsent, 'didntSend'>, rowsHere: number): boolean {
+  return rowsHere > 0 || u.didntSend === true;
+}
+
+/**
+ * Her recordings whose resend failed with no upload row left (`didntSend`, no job): each gets its own failed row on
+ * Home, with Send again. Not one an upload row already covers (`rows`, found as Stop finds a row's note), nor one
+ * she's still to be asked about, nor another cook's or another family's.
+ */
+export function failedNotes(list: Unsent[], at: { cookId: string | null | undefined; familyId: string | null | undefined; rows: RowIds[] }): Unsent[] {
+  if (!at.cookId) return [];
+  return list.filter(
+    (u) =>
+      u.didntSend === true &&
+      !u.jobId &&
+      sendsBySelf(u) &&
+      u.cookId === at.cookId &&
+      u.familyId === (at.familyId ?? null) &&
+      !at.rows.some((r) => rowHas(r)(u)),
+  );
+}
+
+/**
+ * The pass found none of its videos on the phone ('gone'). A note whose send already failed with no upload row left
+ * (`didntSend`, no job) is kept, so its own row stays on Home and says so plainly ("…not on this phone any more", no
+ * button) until her x clears it: never gone from Home with no word. Nothing is sent (every later pass is 'gone' again).
+ * Any other note goes, as before (one with a job is left to its job; its upload row says how that went).
+ */
+export function keepWhenGone(u: Pick<Unsent, 'didntSend' | 'jobId'>): boolean {
+  return u.didntSend === true && !u.jobId;
+}
+
+/** What a note's upload job changes on it: a job made clears `didntSend` (its upload row is on Home now). */
+export function jobPatch(jobId: string | null): Partial<Unsent> {
+  return jobId ? { jobId, didntSend: undefined } : { jobId };
 }
 
 /**
@@ -190,9 +260,12 @@ export const REDO_AFTER_MS = 60 * 60_000;
  *   'send'      no job and no finished upload: send again
  *   'gone'      none of its videos are on the phone: nothing to send (its job is left alone: the files
  *               may have arrived)
- *   'give-up'   too many tries, or too old (the videos stay in documents/recordings/)
+ *   'give-up'   too many tries, or too old: not sent by itself any more (the videos stay in documents/recordings/,
+ *               and the note too while a row of it is on Home: keepAfterGiveUp)
  * `convexJob`: undefined = Convex couldn't say, null = no job. `upload`: this phone's row for the note's
- * job (null: none). `clipsHere`: how many of its videos are still on the phone.
+ * job (null: none). `clipsHere`: how many of its videos are still on the phone. `byHand`: her own "Send
+ * again" on Home, which is a fresh first try: no give-up for its tries or its age, and no hour's wait for a
+ * job missing files (every other rule, never a second copy on a guess included, still holds).
  */
 export type ResendStep = 'wait' | 'done' | 'create' | 'redo' | 'send' | 'gone' | 'give-up';
 
@@ -200,9 +273,11 @@ export type JobSeen = { stage: string | null; error?: string | null };
 
 export function resendStep(
   u: Pick<Unsent, 'resends' | 'savedAt'>,
-  at: { convexJob: JobSeen | null | undefined; upload: 'uploading' | 'uploaded' | 'failed' | null; clipsHere: number; now: number },
+  at: { convexJob: JobSeen | null | undefined; upload: 'uploading' | 'uploaded' | 'failed' | null; clipsHere: number; now: number; byHand?: boolean },
 ): ResendStep {
-  if (at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
+  const byHand = at.byHand === true;
+  const tooMany = !byHand && u.resends >= MAX_RESENDS;
+  if (!byHand && at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
   if (at.convexJob === undefined) return 'wait';
   const uploaded = at.upload === 'uploaded';
   if (at.convexJob) {
@@ -210,10 +285,10 @@ export function resendStep(
     if (stage === null || HAS_FILES.has(stage) || (stage === 'failed' && error === CANCELLED) || uploaded) return 'done';
     if (stage !== 'uploading') return 'wait';
     if (!at.clipsHere) return 'gone';
-    if (at.upload !== 'failed' && at.now - Date.parse(u.savedAt) < REDO_AFTER_MS) return 'wait';
-    return u.resends >= MAX_RESENDS ? 'give-up' : 'redo';
+    if (!byHand && at.upload !== 'failed' && at.now - Date.parse(u.savedAt) < REDO_AFTER_MS) return 'wait';
+    return tooMany ? 'give-up' : 'redo';
   }
-  if (uploaded) return u.resends >= MAX_RESENDS ? 'give-up' : 'create';
+  if (uploaded) return tooMany ? 'give-up' : 'create';
   if (!at.clipsHere) return 'gone';
-  return u.resends >= MAX_RESENDS ? 'give-up' : 'send';
+  return tooMany ? 'give-up' : 'send';
 }

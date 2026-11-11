@@ -5,10 +5,16 @@
 //                                              video, so the sending half of the bar isn't full
 //   uploadingRow(localState, live, …)          the same, unless this phone's own upload gave up: then
 //                                              the row says so ("Some videos didn't send")
+//   sendAgainRow(view, offer, look, t)         that row with her Send again (Caleb, Nov 10), or saying
+//                                              plainly its videos aren't on this phone
+//   noteRow(note, title, thumb)                a recording whose resend failed with no upload row left, as
+//                                              a failed row of its own (isNoteRow); withNoteRows puts them in
 //   liveJobFinished(worker, libraryIds, ...)   'done' and its recipe is in the library: drop the row
 //   recipeIdsToLookUp(workers, known)          finished jobs whose library id isn't known yet
 //   liveJobCancelled(worker)                   stopped (on this phone or another): drop the row
 import type { JobStage } from '@/lib/live/convex';
+import type { Unsent } from '@/lib/unsentLogic';
+import type { StoredJob } from '@/lib/uploads';
 import { english, type T, type WordKey } from '@/lib/words/words';
 
 type Worker = { stage: JobStage; recipeId?: string; error?: string };
@@ -59,6 +65,62 @@ export function uploadingRow(
 ): { failed: true; hint: string } | { failed: false; hint: string; send: number } {
   if (localState === 'failed') return { failed: true, hint: t('parent.processing.someFailed') };
   return { failed: false, ...uploadingView(live, received, expected, t) };
+}
+
+/**
+ * A row whose upload gave up, with her Send again (Caleb, Nov 10: "Yes, if he'll upload, should say send again").
+ * 'send' (its videos are still on this phone): "Your videos didn't send" and the button, in `look`'s state.
+ * 'kept' (no note left, but its files still are): "Your videos didn't send", never that they're gone, no button.
+ * 'gone': says plainly its videos aren't on this phone, with no button that can't work (the x still clears it).
+ */
+export function sendAgainRow<V extends { hint: string }>(
+  view: V,
+  offer: 'send' | 'kept' | 'gone',
+  look: 'offer' | 'sending' | 'error',
+  t: T = english,
+): V & { again: 'offer' | 'sending' | 'error' | null } {
+  if (offer === 'send') return { ...view, hint: t('parent.processing.didntSend'), again: look };
+  if (offer === 'kept') return { ...view, hint: t('parent.processing.didntSend'), again: null };
+  return { ...view, hint: t('parent.processing.videosGone'), again: null };
+}
+
+/** A note row's id: never an upload's (the signer makes those). */
+const NOTE_ROW = 'unsent:';
+
+/** A recording's own failed row (noteRow), not an upload's: nothing on the server to ask about or stop. */
+export const isNoteRow = (row: { job_id: string }) => row.job_id.startsWith(NOTE_ROW);
+
+/**
+ * A recording whose resend failed with no upload row left (unsentLogic failedNotes), as the failed row its upload
+ * had: "Your videos didn't send" with Send again, found by its note the way Stop and Send again find any row's.
+ * Never polled (the poll reads jobs.json) and never given a server job (ensureJob reads jobs.json too).
+ */
+export function noteRow(u: Pick<Unsent, 'recordingId' | 'local' | 'clips' | 'savedAt' | 'cookId'>, title: string, thumb: string | null): StoredJob {
+  return {
+    job_id: `${NOTE_ROW}${u.recordingId}`,
+    status_url: '',
+    title,
+    cook_name: '',
+    relation: '',
+    created_at: u.savedAt,
+    file_count: u.clips.length,
+    local_state: 'failed',
+    sender_id: u.cookId,
+    recording_id: u.local ? null : u.recordingId,
+    unsent_id: u.local ? u.recordingId : null,
+    thumb_video_uri: thumb,
+  };
+}
+
+/** The upload rows (newest first) with the note rows put in among them by when each was filmed. */
+export function withNoteRows(rows: StoredJob[], notes: StoredJob[]): StoredJob[] {
+  const at = (r: StoredJob) => Date.parse(r.created_at) || 0;
+  const out = [...rows];
+  for (const n of [...notes].sort((a, b) => at(b) - at(a))) {
+    const i = out.findIndex((r) => !notes.includes(r) && at(r) < at(n));
+    out.splice(i < 0 ? out.length : i, 0, n);
+  }
+  return out;
 }
 
 /**

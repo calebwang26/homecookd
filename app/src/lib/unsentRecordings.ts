@@ -17,7 +17,9 @@
 //   saveUnsent({ recordingId, cookId, familyId, clips, dish, language, forKids, everyone, requestFrom })
 //   saveFilming(same)   filmingOnScreen(recordingId, on)   startSending(recordingId)   deleteRecording(note)
 //   markUnsentJob(recordingId, jobId)   dropUnsent(recordingId)   dropUnsentFor(row)   countResend(recordingId)
+//   markUnsentDidntSend(recordingId)    a resend that failed with no upload row left: Home shows its own row
 //   loadUnsent()   stillUnsent(recordingId)   savedHere(recordingId)   clipsHere(note)   unsentUri(clip)
+//   recordingFilesHere(recordingId)     an in-app recording's own files are still in documents/recordings/
 //   await keepForSend(clips, noteId)   subscribeUnsent(listener) / unsentVersion()   (Home's card)
 //   cleanOrphanCopies()   once a launch (useResendUnsent): copies under sends/ that no note lists
 import { Directory, File, Paths } from 'expo-file-system';
@@ -30,6 +32,7 @@ import {
   copyPath,
   docPath,
   isFullUri,
+  jobPatch,
   orphanCopies,
   patchUnsent,
   withFilming,
@@ -154,9 +157,16 @@ export function backToFilming(recordingId: string) {
   if (list.some((u) => u.recordingId === recordingId && !u.jobId)) save(patchUnsent(list, recordingId, { state: 'filming' }));
 }
 
-export function markUnsentJob(recordingId: string, jobId: string) {
+/** The note's upload job (null: it has none now, e.g. the job it pointed at was stopped to send it again). */
+export function markUnsentJob(recordingId: string, jobId: string | null) {
   const list = loadUnsent();
-  if (list.some((u) => u.recordingId === recordingId)) save(patchUnsent(list, recordingId, { jobId }));
+  if (list.some((u) => u.recordingId === recordingId)) save(patchUnsent(list, recordingId, jobPatch(jobId)));
+}
+
+/** A resend of it failed with no upload row left (it has no job): Home shows its own failed row (failedNotes). */
+export function markUnsentDidntSend(recordingId: string) {
+  const list = loadUnsent();
+  if (list.some((u) => u.recordingId === recordingId && !u.jobId)) save(patchUnsent(list, recordingId, { didntSend: true }));
 }
 
 function remove(uri: string) {
@@ -243,6 +253,20 @@ export const savedHere = (recordingId: string) => mine.has(recordingId);
 /** Where the clip's video is now. */
 export function unsentUri(c: UnsentClip): string {
   return isFullUri(c.path) ? c.path : new File(Paths.document, c.path).uri;
+}
+
+/**
+ * An in-app recording's own files are still in documents/recordings/<id>/, whether or not a note lists them (only
+ * Delete on Home removes that folder; a note dropped before Nov 10 left them there with nothing pointing at them).
+ */
+export function recordingFilesHere(recordingId: string | null | undefined): boolean {
+  if (!native || !recordingId) return false;
+  try {
+    const dir = new Directory(Paths.document, 'recordings', recordingId);
+    return dir.exists && dir.list().some((f) => f instanceof File && (f.size ?? 0) > 0);
+  } catch {
+    return false;
+  }
 }
 
 /** Its videos that are still on the phone and not empty (a missing one is left out, the rest still go). */

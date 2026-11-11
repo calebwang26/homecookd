@@ -32,6 +32,7 @@ registerHooks({
 const J = await import(pathToFileURL(join(root, 'src/components/parent/jobsLogic.ts')).href);
 const S = await import(pathToFileURL(join(root, 'src/components/parent/stops.ts')).href);
 const R = await import(pathToFileURL(join(root, 'src/components/record/jobRetry.ts')).href);
+const U = await import(pathToFileURL(join(root, 'src/lib/unsentLogic.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -65,12 +66,82 @@ test('the row uses it: ProcessingRow\'s live-stage uploading branch shows a fail
   const branch = row.slice(from, row.indexOf('return { ...ok, hint: stageHint(worker.stage, t)', from));
   assert.ok(from > 0 && branch.length > 0, 'the live uploading branch');
   assert.match(branch, /uploadingRow\(job\.local_state,/, 'the live uploading branch asks uploadingRow with the stored state');
-  assert.match(branch, /if \(row\.failed\) return \{ \.\.\.problem, hint: row\.hint \};/, 'and returns the failed row');
+  assert.match(branch, /if \(row\.failed\) return \{ \.\.\.problem, hint: row\.hint, uploadFailed: true \};/, 'and returns the failed row');
   const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
   const at = home.indexOf("if (action === 'remove') {");
   const remove = home.slice(at, home.indexOf('removeJob(job.job_id);', at));
   assert.ok(at > 0 && remove.length > 0, 'the remove action');
   assert.match(remove, /markGone\(job\.job_id\);/, 'a cleared row\'s live job is stopped and not listed again');
+});
+
+test('Send again (Caleb, Nov 10): the failed row says it didn\'t send and offers the button, or says plainly its videos are gone', () => {
+  const v = { hint: 'Some videos didn’t send · send them again', problem: true, uploadFailed: true };
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'offer'), { ...v, hint: 'Your videos didn’t send', again: 'offer' });
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'sending'), { ...v, hint: 'Your videos didn’t send', again: 'sending' });
+  assert.deepEqual(J.sendAgainRow(v, 'send', 'error'), { ...v, hint: 'Your videos didn’t send', again: 'error' });
+  assert.deepEqual(J.sendAgainRow(v, 'gone', 'offer'), { ...v, hint: 'Your videos didn’t send, and they’re not on this phone any more', again: null }, 'no button that can\'t work');
+  assert.deepEqual(J.sendAgainRow(v, 'kept', 'offer'), { ...v, hint: 'Your videos didn’t send', again: null }, 'its files are here: never "not on this phone", and no button with no note');
+  // Both of describeJob's failed-upload rows are marked, so Home can offer it on either.
+  const row = readFileSync(join(root, 'src/components/parent/ProcessingRow.tsx'), 'utf8');
+  assert.equal((row.match(/uploadFailed: true/g) ?? []).length, 2);
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  assert.match(home, /if \(!v\?\.uploadFailed \|\| stops\.has\(j\.job_id\)\) continue;/);
+  assert.match(home, /const offer = sendAgainOffer\(note, note \? clipsHere\(note\)\.length : 0, !note && recordingFilesHere\(j\.recording_id\)\);\n\s*all\[j\.job_id\] = sendAgainRow\(v, offer, /, 'the line from whether the files are here');
+});
+
+test('a recording that didn\'t send and has no upload row: its own failed row, found by its note, never asked about on the server', () => {
+  const n = { recordingId: 'r1', clips: [{}, {}], savedAt: '2026-11-10T18:00:00Z', cookId: 'cook-1' };
+  const row = J.noteRow(n, 'Poha', 'file:///thumb.mp4');
+  assert.deepEqual(row, {
+    job_id: 'unsent:r1',
+    status_url: '',
+    title: 'Poha',
+    cook_name: '',
+    relation: '',
+    created_at: '2026-11-10T18:00:00Z',
+    file_count: 2,
+    local_state: 'failed',
+    sender_id: 'cook-1',
+    recording_id: 'r1',
+    unsent_id: null,
+    thumb_video_uri: 'file:///thumb.mp4',
+  });
+  assert.equal(J.isNoteRow(row), true);
+  assert.equal(J.isNoteRow({ job_id: 'family-recipe-1' }), false);
+  const local = J.noteRow({ ...n, recordingId: 'send-1', local: true }, 'family recipe', null);
+  assert.equal(local.recording_id, null);
+  assert.equal(local.unsent_id, 'send-1');
+  // Send again and the x find its note the way they find any row's.
+  const notes = [{ ...n, jobId: null }, { ...n, recordingId: 'send-1', local: true, jobId: null }];
+  assert.equal(U.noteForRow(notes, row), notes[0]);
+  assert.equal(U.noteForRow(notes, local), notes[1]);
+  assert.deepEqual(U.withoutUnsentFor(notes, row), [notes[1]], 'her x lets that recording go');
+  // No server job behind it: no Convex job to make (ensureJob), no failed jobs.create to report; describeJob's
+  // failed-upload line is what it shows.
+  assert.equal(row.convex_job, undefined);
+  assert.equal(row.job_fields, undefined);
+  const proc = readFileSync(join(root, 'src/components/parent/ProcessingRow.tsx'), 'utf8');
+  assert.match(proc, /if \(job\.local_state === 'failed'\) return \{ \.\.\.problem, hint: t\('parent\.processing\.someFailed'\), uploadFailed: true \};/);
+  // Home: her failed notes as rows, with the failed row's view and Send again, on screen, and an x that asks the
+  // server nothing.
+  const home = readFileSync(join(root, 'src/components/parent/PendingRecipes.tsx'), 'utf8');
+  assert.match(home, /failedNotes\(loadUnsent\(\), \{ cookId: me\?\.id, familyId: family\?\.id, rows: jobs \}\)/);
+  assert.match(home, /\.\.\.Object\.fromEntries\(noteRows\.map\(\(r\) => \[r\.job_id, describeJob\(r, undefined, now, undefined, undefined, t\)\]\)\)/);
+  assert.match(home, /for \(const j of \[\.\.\.jobs, \.\.\.noteRows\]\) \{/);
+  assert.match(home, /\.\.\.withNoteRows\(\n\s*jobs\.filter\([^\n]*\),\n\s*noteRows,\n\s*\)/);
+  assert.match(home, /if \(!isNoteRow\(job\) && \(statuses\[job\.job_id\]\?\.status \?\? 'uploading'\) === 'uploading'\) \{/);
+});
+
+test('note rows go in among the upload rows by when they were filmed, newest first', () => {
+  const r = (id, at) => ({ job_id: id, created_at: at });
+  const rows = [r('a', '2026-11-10T12:00:00Z'), r('b', '2026-11-09T12:00:00Z')];
+  const n1 = r('unsent:1', '2026-11-10T15:00:00Z');
+  const n2 = r('unsent:2', '2026-11-09T18:00:00Z');
+  const n3 = r('unsent:3', '2026-11-01T00:00:00Z');
+  const n4 = r('unsent:4', '2026-11-09T20:00:00Z');
+  assert.deepEqual(J.withNoteRows(rows, [n2, n1, n3, n4]).map((x) => x.job_id), ['unsent:1', 'a', 'unsent:4', 'unsent:2', 'b', 'unsent:3']);
+  assert.deepEqual(J.withNoteRows(rows, []).map((x) => x.job_id), ['a', 'b']);
+  assert.deepEqual(J.withNoteRows([], [n2, n1]).map((x) => x.job_id), ['unsent:1', 'unsent:2']);
 });
 
 test('uploading: this phone’s own progress, else the server’s count; never a full sending half', () => {
