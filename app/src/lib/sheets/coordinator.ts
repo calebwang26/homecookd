@@ -6,6 +6,7 @@
 //   afterClose(() => router.push(...))        once every sheet up now has gone (+ SETTLE_MS)
 //   afterClose(() => pick.record(), 600)      ... and never sooner than 600 ms (a native camera or picker)
 //   useSheetsUp()                             how many sheets' Modals are up (root hosts wait for 0)
+//   useSheetsHeld()                           how many sheets wait to present (the update popup gives way to them)
 //   showEventFor(id, ancestors)               what `visible` turning true becomes: held while another is up
 //   moveSheet(id, state, event)               a sheet's move, recorded at once; returns the next state
 //   modalGone(id)                             its Modal unmounted in this commit: hidden from now
@@ -173,6 +174,17 @@ export function useModalClaim(closingMs: number = CLOSING_WAIT_MS) {
 
 export function useSheetsUp(): number {
   return useSyncExternalStore(subscribeSheets, () => upCount(), () => 0);
+}
+
+/** Sheets held, waiting for every other Modal to go before they present (scripts/test-app-update.mjs tests it). */
+export function heldCount(): number {
+  let n = 0;
+  for (const s of sheets.values()) if (s === 'held') n += 1;
+  return n;
+}
+
+export function useSheetsHeld(): number {
+  return useSyncExternalStore(subscribeSheets, heldCount, () => 0);
 }
 
 /** Re-renders on any sheet change (Toast's viewport choice). */

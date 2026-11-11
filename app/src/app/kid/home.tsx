@@ -5,6 +5,8 @@
 // chat). The row takes whatever height is left above the buttons, so everything clears the tab bar
 // on any phone. No recipes: the warm empty state, with one way to ask the family (and invite them)
 // on the Ask tab. ActingAsBar (a lent phone) and MoveRequestPrompt stay: they are system states.
+// Over it all, only when the App Store has a newer homecookd than this phone's build: "Update homecookd", a popup in the
+// middle of the screen over blurred glass (components/update/AppUpdatePopup); Home's own layout doesn't move.
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
@@ -14,6 +16,7 @@ import { RecipeDeck } from '@/components/kid-home/RecipeDeck';
 import { AskSheet } from '@/components/messages';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { cookOrder } from '@/components/recipes/RecipeList';
+import { AppUpdatePopup } from '@/components/update/AppUpdatePopup';
 import { ActionButton, EmptyState, LargeHeader, listEnter, ScreenWash, Skeleton, StickyHeader, useScrollY } from '@/components/ui';
 import { openRecipe } from '@/lib/navigation';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
@@ -92,6 +95,7 @@ export default function KidHome() {
       <StickyHeader title={name ? `Hi, ${name}` : 'Home'} scrollY={scrollY} start={56} />
       <MoveRequestPrompt />
       <AskSheet visible={asking} onClose={() => setAsking(false)} />
+      <AppUpdatePopup />
     </View>
   );
 }

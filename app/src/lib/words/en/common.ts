@@ -5,6 +5,12 @@ export const COMMON = {
   'common.language.lineQuiet': 'homecookd will show its words in it.',
   'common.language.saveFailed': 'That didn’t save. Try again.',
   'common.back': 'Back',
+  // The App Store has a newer homecookd (components/update/AppUpdatePopup, lib/appUpdate).
+  'common.appUpdate.title': 'Update homecookd',
+  'common.appUpdate.line': 'A new version is ready in the App Store.',
+  'common.appUpdate.update': 'Update',
+  'common.appUpdate.later': 'Later',
+  'common.appUpdate.updateHint': 'Opens homecookd in the App Store',
   // lib/format: greetings, days, months, times and lists.
   'common.greet.morning': 'Good morning',
   'common.greet.afternoon': 'Good afternoon',

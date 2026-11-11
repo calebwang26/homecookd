@@ -13,9 +13,11 @@
 // keep it simple). Under it a kid's open ask ("Caleb wants your braised pork"), and before she has shared her
 // craving link a quiet card, "Your loved ones miss your cooking." / "Ask what they're craving →" (no photo, no button), and after it "Sent! We'll tell you when they pick a dish." until an
 // ask comes. One CravingSheet serves both cards.
+// Over it all, only when the App Store has a newer homecookd than this phone's build: "Update homecookd", a popup in the
+// middle of the screen over blurred glass (components/update/AppUpdatePopup); Home's own layout doesn't move.
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
 // month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
-// `?preview=stopped` the stopped-early card.
+// `?preview=stopped` the stopped-early card, `?preview=update` the update popup.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -27,6 +29,7 @@ import { CravingSheet } from '@/components/craving/CravingSheet';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
 import { useCravingSent } from '@/components/craving/useCravingSent';
 import { InviteButton } from '@/components/invite/InviteButton';
+import { AppUpdatePopup } from '@/components/update/AppUpdatePopup';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
@@ -156,6 +159,7 @@ export default function ParentHome() {
       </ScrollHold>
       <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
+      <AppUpdatePopup />
       <CravingSheet
         visible={craving}
         onClose={() => setCraving(false)}
