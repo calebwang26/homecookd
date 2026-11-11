@@ -11,7 +11,7 @@
 //                                    a Home drawn again that week has it with its first layout
 //
 // The call goes through its own small fetch so lib/api.ts stays as it is (the same headers the api
-// client sends, from getApiAuth; the moveRequests.ts pattern), plus x-tz (getApiTimeZone, like
+// client sends, from getApiAuth; the moveApi.ts pattern), plus x-tz (getApiTimeZone, like
 // lib/tableApi.ts: none while the web `?as=` dev aid borrows the build's code, so a screenshot never
 // stores a zone on that family's profile). React-free on purpose: the logic here
 // runs under Node in scripts/test-recap.mjs. The server's shapes are supabase/functions/api/recap.ts &
