@@ -23,11 +23,11 @@ function staging(answers) {
 }
 
 test('ids come from the run alone, so a sweep can find them', () => {
-  assert.deepEqual(idsFor(42664613421, 2), { cook: 'j42664613421-2-cook', kid: 'j42664613421-2-kid' });
+  assert.deepEqual(idsFor(42664613421, 2), { cook: 'j42664613421-2-cook', kid: 'j42664613421-2-kid', cook5: 'j42664613421-2-cook5', kid5: 'j42664613421-2-kid5' });
   assert.match(idsFor(42664613421, 2).cook, /^[a-z0-9-]{1,40}$/); // staging's test_id rule
   // The second set, for the journeys' second attempt: other people, found again the same way.
-  assert.deepEqual(idsFor(42664613421, 2, 2), { cook: 'j42664613421-2-r2-cook', kid: 'j42664613421-2-r2-kid' });
-  assert.match(idsFor(42664613421, 2, 2).cook, /^[a-z0-9-]{1,40}$/);
+  assert.deepEqual(idsFor(42664613421, 2, 2), { cook: 'j42664613421-2-r2-cook', kid: 'j42664613421-2-r2-kid', cook5: 'j42664613421-2-r2-cook5', kid5: 'j42664613421-2-r2-kid5' });
+  for (const id of Object.values(idsFor(42664613421, 2, 2))) assert.match(id, /^[a-z0-9-]{1,40}$/);
 });
 
 test("a family link becomes the app's own form", () => {
@@ -51,25 +51,52 @@ test('a 429 waits once and tries again', async () => {
   assert.equal(waited, 61_000);
 });
 
-test('setup keeps the ids before any sign-in, then joins the kid by the cook’s link', async () => {
+/** Staging as the seed sees it: each cook's family is named after her; a kid joins the family whose link token she brings. */
+const families = { AbCdEfGhIjKlMnOpQrStUv: 'Asha (test)’s family', ZyXwVuTsRqPoNmLkJiHgFe: 'Meera (test)’s family' };
+const seedStaging = (state, also = {}) => staging({
+  '/v1/test/sign-in': (body) => {
+    assert.deepEqual(JSON.parse(readFileSync(state, 'utf8')), idsFor(7, 1)); // all four written first, before any sign-in
+    const fam = body.join_token ? families[body.join_token] : `${body.name}’s family`;
+    return json(200, { device_key: `key-${body.test_id}`, profile_id: `p-${body.test_id}`, family_name: fam });
+  },
+  '/join-links': (_b, calls) => json(200, { url: `https://homecookd.app/i?t=${calls[calls.length - 1].headers['x-device-key'] === 'key-j7-1-cook' ? 'AbCdEfGhIjKlMnOpQrStUv' : 'ZyXwVuTsRqPoNmLkJiHgFe'}` }),
+  '/v1/sessions/start': json(200, { sessionToken: 'st-meera' }),
+  '/v1/test/recipe': json(201, { recipeId: 'r1', title: 'Masala chai (test recipe)' }),
+  ...also,
+});
+
+test('setup keeps all four ids before any sign-in, joins each kid by its cook’s link, and gives Meera the test recipe', async () => {
   const state = join(dir, 'setup.json');
   const masked = [];
-  const { f, calls } = staging({
-    '/v1/test/sign-in': (body) => {
-      assert.deepEqual(JSON.parse(readFileSync(state, 'utf8')), idsFor(7, 1)); // written first
-      return json(200, { device_key: `key-${body.test_id}`, profile_id: `p-${body.test_id}`, family_name: 'Asha (test)’s family' });
-    },
-    '/join-links': json(200, { url: 'https://homecookd.app/i?t=AbCdEfGhIjKlMnOpQrStUv' }),
-  });
+  const { f, calls } = seedStaging(state);
   const out = await setup('the-key', state, idsFor(7, 1), f, (line) => masked.push(line));
-  assert.deepEqual(out, { familyLink: 'homecookd://i?t=AbCdEfGhIjKlMnOpQrStUv', kidKey: 'key-j7-1-kid', cookKey: 'key-j7-1-cook', familyName: 'Asha (test)’s family' });
-  assert.deepEqual(calls.map((c) => c.path), ['/v1/test/sign-in', '/join-links', '/v1/test/sign-in']);
+  assert.deepEqual(out, { familyLink: 'homecookd://i?t=AbCdEfGhIjKlMnOpQrStUv', kidKey: 'key-j7-1-kid', cookKey: 'key-j7-1-cook', familyName: 'Asha (test)’s family', kid5Key: 'key-j7-1-kid5', family5Link: 'homecookd://i?t=ZyXwVuTsRqPoNmLkJiHgFe' });
+  assert.deepEqual(calls.map((c) => c.path), [
+    '/v1/test/sign-in', '/join-links', '/v1/test/sign-in', // Asha, her link, Leo
+    '/v1/test/sign-in', '/join-links', '/v1/test/sign-in', // Meera, her link, Kabir
+    '/v1/sessions/start', '/v1/test/recipe', // Meera's session, then staging's made-up recipe in her family
+  ]);
   assert.equal(calls[0].headers['x-test-signin-key'], 'the-key');
   assert.deepEqual(calls[0].body, { test_id: 'j7-1-cook', name: 'Asha (test)', role: 'cook' });
   assert.equal(calls[1].headers['x-device-key'], 'key-j7-1-cook');
   assert.deepEqual(calls[2].body, { test_id: 'j7-1-kid', name: 'Leo (test)', role: 'learner', join_token: 'AbCdEfGhIjKlMnOpQrStUv' });
+  assert.deepEqual(calls[3].body, { test_id: 'j7-1-cook5', name: 'Meera (test)', role: 'cook' });
+  assert.deepEqual(calls[5].body, { test_id: 'j7-1-kid5', name: 'Kabir (test)', role: 'learner', join_token: 'ZyXwVuTsRqPoNmLkJiHgFe' });
+  assert.deepEqual(calls[6].body, { deviceKey: 'key-j7-1-cook5', profileId: 'p-j7-1-cook5' });
+  assert.equal(calls[7].headers['x-test-signin-key'], 'the-key');
+  assert.equal(calls[7].headers.authorization, 'Bearer st-meera');
   // every value the log could show is masked before it's used
-  assert.deepEqual(masked, ['::add-mask::key-j7-1-cook', '::add-mask::AbCdEfGhIjKlMnOpQrStUv', '::add-mask::key-j7-1-kid']);
+  assert.deepEqual(masked, [
+    '::add-mask::key-j7-1-cook', '::add-mask::AbCdEfGhIjKlMnOpQrStUv', '::add-mask::key-j7-1-kid',
+    '::add-mask::key-j7-1-cook5', '::add-mask::ZyXwVuTsRqPoNmLkJiHgFe', '::add-mask::key-j7-1-kid5', '::add-mask::st-meera',
+  ]);
+});
+
+test('setup fails when the test recipe is refused, with the people already in the state file for delete', async () => {
+  const state = join(dir, 'refused.json');
+  const { f } = seedStaging(state, { '/v1/test/recipe': json(501, { code: 'not_moved' }) });
+  await assert.rejects(setup('k', state, idsFor(7, 1), f, () => {}), /the test recipe answered 501/);
+  assert.deepEqual(JSON.parse(readFileSync(state, 'utf8')), idsFor(7, 1));
 });
 
 test('setup fails when the kid lands in another family', async () => {
@@ -87,19 +114,31 @@ test('delete signs each in again and deletes, kid first, and never throws', asyn
     '/v1/sessions/start': json(200, { sessionToken: 'st' }),
     '/v1/account/delete': json(200, { deleted: true }),
   });
-  await remove('k', idsFor(9, 1), f, (l) => log.push(l));
-  assert.deepEqual(log, ['deleted Leo (test)', 'deleted Asha (test)']);
+  assert.equal(await remove('k', idsFor(9, 1), f, (l) => log.push(l)), 0);
+  assert.deepEqual(log, ['deleted Leo (test)', 'deleted Asha (test)', 'deleted Kabir (test)', 'deleted Meera (test)']);
   assert.equal(calls.find((c) => c.path === '/v1/account/delete').headers.authorization, 'Bearer st');
 
   const failing = staging({ '/v1/test/sign-in': json(500, {}) });
   const warned = [];
-  await remove('k', idsFor(9, 1), failing.f, (l) => warned.push(l));
-  assert.equal(warned.length, 2);
+  assert.equal(await remove('k', idsFor(9, 1), failing.f, (l) => warned.push(l)), 4);
+  assert.equal(warned.length, 4);
   assert.match(warned[0], /^::warning .*could not delete Leo \(test\)/);
+
+  // One that fails doesn't stop the rest: Asha's sign-in fails, the other three are deleted, and it says 1 failed.
+  const one = staging({
+    '/v1/test/sign-in': (body) => (body.test_id === 'j9-1-cook' ? json(500, {}) : json(200, { device_key: `key-${body.test_id}`, profile_id: `p-${body.test_id}` })),
+    '/v1/sessions/start': json(200, { sessionToken: 'st' }),
+    '/v1/account/delete': json(200, { deleted: true }),
+  });
+  const mixed = [];
+  assert.equal(await remove('k', idsFor(9, 1), one.f, (l) => mixed.push(l)), 1);
+  assert.equal(mixed.length, 4);
+  assert.deepEqual([mixed[0], mixed[2], mixed[3]], ['deleted Leo (test)', 'deleted Kabir (test)', 'deleted Meera (test)']);
+  assert.match(mixed[1], /^::warning title=Journey test people::could not delete Asha \(test\): /);
 
   const second = [];
   await remove('k', idsFor(9, 1, 2), f, (l) => second.push(l), ' (second attempt)');
-  assert.deepEqual(second, ['deleted Leo (test) (second attempt)', 'deleted Asha (test) (second attempt)']);
+  assert.deepEqual(second, ['deleted Leo (test) (second attempt)', 'deleted Asha (test) (second attempt)', 'deleted Kabir (test) (second attempt)', 'deleted Meera (test) (second attempt)']);
 });
 
 test('the sweep finds runs that seeded and never finished deleting', () => {
