@@ -8,7 +8,7 @@
 // missing. Every dish of mine that was asked for comes back, zeros included; the UI hides zero parts.
 //
 // The calls go through their own small fetch so lib/api.ts stays as it is (the same pattern as
-// lib/moveRequests.ts); the headers are the ones the api client sends (getApiAuth). Plain TS with no
+// lib/moveApi.ts); the headers are the ones the api client sends (getApiAuth). Plain TS with no
 // React Native imports, so scripts/test-hearts.mjs runs it under Node. The hooks that keep the
 // answers fresh are in components/hearts/useDishStats.ts.
 // TODO(wiring): fold these into lib/api.ts as api.dishStats / api.heartsRecent with DishStats and
