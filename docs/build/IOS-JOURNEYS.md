@@ -333,6 +333,13 @@ phones.
   (#482's line) has the times. In 42898927696 trustd's last check was 21:09:08; at 21:09:10 it logged "Pinning database
   should update from version 121 to version 131" and checked nothing for the six minutes left ("database is locked" at
   21:14:22), so every process failed, not only the app.
+  **The first rebuild seen to end** (run 42926262894, #486's own run, green): trustd pid 39565 started "Pinning database
+  should update from version 121 to version 131" at 00:12:02, 5 m 1 s after the trust check passed; its database was
+  locked 155 times, 00:12:12–00:13:54, and it evaluated again at 00:13:55, 1 m 54 s after the rebuild began. "Family link,
+  name, sign in" had 9 failed app checks and 12 from other processes in 00:12:29–00:13:31 and still passed (2 m 31 s):
+  its Try again outlasted the stall. 42898927696's rebuild hadn't ended six minutes in. That run's summary also shows
+  three trustd pids (one per relaunch, the third the one that rebuilt). One ended stall is not a pattern: no wait is
+  built on it until two or three ended stalls give their lengths.
   **It names itself** ("Name a certificate stall", `scripts/journey-trust.mjs`): trustd's own log is streamed from boot
   and stays on the runner. Each journey whose app had a check fail gets a "Certificate checks failed" warning: when
   trustd last checked anything (and how long after the trust check passed), whether it was rebuilding or locked, and

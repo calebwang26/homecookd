@@ -41,6 +41,14 @@ test('42898927696: trustd stopped after the gate, so the journey names the simul
   ]);
 });
 
+test('a journey that got through the stall says so, with no re-run advice (run 42926262894: it passed)', () => {
+  const [passedLine] = journeyLines([{ name: 'New message, Add family, Copy link', log: J3, passed: true }], trustd(STREAM), GATE);
+  assert.match(passedLine, /: the simulator stopped checking certificates, not the app; the journey got through it$/);
+  assert.doesNotMatch(passedLine, /re-run/);
+  const [failedLine] = journeyLines([{ name: 'New message, Add family, Copy link', log: J3, passed: false }], trustd(STREAM), GATE);
+  assert.match(failedLine, /not the app \(re-run the job\)$/);
+});
+
 test("trustd evaluating while only the app fails points at the api's certificate, not the simulator", () => {
   const stream = [EVAL('21:09:00.000'), EVAL('21:09:40.000'), EVAL('21:10:30.000')].join('\n');
   const log = [CHECK('21:09:30.000', 'homecookd', false), CHECK('21:09:45.000', 'nsurlsessiond', true), CHECK('21:10:40.000', 'homecookd', false)].join('\n');
