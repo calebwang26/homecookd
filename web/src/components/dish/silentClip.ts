@@ -18,3 +18,21 @@ export function silentClip(decoded: boolean | null, bytes: number, durationS: nu
   if (decoded !== null) return decoded;
   return bytes < FLOOR_BYTES_PER_S * durationS;
 }
+
+/** How long the clip's own decode may take before it counts as "couldn't tell" (a slow phone, a long answer). */
+export const DECODE_MS = 2000;
+
+/**
+ * silentClip on a decode that may never finish: once `ms` pass, it counts as "couldn't tell" (null), so the size
+ * floor decides, the same as a decode that failed.
+ */
+export function silentWithin(decoding: Promise<boolean | null>, bytes: number, durationS: number, ms = DECODE_MS): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((r) => {
+    timer = setTimeout(() => r(null), ms);
+  });
+  return Promise.race([decoding, late]).then((decoded) => {
+    clearTimeout(timer);
+    return silentClip(decoded, bytes, durationS);
+  });
+}
