@@ -1,0 +1,50 @@
+# Journey 5 (docs/build/IOS-JOURNEYS.md): a kid opens a recipe on his Home and its video plays.
+# The seed (scripts/journey-people.mjs) made journey 5 its own family: "Meera (test)", whose family has staging's made-up
+# test recipe ("Masala chai (test recipe)": three steps over a 24 s silent video, from POST /v1/test/recipe, no model
+# call; it goes with her account), and "Kabir (test)", who joined by her link. Not Asha's family: a family with a recipe
+# doesn't show a new cook the welcome journeys 3 and 4 go through. KID5_KEY is Kabir's masked device key, for the
+# simulator-only sign-in hook. Without TEST_SIGNIN_KEY (a fork's PR) the workflow leaves this journey out.
+#
+# What it proves: the kid's Home lists his family's recipe, it opens, and step 1's video really plays from staging's media
+# host. The proof is the player's elapsed time (components/media/ProgressRow, from expo-video's own timeUpdate events, and
+# shown only once the video moves) reaching 0:01-0:07; step 1 is 8 s long, so its total reads 0:08 and can't match.
+# "Pause" alone wouldn't prove it: the app shows Pause as soon as Play is tapped, before a frame arrives
+# (lib/media.ts, useClipVideo's resume()).
+appId: ${APP_ID}
+name: A kid opens a recipe and its video plays
+tags:
+  - needs-key
+---
+# A fresh install, signed out, on the first screen, whatever an earlier journey left (flows/launch-fresh.yaml).
+- runFlow:
+    file: ../flows/launch-fresh.yaml
+# Signed in as Kabir, as the Apple button would: the kid's Home in Meera's family.
+- runFlow:
+    file: ../flows/open-link.yaml
+    env:
+      LINK: homecookd://e2e/sign-in?key=${KID5_KEY}
+      EXPECT: ".*Hi, Kabir \\(test\\).*"
+# His Home's row of dishes holds Meera's recipe.
+- extendedWaitUntil:
+    visible: ".*Masala chai \\(test recipe\\).*"
+    timeout: 20000
+- takeScreenshot: 05-kid-home
+- tapOn: ".*Masala chai \\(test recipe\\).*"
+# The recipe: its steps, and "Start cooking" to step 1.
+- extendedWaitUntil:
+    visible: "Start cooking"
+    timeout: 20000
+- assertVisible: ".*Boil the water.*"
+- takeScreenshot: 05-recipe
+- tapOn: "Start cooking"
+# Step 1 and its clip ("Watch this step: Boil the water, 0:08", cook/[id].tsx): tap play, then wait for the video's own
+# clock to move.
+- extendedWaitUntil:
+    visible: ".*Watch this step.*"
+    timeout: 20000
+- takeScreenshot: 05-step-1
+- tapOn: ".*Watch this step.*"
+- extendedWaitUntil:
+    visible: "0:0[1-7]"
+    timeout: 30000
+- takeScreenshot: 05-playing

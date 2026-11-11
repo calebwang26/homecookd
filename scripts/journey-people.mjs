@@ -1,9 +1,12 @@
 // The iOS journeys' test people on AWS staging (docs/build/IOS-JOURNEYS.md, "Test people"). Plain fetch, no packages, so
 // the sweep runs without npm ci. TEST_SIGNIN_KEY comes from the environment and is never printed.
 //   node scripts/journey-people.mjs setup <state>   a cook ("Asha (test)") and her family link; a kid ("Leo (test)") who
-//                                                    joined by it. Masks, then writes FAMILY_LINK, KID_KEY and COOK_KEY
-//                                                    (each one's device key, for the e2e sign-in link) to $GITHUB_ENV
-//   node scripts/journey-people.mjs delete <state>  deletes both (if: always()); a missing state file is nothing to do
+//                                                    joined by it; and journey 5's family: "Meera (test)" with staging's
+//                                                    test recipe, and "Kabir (test)" who joined by her link. Masks, then
+//                                                    writes FAMILY_LINK, KID_KEY, COOK_KEY, KID5_KEY (device keys, for the
+//                                                    e2e sign-in link) and FAMILY5_LINK (only for the scrub) to $GITHUB_ENV
+//   node scripts/journey-people.mjs delete <state>  deletes all four (if: always()), each tried even if one fails, and
+//                                                    exits 1 when any couldn't be; a missing state file is nothing to do
 //   setup|delete <state> --round 2                   the second set, for the journeys' second attempt after Maestro lost
 //                                                    the simulator (scripts/journey-unreachable.mjs): ids …-r2-cook|kid,
 //                                                    FAMILY_LINK_2, KID_KEY_2 and COOK_KEY_2, and "(second attempt)" in
@@ -17,14 +20,24 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs
 import { pathToFileURL } from 'node:url';
 
 export const API = process.env.EXPO_PUBLIC_AWS_URL || 'https://d2zh46br3dalyf.cloudfront.net';
-export const PEOPLE = { cook: { name: 'Asha (test)', role: 'cook' }, kid: { name: 'Leo (test)', role: 'learner' } };
+// cook5 and kid5 are journey 5's own family: its cook has staging's test recipe, and a family with a recipe doesn't
+// show a new cook the two doors that journeys 3 and 4 expect, so it can't be Asha's.
+export const PEOPLE = {
+  cook: { name: 'Asha (test)', role: 'cook' },
+  kid: { name: 'Leo (test)', role: 'learner' },
+  cook5: { name: 'Meera (test)', role: 'cook' },
+  kid5: { name: 'Kabir (test)', role: 'learner' },
+};
+/** What staging's POST /v1/test/recipe {} makes (api/src/modules/recipes/testRecipe.ts DEFAULT_TITLE). */
+export const TEST_RECIPE_TITLE = 'Masala chai (test recipe)';
 export const SEED_STEP = 'Seed the journey test people';
 export const SEED2_STEP = 'Seed new test people for the second attempt';
 export const DELETE_STEP = 'Delete the journey test people';
 
 export const idsFor = (runId, attempt, round = 1) => {
   const r = round === 2 ? '-r2' : '';
-  return { cook: `j${runId}-${attempt}${r}-cook`, kid: `j${runId}-${attempt}${r}-kid` };
+  const id = (who) => `j${runId}-${attempt}${r}-${who}`;
+  return { cook: id('cook'), kid: id('kid'), cook5: id('cook5'), kid5: id('kid5') };
 };
 
 /** The app's own form of a family link (https://homecookd.app/i?t=X → homecookd://i?t=X): a Release build without signing has no universal links. */
@@ -73,12 +86,34 @@ export async function setup(key, state, ids, f = fetch, mask = maskInActions) {
   const kid = await signIn(key, ids.kid, 'kid', { join_token: familyLink.split('t=')[1] }, f);
   mask(`::add-mask::${kid.device_key}`);
   if (kid.family_name !== cook.family_name) throw new Error('the kid did not join the cook’s family');
-  return { familyLink, kidKey: kid.device_key, cookKey: cook.device_key, familyName: cook.family_name };
+
+  // Journey 5's family: Meera, with staging's made-up test recipe (no model call; its files and row go with her
+  // account), and Kabir, who joined by her link. Only Kabir's key reaches Maestro.
+  const cook5 = await signIn(key, ids.cook5, 'cook5', {}, f);
+  mask(`::add-mask::${cook5.device_key}`);
+  const link5 = await call('/join-links', { headers: { 'x-device-key': cook5.device_key, 'x-profile-id': cook5.profile_id } }, f);
+  if (link5.status !== 200 || !link5.json?.url) throw new Error(`join link answered ${link5.status}`);
+  const token5 = appLink(link5.json.url).split('t=')[1];
+  mask(`::add-mask::${token5}`);
+  const kid5 = await signIn(key, ids.kid5, 'kid5', { join_token: token5 }, f);
+  mask(`::add-mask::${kid5.device_key}`);
+  if (kid5.family_name !== cook5.family_name) throw new Error('journey 5’s kid did not join its cook’s family');
+  const session = await call('/v1/sessions/start', { body: { deviceKey: cook5.device_key, profileId: cook5.profile_id } }, f);
+  if (session.status !== 200 || !session.json?.sessionToken) throw new Error(`session answered ${session.status}`);
+  mask(`::add-mask::${session.json.sessionToken}`);
+  const recipe = await call('/v1/test/recipe', { headers: { 'x-test-signin-key': key, authorization: `Bearer ${session.json.sessionToken}` } }, f);
+  if (recipe.status !== 201) throw new Error(`the test recipe answered ${recipe.status}`);
+
+  return { familyLink, kidKey: kid.device_key, cookKey: cook.device_key, familyName: cook.family_name, kid5Key: kid5.device_key, family5Link: `homecookd://i?t=${token5}` };
 }
 
-/** Signs each one in again and deletes the account. Never throws: one that's already gone is fine. */
+/**
+ * Signs each one in again and deletes the account, every one even if one fails (each name logged). Never throws; returns
+ * how many couldn't be deleted, so the delete step can fail at the end and the sweep tries them again.
+ */
 export async function remove(key, ids, f = fetch, log = console.log, label = '') {
-  for (const who of ['kid', 'cook']) {
+  let failed = 0;
+  for (const who of ['kid', 'cook', 'kid5', 'cook5']) {
     if (!ids[who]) continue;
     try {
       const p = await signIn(key, ids[who], who, {}, f);
@@ -89,8 +124,10 @@ export async function remove(key, ids, f = fetch, log = console.log, label = '')
       log(`deleted ${PEOPLE[who].name}${label}`);
     } catch (e) {
       log(`::warning title=Journey test people::could not delete ${PEOPLE[who].name}${label}: ${e.message}`);
+      failed += 1;
     }
   }
+  return failed;
 }
 
 /**
@@ -163,11 +200,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   if (step === 'setup') {
     const out = await setup(key, state, idsFor(process.env.GITHUB_RUN_ID ?? `local${Date.now()}`, process.env.GITHUB_RUN_ATTEMPT ?? '1', round));
-    if (process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `FAMILY_LINK${suffix}=${out.familyLink}\nKID_KEY${suffix}=${out.kidKey}\nCOOK_KEY${suffix}=${out.cookKey}\n`);
-    console.log(`Seeded${label}: a cook and a kid who joined her family by its link (${out.familyName}).`);
+    if (process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `FAMILY_LINK${suffix}=${out.familyLink}\nKID_KEY${suffix}=${out.kidKey}\nCOOK_KEY${suffix}=${out.cookKey}\nKID5_KEY${suffix}=${out.kid5Key}\nFAMILY5_LINK${suffix}=${out.family5Link}\n`);
+    console.log(`Seeded${label}: a cook and a kid who joined her family by its link (${out.familyName}); for journey 5, another cook with "${TEST_RECIPE_TITLE}" and a kid in her family.`);
   } else if (step === 'delete') {
-    if (existsSync(state)) await remove(key, JSON.parse(readFileSync(state, 'utf8')), fetch, console.log, label);
-    else console.log(`No test people were made${label}.`);
+    if (!existsSync(state)) console.log(`No test people were made${label}.`);
+    else if (await remove(key, JSON.parse(readFileSync(state, 'utf8')), fetch, console.log, label)) process.exitCode = 1;
   } else {
     await sweep(key);
   }
