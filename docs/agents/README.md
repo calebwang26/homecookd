@@ -79,7 +79,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [person-who-comes-back](memory/person-who-comes-back.md) | Someone who left or moved and came back is tied to their old row, only for deletion |
 | [uptime-first](memory/uptime-first.md) | Nov 7: the app never crashes, about 99.9% uptime; the reliable production option by default, cost beside it |
 | [send-again-failed-upload](memory/send-again-failed-upload.md) | Nov 10: a recording whose upload gave up gets a real Send again on Home (Caleb: "if he'll upload, should say send again") |
-| [app-update-card](memory/app-update-card.md) | Nov 10: 1.1 gets an "Update homecookd" card (App Store button, Later) when Apple's lookup has a newer version; not built for 1.0 |
+| [app-update-card](memory/app-update-card.md) | Nov 10: 1.1 gets an "Update homecookd" popup (App Store button, Later) when Apple's lookup has a newer version; Caleb, that evening: centred, over blurred glass; not built for 1.0 |
 
 Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "The App UI session" and
 "the other session" in these notes were other Claude Code sessions, so they no longer exist.

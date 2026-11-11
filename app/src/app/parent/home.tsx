@@ -2,8 +2,6 @@
 // "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Switch family and Sign out)
 // + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
-//     Under it, only when the App Store has a newer homecookd than this phone's build: "Update homecookd" with
-//     Update / Later (components/update/AppUpdateCard)
 //     Under it, only when it happened: "Your recording stopped early. Send what was filmed?" (the app
 //     closed while she was filming, before "I'm done"; components/record/StoppedEarlyCard)
 //  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
@@ -15,9 +13,11 @@
 // keep it simple). Under it a kid's open ask ("Caleb wants your braised pork"), and before she has shared her
 // craving link a quiet card, "Your loved ones miss your cooking." / "Ask what they're craving →" (no photo, no button), and after it "Sent! We'll tell you when they pick a dish." until an
 // ask comes. One CravingSheet serves both cards.
+// Over it all, only when the App Store has a newer homecookd than this phone's build: "Update homecookd", a popup in the
+// middle of the screen over blurred glass (components/update/AppUpdatePopup); Home's own layout doesn't move.
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
 // month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
-// `?preview=stopped` the stopped-early card, `?preview=update` the update card.
+// `?preview=stopped` the stopped-early card, `?preview=update` the update popup.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -29,7 +29,7 @@ import { CravingSheet } from '@/components/craving/CravingSheet';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
 import { useCravingSent } from '@/components/craving/useCravingSent';
 import { InviteButton } from '@/components/invite/InviteButton';
-import { AppUpdateCard } from '@/components/update/AppUpdateCard';
+import { AppUpdatePopup } from '@/components/update/AppUpdatePopup';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
@@ -135,7 +135,6 @@ export default function ParentHome() {
                 accessibilityHint={t('parent.home.recordHint')}
               />
             </Animated.View>
-            <AppUpdateCard enterIndex={1} />
             {open.map((a, i) => (
               <Animated.View key={a.id} entering={listEnter(i + 1)}>
                 <AskCard ask={a} />
@@ -160,6 +159,7 @@ export default function ParentHome() {
       </ScrollHold>
       <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
+      <AppUpdatePopup />
       <CravingSheet
         visible={craving}
         onClose={() => setCraving(false)}

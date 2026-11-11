@@ -7,6 +7,9 @@
 //    turns the drag off and hides the grabber (a sheet that only its own buttons may answer).
 //  - `success={{ title, subtitle }}` runs the Luma confirmation: the content fades out, a
 //    SuccessBurst plays at the top-centre, holds 1.4 s, then `onSuccessDone` (default: onClose).
+//  - `placement="center"` (the "Update homecookd" popup, Caleb Nov 10): the same sheet in the middle of the
+//    screen over blurred glass (a light blur, no grey-out), all corners round, no grabber or drag; it fades and
+//    grows in (0.94 -> 1) and fades out on the same timings. Its lifecycle is the same as every sheet's.
 // Renders in a transparent native Modal so it sits above tabs and navigators on iOS and web.
 // Its lifecycle is the table in lib/sheets/machine.ts (hidden, held, open, closing), held in one place by
 // lib/sheets/coordinator.ts. iOS: a sheet that becomes visible while any other sheet's Modal is up (one
@@ -32,7 +35,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useMachine } from '@/lib/machine';
 import { forgetSheet, holdSheet, modalGone, moveSheet, showEventFor } from '@/lib/sheets/coordinator';
 import { isUp, sheetMachine } from '@/lib/sheets/machine';
-import { alpha, colors, motion, radii } from '@/theme/tokens';
+import { alpha, colors, motion, radii, shadows } from '@/theme/tokens';
 
 import { CloseIcon } from './icons';
 import { IconButton } from './IconButton';
@@ -72,6 +75,8 @@ export type BottomSheetProps = {
    * whose onClose records an answer (the push ask's 30-day snooze) passes one that records nothing.
    */
   onDropped?: () => void;
+  /** 'bottom' (default): slides up from the bottom. 'center': a popup in the middle of the screen over blurred glass. */
+  placement?: 'bottom' | 'center';
 };
 
 /** The sheets a sheet's content sits inside: a sheet rendered there presents over them, so they don't hold it. */
@@ -99,7 +104,9 @@ export function BottomSheet({
   onTrace,
   onShown,
   onDropped,
+  placement = 'bottom',
 }: BottomSheetProps) {
+  const center = placement === 'center';
   const sheetId = useId();
   const ancestors = useContext(SheetAncestors);
   const inside = useMemo(() => [...ancestors, sheetId], [ancestors, sheetId]);
@@ -230,14 +237,19 @@ export function BottomSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [success?.title]);
 
+  // A centred popup fades and grows in with the backdrop; a bottom sheet slides.
   const sheetStyle = useAnimatedStyle(() =>
-    reduce ? { opacity: back.value, transform: [{ translateY: 0 }] } : { opacity: 1, transform: [{ translateY: Math.max(y.value, -24) }] },
+    center
+      ? { opacity: back.value, transform: [{ scale: reduce ? 1 : 0.94 + 0.06 * back.value }] }
+      : reduce
+        ? { opacity: back.value, transform: [{ translateY: 0 }] }
+        : { opacity: 1, transform: [{ translateY: Math.max(y.value, -24) }] },
   );
   const backStyle = useAnimatedStyle(() => ({ opacity: back.value }));
   const contentStyleA = useAnimatedStyle(() => ({ opacity: content.value }));
 
   const drag = Gesture.Pan()
-    .enabled(dismissOnDrag)
+    .enabled(dismissOnDrag && !center)
     .activeOffsetY(8)
     .onChange((e) => {
       y.set(Math.max(0, y.get() + e.changeY));
@@ -264,8 +276,17 @@ export function BottomSheet({
       <SheetAncestors.Provider value={inside}>
         <GestureHandlerRootView style={styles.fill}>
           <Animated.View style={[StyleSheet.absoluteFill, backStyle]}>
-            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha.backdrop }]} />
+            {center ? (
+              <>
+                <BlurView intensity={GLASS_BLUR} tint="light" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha.glass }]} />
+              </>
+            ) : (
+              <>
+                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha.backdrop }]} />
+              </>
+            )}
             <Pressable
               style={StyleSheet.absoluteFill}
               onPress={dismissOnBackdrop && !success ? onClose : undefined}
@@ -273,9 +294,13 @@ export function BottomSheet({
               accessibilityLabel="Close"
             />
           </Animated.View>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.anchor} pointerEvents="box-none">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={center ? [styles.middle, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }] : styles.anchor}
+            pointerEvents="box-none">
             <Animated.View
               accessibilityViewIsModal
+              role={center ? 'dialog' : undefined}
               accessibilityLabel={accessibilityLabel ?? title}
               onLayout={(e) => {
                 const h = e.nativeEvent.layout.height;
@@ -283,15 +308,19 @@ export function BottomSheet({
                 if (Number.isFinite(h) && h > 0) setSheetH(h);
               }}
               style={[
-                styles.sheet,
-                { backgroundColor: background, maxHeight: winH * maxHeightRatio, paddingBottom: Math.max(insets.bottom, 16) + 8 },
+                center ? styles.popup : styles.sheet,
+                { backgroundColor: background, maxHeight: winH * maxHeightRatio, paddingBottom: center ? 24 : Math.max(insets.bottom, 16) + 8 },
                 sheetStyle,
               ]}>
-              <GestureDetector gesture={drag}>
-                <View style={styles.handleZone}>
-                  {dismissOnDrag ? <View style={styles.grabber} /> : null}
-                </View>
-              </GestureDetector>
+              {center ? (
+                <View style={styles.popupTop} />
+              ) : (
+                <GestureDetector gesture={drag}>
+                  <View style={styles.handleZone}>
+                    {dismissOnDrag ? <View style={styles.grabber} /> : null}
+                  </View>
+                </GestureDetector>
+              )}
               {showClose ? (
                 <IconButton
                   icon={(c) => <CloseIcon size={18} color={c} />}
@@ -325,15 +354,21 @@ export function BottomSheet({
   );
 }
 
+/** The centred popup's backdrop: a light blur, so Home shows through as frosted glass (Caleb: "like blurry glass"). */
+const GLASS_BLUR = 50;
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   anchor: { flex: 1, justifyContent: 'flex-end' },
+  middle: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   sheet: {
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
     overflow: 'hidden',
     boxShadow: '0 -10px 30px rgba(24,34,29,0.10)',
   },
+  popup: { width: '100%', maxWidth: 440, borderRadius: radii.sheet, overflow: 'hidden', boxShadow: shadows.popup },
+  popupTop: { height: 20 },
   handleZone: { height: 24, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 8 },
   grabber: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: alpha.grabber },
   close: { position: 'absolute', right: 16, top: 16, zIndex: 2 },
