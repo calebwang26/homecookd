@@ -72,6 +72,19 @@ test('a quiet gap with no failed check from anyone only hedges: it may be the st
   assert.doesNotMatch(line, /not the app|re-run the job/);
 });
 
+test("only checks inside the quiet gap count: a failed check before trustd's last one, or after the journey failed, still hedges", () => {
+  // The gap is (01:50:39, 01:51:20]. nsurlsessiond failing at 01:50:35 (trustd still checking) or at 01:51:30 (the
+  // journey already over) says nothing about the stall that ended this journey.
+  const log = [
+    CHECK('01:50:35.000', 'nsurlsessiond', false),
+    CHECK('01:51:00.000', 'nsurlsessiond', true),
+    CHECK('01:51:30.000', 'nsurlsessiond', false),
+  ].join('\n');
+  const [line] = journeyLines([{ name: 'J', log, passed: false, endMs: atMs('01:51:20') }], trustd(STALL_488), null);
+  assert.match(line, /other processes' checks in that gap: 0 failed, 1 passed\. It may be the stall: re-run once, and if the same step fails again, it's the app$/);
+  assert.doesNotMatch(line, /not the app|re-run the job/);
+});
+
 test('no such line for a journey that passed, one that failed after trustd checked again, or one with no end time', () => {
   const j = (o) => ({ name: 'J', log: '', ...o });
   assert.deepEqual(journeyLines([j({ passed: true, endMs: atMs('01:51:20') })], trustd(STALL_488), null), []);
