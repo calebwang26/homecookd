@@ -18,14 +18,14 @@
 // locked recipe view (the /r mechanism on the dish card's version): the recipe, ingredients and steps open;
 // any other tap says "Get the app", and the sheet copies the page's link, then opens the store. A parent's craving link (/miss?c=, §8): her name and line,
 // the kid's name required, the card tied to her; a stopped, bad or full link falls back to the plain page. Every screen
-// is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
+// is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure, 2 when the Mac's audio clock is stalled (synthetic-mic.mjs). Flags: --base, --out, --chrome (default:
 // /Applications/Google Chrome.app), --port (fake), --uploads (raw, the default, or links).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startFake } from './dish-fake-server.mjs';
 import { printMachineHistory } from './machine-history.mjs';
-import { micInit } from './synthetic-mic.mjs';
+import { AUDIO_ARGS, audioClockStalled, micInit } from './synthetic-mic.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
 
@@ -61,8 +61,14 @@ const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, merg
 const browser = await chromium.launch({
   executablePath: CHROME,
   headless: true,
-  args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+  args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...AUDIO_ARGS],
 });
+const stalled = MIC === 'synthetic' ? await audioClockStalled(browser) : null;
+if (stalled) {
+  console.log(stalled);
+  await browser.close();
+  process.exit(2);
+}
 
 const pages = [];
 async function phone(locale = 'en-US') {

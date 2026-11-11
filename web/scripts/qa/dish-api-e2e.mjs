@@ -1,6 +1,6 @@
 // The dish pages end to end in real Chrome against a real api: not the fake. A kid makes a card from a made-up dish with a test photo, saves it and asks Mom;
 // Mom answers by voice with Chrome's fake audio device and sends; the kid reopens and sees her version. Models may be fake, so this checks states, never sentences
-// a model wrote. Any request that fails and any CORS error in the console is a failure. Exits 1 on a failure. Made-up content only.
+// a model wrote. Any request that fails and any CORS error in the console is a failure. Exits 1 on a failure, 2 when the Mac's audio clock is stalled (synthetic-mic.mjs). Made-up content only.
 //
 //   Locally (api/test/localApi.ts: real routes and Postgres, fake models and storage):
 //     cd api && DATABASE_URL=postgres://postgres:t@localhost:15451/t npx tsx test/localApi.ts
@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { micInit } from './synthetic-mic.mjs';
+import { AUDIO_ARGS, audioClockStalled, micInit } from './synthetic-mic.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright-core');
 
@@ -85,8 +85,14 @@ function watch(page, who) {
 const browser = await chromium.launch({
   executablePath: CHROME,
   headless: true,
-  args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+  args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required', ...AUDIO_ARGS],
 });
+const stalled = MIC === 'synthetic' ? await audioClockStalled(browser) : null;
+if (stalled) {
+  console.log(stalled);
+  await browser.close();
+  process.exit(2);
+}
 
 async function phone(who, locale = 'en-US') {
   const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 2, locale, permissions: ['microphone', 'clipboard-read', 'clipboard-write'] });
