@@ -6,6 +6,8 @@
 //                MediaRecorder records real audio and the page's silence check hears it
 //   'denied'     rejects with NotAllowedError, as "Don't Allow" does
 //   'hung'       never settles, as a permission prompt left open (or a browser that never answers)
+//   'no-frames'  a live audio track that never delivers audio, as a mic cut off mid-answer (a call, Siri,
+//                another app): Chrome's MediaRecorder then saves a 110-byte webm with only its header
 //   'device'     leaves getUserMedia alone (Chrome's fake device, with its launch flags)
 //
 // The tone is made by an AudioContext, which runs on the clock of the audio output. On Nov 11 this Mac's
@@ -39,7 +41,7 @@ export async function audioClockStalled(browser) {
   }
 }
 
-/** @param {'synthetic' | 'denied' | 'hung' | 'device'} mode */
+/** @param {'synthetic' | 'denied' | 'hung' | 'no-frames' | 'device'} mode */
 export function micInit(mode) {
   if (mode === 'device') return '';
   return `(() => {
@@ -50,6 +52,7 @@ export function micInit(mode) {
       if (!c || !c.audio) return Promise.reject(new DOMException('Only audio here', 'NotSupportedError'));
       if (mode === 'denied') return Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
       if (mode === 'hung') return new Promise(() => {});
+      if (mode === 'no-frames') return Promise.resolve(new MediaStream([new MediaStreamTrackGenerator({ kind: 'audio' })]));
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();

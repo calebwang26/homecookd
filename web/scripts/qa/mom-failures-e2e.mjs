@@ -6,6 +6,7 @@
 //   in-app     an Instagram in-app browser that refuses the mic
 //   refused    every saved answer comes back 415 (a lasting refusal)
 //   finish     her Send comes back 503
+//   no-frames  her mic stays live but delivers no audio: "We couldn't hear you. Try again.", nothing saved (either --expect)
 // Each checks what the page does TODAY (--expect today, the default) or after decision 3 (--expect fixed).
 //
 //   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105
@@ -210,6 +211,22 @@ const runs = {
     } finally {
       fake.setAnswerStatus(null);
     }
+    return page;
+  },
+
+  async 'no-frames'() {
+    // A live track that delivers nothing leaves a header-only clip this browser can't decode. It used to count as
+    // heard: sent, and the kid's card got a play button on a clip that can't play (Bug hunt, Nov 11).
+    const page = await momPage({ mic: 'no-frames' });
+    const { url, kidToken } = await askUrl();
+    await toQuestions(page, url);
+    await holdMic(page, 2000);
+    await page.getByText('We couldn’t hear you. Try again.').waitFor({ timeout: 10000 }).catch(() => {});
+    await shot(page, 'no-frames');
+    check('"We couldn’t hear you. Try again."', (await label(page)) === 'We couldn’t hear you. Try again.', await label(page));
+    check('nothing saved', fake.cards.get(kidToken).answers.size === 0, `${fake.cards.get(kidToken).answers.size} saved`);
+    check('still on question 1', (await page.getByText('1 of 3').count()) === 1);
+    check('the mic works again', (await mic(page).isEnabled()));
     return page;
   },
 

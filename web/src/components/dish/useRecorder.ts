@@ -1,10 +1,11 @@
 // Mom's voice answers on /a: one microphone stream for the whole visit, asked for on her first press
 // of the mic (so the permission prompt comes from her own tap), and one MediaRecorder per answer.
 // Chrome, Android and a recent Safari record webm/opus; an older iPhone records mp4 (AAC). Cartesia
-// takes both, and both upload as they are. A clip with no sound in it (a muted or broken microphone)
-// comes back `silent`, so it is never sent. The stream is let go when the page goes away (pagehide)
-// or the questions are done (unmount), so the browser's "recording" dot never lingers.
+// takes both, and both upload as they are. A clip with no sound in it (a muted or broken microphone, or
+// one that delivered nothing) comes back `silent`, so it is never sent. The stream is let go when the page
+// goes away (pagehide) or the questions are done (unmount), so the browser's "recording" dot never lingers.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { silentClip } from './silentClip';
 
 /**
  * Best first; '' lets the browser pick its own default. webm leads because Chrome's mp4 carries
@@ -58,13 +59,17 @@ function pickType(): string {
 /**
  * True when the clip has no sound in it. A model can write a plausible answer for a clip with no speech
  * (DISH-I-MISS-SPEC §3), so such a clip is never sent. It reads the recorded file itself, which needs
- * no audio graph or tap; a clip this browser can't decode (or not within 2 s) counts as heard.
+ * no audio graph or tap; a clip this browser can't decode (or not within 2 s) counts as heard unless it is
+ * too small to hold any audio (silentClip.ts: a mic that delivered nothing leaves only a file's header).
  */
-function isSilent(blob: Blob): Promise<boolean> {
-  return Promise.race([measure(blob), new Promise<boolean>((r) => window.setTimeout(() => r(false), 2000))]);
+function isSilent(blob: Blob, durationS: number): Promise<boolean> {
+  return Promise.race([measure(blob), new Promise<null>((r) => window.setTimeout(() => r(null), 2000))]).then((decoded) =>
+    silentClip(decoded, blob.size, durationS),
+  );
 }
 
-async function measure(blob: Blob): Promise<boolean> {
+/** True: nothing louder than a faint hiss; false: something was; null: this browser couldn't decode it. */
+async function measure(blob: Blob): Promise<boolean | null> {
   try {
     const audio = await new OfflineAudioContext(1, 1, 44_100).decodeAudioData(await blob.arrayBuffer());
     for (let c = 0; c < audio.numberOfChannels; c++) {
@@ -78,7 +83,7 @@ async function measure(blob: Blob): Promise<boolean> {
     }
     return true;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -205,7 +210,7 @@ export function useRecorder(onLimit: () => void, maxMs = MAX_MS) {
         const blob = new Blob(chunks.current, { type: contentType });
         chunks.current = [];
         if (!blob.size) return resolve(null);
-        void isSilent(blob).then((silent) => resolve({ blob, contentType, durationS, silent }));
+        void isSilent(blob, durationS).then((silent) => resolve({ blob, contentType, durationS, silent }));
       };
       r.onstop = finish; // the last dataavailable always comes first
       r.onerror = finish;

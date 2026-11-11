@@ -257,12 +257,12 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 # web
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
-cd web && npm test                                                 # the site's state machines (Mom's page): every state × event (node --test, no dependency)
+cd web && npm test                                                 # the site's state machines (Mom's page): every state × event, and when her answer counts as silent (node --test, no dependency)
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
   # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
-node web/scripts/qa/mom-failures-e2e.mjs --base http://localhost:3105 --out /tmp/mom-failures [--expect today|fixed]   # Mom's page when the mic is denied or hangs, in an in-app browser, a refused answer, a failed Send (same site and fake as dish-e2e)
+node web/scripts/qa/mom-failures-e2e.mjs --base http://localhost:3105 --out /tmp/mom-failures [--expect today|fixed]   # Mom's page when the mic is denied or hangs, in an in-app browser, a refused answer, a mic that delivers no audio, a failed Send (same site and fake as dish-e2e)
   # dish-e2e, dish-api-e2e and mom-failures use a test-only synthetic mic (scripts/qa/synthetic-mic.mjs); --mic device for Chrome's fake device, which never answers on some Macs
   # their Chrome plays audio to a fake, timer-driven output (--disable-audio-output), so a stalled Mac sound clock can't silence the tone; if a page's clock still doesn't move, they stop at once with exit 2 and a line naming it
 node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
