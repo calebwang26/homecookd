@@ -9,7 +9,7 @@
 //   heartFetcher(cookId)                                 the kid's 1:1 with the cook, messages after a time
 //
 // The calls go through their own small fetch so lib/api.ts stays as it is (the same pattern as
-// lib/moveRequests.ts); the headers are the ones the api client sends (getApiAuth), plus x-tz so the
+// lib/moveApi.ts); the headers are the ones the api client sends (getApiAuth), plus x-tz so the
 // server knows the kid's local day for the one-push-a-day rule (getApiTimeZone: none while the web
 // `?as=` dev aid borrows the build's code, exactly like the api client).
 // TODO(wiring): once lib/api.ts has cooking calls & the 'reaction' kind, these can move there.
