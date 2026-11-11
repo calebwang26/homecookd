@@ -8,7 +8,7 @@
 # delivers it seconds later (docs/build/IOS-JOURNEYS.md, "A link open iOS gives up on"). simctl then fails, Maestro's
 # openLink throws an error its retry and optional don't catch (they catch only Maestro's own), and the journey ends on a
 # link that landed. So a failed open counts as opened only when the simulator's log shows lsd giving up and the app
-# receiving a link within 30 s of the open, the time open-link.yaml would wait for its screen anyway: then it exits 0
+# receiving a link within 45 s of the open (journey-openurl.mjs LAND_S, raised from 30 s on Nov 10): then it exits 0
 # and the flow goes on to check that screen. journey-openurl.mjs decides, and writes one line for the job summary's
 # "Journey retry" warning, passed or not. Anything else fails exactly as before, with simctl's own error output.
 #
@@ -36,7 +36,7 @@ if [ "$CODE" -eq 0 ]; then
   exit 0
 fi
 if node "$HERE/journey-openurl.mjs" --since "$SINCE" --stream "$JOURNEY_OPENURL_STREAM" --log "${JOURNEY_OPENURL_LOG:-/dev/null}" \
-  --exit "$CODE" --wait "${JOURNEY_OPENURL_WAIT_S:-30}" $SIMULATED; then
+  --exit "$CODE" --wait "${JOURNEY_OPENURL_WAIT_S:-45}" $SIMULATED; then
   exit 0
 fi
 [ -z "$ERR" ] || printf '%s\n' "$ERR" >&2
