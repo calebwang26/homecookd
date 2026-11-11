@@ -366,8 +366,11 @@ phones.
     looks like a clean green. The driver dropping at the same journey and step twice fails the job, naming that point.
   - Both attempts' output is kept (the second in `maestro-out/attempt-2/`), through the same scrub, and the summary's
     Try again, link-open and certificate lines cover both.
-  - The `unreachable_fault` dispatch input forces the path whatever the first round did; such a run is never merge
-    evidence, and its summary's first line says so.
+  - The `unreachable_fault` dispatch input forces the path whatever the first round did; its summary's first line says
+    it isn't merge evidence. What enforces that is the verdict ("Journeys passed", `journey-unreachable.mjs verdict`,
+    tested): a forced run is green only when the first round passed by itself and the second passed too, so it can never
+    turn a real failure into a green `ios-journeys` check, which is required on main and is what `scripts/check-sim.mjs`
+    reads before a 1.1.1 update.
   - **Three runs in a week with this warning means stop and look for a cause, not a third line of defense.**
 - **`openurl` times out**: CoreSimulatorBridge's open of the link fails with Code=60 "Operation timed out"
   (`_LSDispatchWithTimeout`, 10 s after the open) and Maestro says "Unknown error" at `openLink`, which throws, so

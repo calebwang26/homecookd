@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { decide, describe, journeys, samePoint, stopStep } from './journey-unreachable.mjs';
+import { decide, describe, journeys, samePoint, stopStep, verdict } from './journey-unreachable.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'journey-unreachable.mjs');
 const J3 = 'New message, Add family, Copy link';
@@ -61,6 +61,40 @@ test('a mixed report, none failed, or an empty, unreadable or missing report.xml
   for (const bad of ['', '<testsuites></testsuites>', 'not xml', null]) {
     assert.deepEqual(decide(bad), { rerun: false, point: null, line: "No readable report.xml: Maestro's failure stands, no second attempt." }, String(bad));
   }
+});
+
+test('a failed journey with no failure text the parser can read (a self-closing <failure/>) still counts: no second attempt', () => {
+  const selfClosing = `<testcase id="${J2}" name="${J2}" classname="${J2}" file="x.yaml" time="40" timestamp="2026-11-10T19:52:00" status="ERROR"><failure message="x"/></testcase>`;
+  const xml = report(fail(J3, '2026-11-10T19:50:07', '85.747', UNREACHABLE('deviceInfo')), selfClosing);
+  assert.equal(journeys(xml)[1].failed, true);
+  assert.deepEqual(decide(xml), { rerun: false, point: null, line: "Maestro lost the simulator's driver, but 1 journey also failed for another reason: no second attempt." });
+});
+
+test('the drop point is the earliest journey to fail on the driver, even when report.xml lists them out of time order', () => {
+  const xml = report(
+    fail(J0, '2026-11-10T19:53:22', '28.647', UNREACHABLE('setPermissions')),
+    fail(J2, '2026-11-10T19:51:33', '109.408', UNREACHABLE('setPermissions')),
+    fail(J3, '2026-11-10T19:50:07', '85.747', UNREACHABLE('deviceInfo')),
+  );
+  assert.deepEqual(decide(xml).point, { journey: J3, seconds: 86, call: 'deviceInfo', step: null });
+});
+
+test('the verdict: a normal run, a second attempt, the same point twice', () => {
+  assert.deepEqual(verdict({ first: 'success', rerun: '', second: '', same: '' }), { ok: true, line: null });
+  assert.equal(verdict({ first: 'failure', rerun: 'false', second: '', same: '' }).ok, false);
+  assert.equal(verdict({ first: 'failure', rerun: '', second: '', same: '' }).ok, false);
+  assert.deepEqual(verdict({ first: 'failure', rerun: 'true', second: 'success', same: '' }), { ok: true, line: 'Passed on the second attempt (the warning above says why): not a clean green.' });
+  assert.deepEqual(verdict({ first: 'failure', rerun: 'true', second: 'failure', same: 'success' }), { ok: false, line: 'The second attempt failed too.' });
+  assert.deepEqual(verdict({ first: 'failure', rerun: 'true', second: 'failure', same: 'failure' }), { ok: false, line: null });
+  assert.equal(verdict({ first: 'failure', rerun: 'true', second: 'skipped', same: '' }).ok, false, 'the simulator was no longer booted');
+});
+
+test('a forced run is green only when the first round passed by itself and the second passed too', () => {
+  // The Master's blocker: round one failing for a real reason, round two passing, must not end green.
+  assert.deepEqual(verdict({ first: 'failure', rerun: 'true', second: 'success', same: '', forced: true }), { ok: false, line: "The first round failed by itself (failure), and unreachable_fault can't make that green." });
+  assert.equal(verdict({ first: 'success', rerun: 'true', second: 'failure', same: 'success', forced: true }).ok, false);
+  assert.deepEqual(verdict({ first: 'success', rerun: 'true', second: 'success', same: '', forced: true }), { ok: true, line: 'Both rounds passed, the second forced by unreachable_fault.' });
+  assert.equal(verdict({ first: 'skipped', rerun: '', second: '', same: '', forced: true }).ok, false);
 });
 
 test('the unreachable_fault input re-runs whatever happened, and says it is simulated and not merge evidence', () => {
@@ -127,4 +161,11 @@ test('the CLI: decide prints the line and writes rerun= to $GITHUB_OUTPUT; again
   assert.equal(elsewhere.status, 0);
   assert.equal(elsewhere.stdout, '');
   assert.equal(spawnSync(process.execPath, [SCRIPT, 'again', one, out(NONE)], { encoding: 'utf8' }).status, 0);
+
+  // verdict: the workflow's last step passes the outcomes as they are (empty for a step that didn't run).
+  const red = spawnSync(process.execPath, [SCRIPT, 'verdict', 'failure', 'true', 'success', '', '--forced'], { encoding: 'utf8' });
+  assert.equal(red.status, 1);
+  assert.match(red.stdout, /^::error title=Journeys::The first round failed by itself/);
+  assert.equal(spawnSync(process.execPath, [SCRIPT, 'verdict', 'success', '', '', ''], { encoding: 'utf8' }).status, 0);
+  assert.equal(spawnSync(process.execPath, [SCRIPT, 'verdict', 'failure', 'true', 'success', 'skipped'], { encoding: 'utf8' }).status, 0);
 });

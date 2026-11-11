@@ -6,9 +6,13 @@
 //   node scripts/journey-unreachable.mjs decide <maestro test-output dir> [--forced]
 //     Re-run only when report.xml has at least one failure and every failure is DeviceUnreachableException; a missing,
 //     unreadable or empty report.xml, a mixed one, or none failed, never (--forced, the unreachable_fault input, re-runs
-//     whatever happened, marked simulated). Prints the warning line; with $GITHUB_OUTPUT set, writes rerun= and point=.
+//     whatever happened, marked simulated). Prints the warning line; with $GITHUB_OUTPUT set, writes rerun=.
 //   node scripts/journey-unreachable.mjs again <attempt 1 dir> <attempt 2 dir>
 //     After the second attempt: exit 1 with a line naming the point when the driver dropped at the same point twice.
+//   node scripts/journey-unreachable.mjs verdict <first> <rerun> <second> <same> [--forced]
+//     The job's last step: exit 0 (green) or 1, with a line, from the steps' outcomes (success, failure, skipped or
+//     empty). A forced run is green only when the first round passed by itself and the second passed too, so it can't
+//     turn a real failure green, and its green is stronger than a normal one.
 // Only fixed words, numbers and journey names are printed: the step's command kind comes from a fixed list of Maestro
 // command names ("unknown" otherwise), so no text from commands.json (which echoes keys and links) reaches a log.
 import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -115,6 +119,23 @@ export function samePoint(a, b) {
   return Math.abs(a.seconds - b.seconds) <= 10;
 }
 
+/** The job's verdict from the steps' outcomes: { ok, line }. */
+export function verdict({ first, rerun, second, same, forced = false }) {
+  if (forced) {
+    if (first !== 'success') return { ok: false, line: `The first round failed by itself (${first || 'not run'}), and unreachable_fault can't make that green.` };
+    if (same === 'failure') return { ok: false, line: null };
+    if (second !== 'success') return { ok: false, line: `The forced second attempt failed (${second || 'not run'}).` };
+    return { ok: true, line: 'Both rounds passed, the second forced by unreachable_fault.' };
+  }
+  if (rerun === 'true') {
+    if (same === 'failure') return { ok: false, line: null };
+    if (second === 'success') return { ok: true, line: 'Passed on the second attempt (the warning above says why): not a clean green.' };
+    return { ok: false, line: 'The second attempt failed too.' };
+  }
+  if (first === 'success') return { ok: true, line: null };
+  return { ok: false, line: 'The journeys failed (no second attempt: not only Maestro losing the simulator).' };
+}
+
 const read = (dir) => (dir && existsSync(path.join(dir, 'report.xml')) ? readFileSync(path.join(dir, 'report.xml'), 'utf8') : null);
 
 if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
@@ -132,8 +153,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url
       console.log(`Maestro lost the simulator's driver at the same point in both attempts: ${describe(p2)}. That is not chance: look at the app or the flow there.`);
       process.exit(1);
     }
+  } else if (cmd === 'verdict') {
+    const [first, rerun, second, same] = process.argv.slice(3, 7);
+    const v = verdict({ first, rerun, second, same, forced: process.argv.includes('--forced') });
+    if (v.line) console.log(v.ok ? v.line : `::error title=Journeys::${v.line}`);
+    process.exit(v.ok ? 0 : 1);
   } else {
-    console.error('usage: node scripts/journey-unreachable.mjs decide <dir> [--forced] | again <attempt 1 dir> <attempt 2 dir>');
+    console.error('usage: node scripts/journey-unreachable.mjs decide <dir> [--forced] | again <attempt 1 dir> <attempt 2 dir> | verdict <first> <rerun> <second> <same> [--forced]');
     process.exit(2);
   }
 }

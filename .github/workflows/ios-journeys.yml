@@ -643,23 +643,21 @@ jobs:
           fi
           # Both sets: the first, and the second attempt's when it was seeded (its state file exists from before its
           # first sign-in, so a re-seed that stopped halfway is deleted too). Each name deleted is logged.
-          node scripts/journey-people.mjs delete "$RUNNER_TEMP/journey-people.json"
-          [ ! -f "$RUNNER_TEMP/journey-people-2.json" ] || node scripts/journey-people.mjs delete "$RUNNER_TEMP/journey-people-2.json" --round 2
+          # Both run even if the first fails; then the step fails if either did.
+          S=0
+          node scripts/journey-people.mjs delete "$RUNNER_TEMP/journey-people.json" || S=1
+          [ ! -f "$RUNNER_TEMP/journey-people-2.json" ] || node scripts/journey-people.mjs delete "$RUNNER_TEMP/journey-people-2.json" --round 2 || S=1
+          exit $S
       # The job's verdict, last, once everything above has cleaned up (Journeys and Journeys again may fail without failing
-      # the job): green only when the first round passed, or a second attempt passed and the driver didn't drop where it
-      # did the first time.
+      # the job; scripts/journey-unreachable.mjs verdict, tested): green only when the first round passed, or a second
+      # attempt passed and the driver didn't drop where it did the first time. A forced run (unreachable_fault) is green
+      # only when the first round passed by itself and the second passed too, so it can never turn a real failure into a
+      # green ios-journeys check (a required check, and scripts/check-sim.mjs's evidence for a 1.1.1 update).
       - name: Journeys passed
         if: always()
         run: |
-          J1="${{ steps.journeys.outcome }}"; RERUN="${{ steps.unreachable.outputs.rerun }}"
-          J2="${{ steps.journeys2.outcome }}"; SAME="${{ steps.same.outcome }}"
-          if [ "$RERUN" = true ]; then
-            [ "$SAME" != failure ] || exit 1
-            if [ "$J2" = success ]; then echo "Passed on the second attempt (the warning above says why): not a clean green."; exit 0; fi
-            echo "::error title=Journeys::the second attempt failed too"; exit 1
-          fi
-          [ "$J1" = success ] && exit 0
-          echo "::error title=Journeys::the journeys failed (no second attempt: not only Maestro losing the simulator)"; exit 1
+          node scripts/journey-unreachable.mjs verdict "${{ steps.journeys.outcome }}" "${{ steps.unreachable.outputs.rerun }}" \
+            "${{ steps.journeys2.outcome }}" "${{ steps.same.outcome }}" ${{ inputs.unreachable_fault && '--forced' || '' }}
 
   # The one to require on main: a skipped journeys job (no app/ change) passes, a failed or cancelled one doesn't.
   result:
