@@ -12,13 +12,13 @@
 //   node web/scripts/qa/mom-failures-e2e.mjs --base http://localhost:3105 --out /tmp/mom-failures [--expect today|fixed] [--only denied,hung]
 //   (--uploads links, with the site built with NEXT_PUBLIC_DISH_UPLOADS=links, for the new api's contract)
 //
-// The mic is the test-only init script in synthetic-mic.mjs. Exits 1 on a failure.
+// The mic is the test-only init script in synthetic-mic.mjs. Exits 1 on a failure, 2 when the Mac's audio clock is stalled.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { startFake } from './dish-fake-server.mjs';
 import { printMachineHistory } from './machine-history.mjs';
-import { micInit } from './synthetic-mic.mjs';
+import { AUDIO_ARGS, audioClockStalled, micInit } from './synthetic-mic.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, v, i, all) => {
@@ -44,7 +44,13 @@ function check(name, ok, detail) {
 }
 
 const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, mergeMs: 1500, translateMs: 500, uploads: UPLOADS });
-const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--autoplay-policy=no-user-gesture-required', ...AUDIO_ARGS] });
+const stalled = await audioClockStalled(browser); // its answered cases use the synthetic mic
+if (stalled) {
+  console.log(stalled);
+  await browser.close();
+  process.exit(2);
+}
 
 /** A fresh card asked of Mom with three questions; her page's address. */
 async function askUrl() {
