@@ -65,6 +65,17 @@ export function verdicts(text) {
 // certificate fails, trustd's evaluation is the check that failed, well under a second before it; in 42898927696
 // trustd's last evaluation was 24 s before the app's first failure, in 42887110283 attempt 2, 55 s.
 export const STALL_GAP_MS = 5000;
+// A rebuild counts as over once trustd checks something this long or more after it began: in 42939750084 it still
+// checked a few certificates 18 s into the rebuild (01:50:21-01:50:39), then nothing; the two seen to end did so after
+// 1 m 54 s and 6 m 20 s.
+export const SETTLED_MS = 60_000;
+
+/** The pinning database update still open at `now` (no check SETTLED_MS or more after it began), or null. */
+export function openUpdate(t, now) {
+  const u = [...t.updates].reverse().find((x) => x.ms <= now);
+  if (!u) return null;
+  return t.evals.some((ms) => ms >= u.ms + SETTLED_MS && ms <= now) ? null : u;
+}
 
 const hms = (ms) => new Date(ms).toISOString().slice(11, 19);
 const ago = (s) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} m ${s % 60} s`);
@@ -80,12 +91,24 @@ const after = (ms, gate) => {
  */
 export function journeyLines(journeys, t, gate) {
   const out = [];
-  for (const { name, log, passed } of journeys) {
+  for (const { name, log, passed, endMs } of journeys) {
     // "Re-run the job" only when this journey failed; one that got through the stall says so (run 42926262894).
     const end = passed === true ? '; the journey got through it' : ' (re-run the job)';
     const v = verdicts(log);
     const failed = v.filter((x) => x.proc === APP && !x.ok);
-    if (!failed.length) continue;
+    if (!failed.length) {
+      // A failed journey with no failed check counted can still have died in a stall: a download that hangs counts
+      // nothing (42939750084's journey 4: its clip download hung after the rebuild began at 01:50:21, trustd's last
+      // check was 01:50:39, and the journey failed at 01:51). Named only for a failed journey whose failure time falls
+      // where trustd had checked nothing for STALL_GAP_MS, with a rebuild still open.
+      if (passed !== false || !endMs) continue;
+      const evals = [...t.evals, ...trustd(log).evals].sort((a, b) => a - b);
+      const stop = evals.filter((ms) => ms < endMs).pop();
+      const u = openUpdate({ updates: t.updates, evals }, endMs);
+      if (!u || stop === undefined || endMs - stop < STALL_GAP_MS) continue;
+      out.push(`${name}: failed at ${hms(endMs)} with no failed certificate check counted, while trustd had checked nothing since ${hms(stop)}${after(stop, gate)}, during a pinning database update (${u.from} → ${u.to}) from ${hms(u.ms)}: the simulator stopped checking certificates, not the app (re-run the job)`);
+      continue;
+    }
     const first = failed[0].ms;
     const last = failed[failed.length - 1].ms;
     const others = v.filter((x) => x.proc !== APP);
@@ -161,12 +184,13 @@ export function journeyLogs(dir) {
   if (!existsSync(dir)) return out;
   const xml = path.join(dir, 'report.xml');
   const report = existsSync(xml) ? readFileSync(xml, 'utf8') : '';
-  const order = [...windows(report).keys()];
+  const win = windows(report);
+  const order = [...win.keys()];
   const passed = results(report);
   for (const run of readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory())) {
     for (const flow of readdirSync(path.join(dir, run.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
       const f = path.join(dir, run.name, flow.name, 'logs', 'device-simulator.log');
-      if (existsSync(f)) out.push({ name: flow.name, log: readFileSync(f, 'utf8'), passed: passed.get(flow.name) });
+      if (existsSync(f)) out.push({ name: flow.name, log: readFileSync(f, 'utf8'), passed: passed.get(flow.name), endMs: win.get(flow.name)?.[1] });
     }
   }
   return out.sort((a, b) => (order.indexOf(a.name) + 1 || Infinity) - (order.indexOf(b.name) + 1 || Infinity));

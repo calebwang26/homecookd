@@ -8,7 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { decide, events } from './journey-openurl.mjs';
+import { decide, events, LAND_S } from './journey-openurl.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHIM = path.join(HERE, 'journey-xcrun.sh');
@@ -40,10 +40,17 @@ test('a link that reached the app after the wait fails (42847823481 attempt 1: 5
   assert.deepEqual(decide(at53, OPEN), { gaveUpS: 10, landedS: null, passed: false });
 });
 
-test("the 30 s limit is on the app's own line, counted from the open: 29.9 s passes, 30.2 s fails", () => {
+test("the 45 s limit is on the app's own line, counted from the open: 30.3 s passes (42939750084 attempt 2), 45.2 s fails, 53.0 s still fails", () => {
   const at = (s) => [HEADER, GAVE_UP, LANDED.replace('16:25:40.315841', new Date(OPEN + s * 1000).toISOString().slice(11, 23) + '000')].join('\n');
-  assert.deepEqual(decide(at(29.9), OPEN), { gaveUpS: 10, landedS: 29.9, passed: true });
-  assert.deepEqual(decide(at(30.2), OPEN), { gaveUpS: 10, landedS: null, passed: false });
+  assert.equal(LAND_S, 45);
+  assert.deepEqual(decide(at(30.3), OPEN), { gaveUpS: 10, landedS: 30.3, passed: true });
+  assert.deepEqual(decide(at(45.2), OPEN), { gaveUpS: 10, landedS: null, passed: false });
+  assert.deepEqual(decide(at(53.0), OPEN), { gaveUpS: 10, landedS: null, passed: false });
+});
+
+test("only an open iOS gave up on gets the 45 s: a landing at 30.3 s with no lsd timeout isn't excused", () => {
+  const text = [HEADER, LANDED.replace('16:25:40.315841', new Date(OPEN + 30_300).toISOString().slice(11, 23) + '000')].join('\n');
+  assert.deepEqual(decide(text, OPEN), { gaveUpS: null, landedS: 30.3, passed: false });
 });
 
 test("a link that landed with no lsd timeout isn't this fault: it fails as before, unless simulated", () => {

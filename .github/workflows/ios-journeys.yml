@@ -452,7 +452,7 @@ jobs:
       # A link open iOS gives up on (docs/build/IOS-JOURNEYS.md): after 10 s lsd stops waiting (Code=60) while SpringBoard
       # can still deliver the link seconds later, and Maestro's openLink then throws an error its retry can't catch. Maestro
       # runs xcrun from its PATH, so scripts/journey-xcrun.sh goes first: a failed open counts as opened only when this
-      # step's stream shows lsd giving up and the app receiving a link within 30 s of the open, and the Times step warns
+      # step's stream shows lsd giving up and the app receiving a link within 45 s of the open, and the Times step warns
       # about each failed open, passed or not. Every open is logged, and the Times step's table shows when the app got
       # each link. The stream keeps only those two kinds of line; neither holds the link, and it stays on the runner.
       # The journeys themselves run in scripts/journey-maestro.sh (the stand-in, its stream, the keyed journeys), so the
@@ -574,6 +574,10 @@ jobs:
               *) echo "::warning title=Certificate checks failed::$LINE"; echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
             esac
           done
+          # Each wait the flows held for a rebuild (journey-trust-wait.mjs), and a run with no trustd stream to wait by.
+          if [ -s "$RUNNER_TEMP/trustd-wait.log" ]; then
+            while IFS= read -r LINE; do echo "::warning title=Trust wait::$LINE"; echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"; done < "$RUNNER_TEMP/trustd-wait.log"
+          fi
           # The second attempt's journeys, when there was one (trustd's own lines were printed above, for the whole run).
           [ -d "$RUNNER_TEMP/maestro-out/attempt-2" ] || exit 0
           node scripts/journey-trust.mjs "$RUNNER_TEMP/maestro-out/attempt-2" "$RUNNER_TEMP/trustd-stream.log" "${T_WARM:-}" | while IFS= read -r LINE; do

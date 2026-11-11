@@ -92,6 +92,18 @@ test('setup keeps all four ids before any sign-in, joins each kid by its cook’
   ]);
 });
 
+test("setup fails when journey 5's kid lands in another family than Meera's (her recipe would never show on his Home)", async () => {
+  const state = join(dir, 'kid5-elsewhere.json');
+  const { f } = seedStaging(state, {
+    '/v1/test/sign-in': (body) => {
+      // Kabir lands in some other family; everyone else as usual.
+      const fam = body.test_id.endsWith('-kid5') ? 'Other' : body.join_token ? families[body.join_token] : `${body.name}’s family`;
+      return json(200, { device_key: `key-${body.test_id}`, profile_id: `p-${body.test_id}`, family_name: fam });
+    },
+  });
+  await assert.rejects(setup('k', state, idsFor(7, 1), f, () => {}), /journey 5’s kid did not join its cook’s family/);
+});
+
 test('setup fails when the test recipe is refused, with the people already in the state file for delete', async () => {
   const state = join(dir, 'refused.json');
   const { f } = seedStaging(state, { '/v1/test/recipe': json(501, { code: 'not_moved' }) });

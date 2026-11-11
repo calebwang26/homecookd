@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+name: Wait out a trustd pinning database rebuild
+---
+# The simulator's trustd sometimes rebuilds its pinning database and checks no certificate for minutes (1 m 54 s and
+# 6 m 20 s seen), so every handshake fails. This asks the runner's wait (trustd-ready.js) until it says "ready": at once
+# when no rebuild is open; MODE launch (before the app is up) has Safari provoke a check, MODE watch (mid-journey) only
+# watches. The wait has one budget for the whole job, and each wait that held is a warning in the job summary.
+- evalScript: ${output.trustd = 'wait'}
+- repeat:
+    times: 200
+    while:
+      true: ${output.trustd !== 'ready'}
+    commands:
+      - runScript:
+          file: trustd-ready.js
+          env:
+            MODE: ${MODE}
+            WHY: ${WHY}
