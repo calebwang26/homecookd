@@ -437,6 +437,10 @@ let errorLanguage: string | null = null;
 export function setApiLanguage(lang: string | null) {
   errorLanguage = lang;
 }
+/** That language (null: English), for the calls made outside this client (lib/moveApi.ts). */
+export function getApiLanguage(): string | null {
+  return errorLanguage;
+}
 
 export function setApiAuth(next: Partial<AuthState>) {
   auth = { ...auth, ...next };

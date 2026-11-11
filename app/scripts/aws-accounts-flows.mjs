@@ -1,5 +1,6 @@
-// The Accounts flows on AWS staging, through the app's own client (src/lib/aws), with test people from the
-// staging-only test sign-in (ACCOUNTS.md, "Staging testing"). It writes to staging and deletes everyone it made.
+// The Accounts flows on AWS staging, through the app's own client (src/lib/aws, and src/lib/moveApi.ts for moving to a
+// new phone), with test people from the staging-only test sign-in (ACCOUNTS.md, "Staging testing"). It writes to
+// staging and deletes everyone it made.
 //   node scripts/aws-accounts-flows.mjs [base url]      default: staging over HTTPS
 // Needs TEST_SIGNIN_KEY in the root .env (read here, never printed). Production refuses the route.
 import assert from 'node:assert/strict';
@@ -25,6 +26,8 @@ process.env.EXPO_PUBLIC_BACKEND = 'aws';
 process.env.EXPO_PUBLIC_AWS_URL = BASE;
 const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const A = await import(pathToFileURL(join(root, 'src/lib/aws/accounts.ts')).href);
+const API = await import(pathToFileURL(join(root, 'src/lib/api.ts')).href);
+const M = await import(pathToFileURL(join(root, 'src/lib/moveApi.ts')).href);
 
 let passed = 0;
 const check = async (name, fn) => {
@@ -58,10 +61,12 @@ async function testSignIn(body) {
 }
 /** Become this phone: its key and its own person. */
 const phone = (a) => C.setAwsCredentials({ deviceKey: a.device_key, personId: a.profile_id });
+/** The same, for moveApi, which reads the person from the app's api client (getApiAuth) as the screens do. */
+const appPhone = (a) => API.setApiAuth({ deviceKey: a.device_key, profileId: a.profile_id });
 
 const run = randomBytes(4).toString('hex');
 const made = []; // {key, personId} to delete at the end
-let cook, kid, nani, link;
+let cook, kid, nani, link, newPhone;
 
 try {
   await check('a new cook signs up: a new family, and the person id is the same everywhere', async () => {
@@ -135,6 +140,36 @@ try {
     return e.code || e.message;
   });
 
+  await check('a new phone asks to be Nani (moveApi), and the cook lets it in from her own phone', async () => {
+    // A phone with no person yet: an old family invite (POST /invites, then /invites/accept, as a 1.0 phone joins).
+    phone(cook);
+    const inv = await C.request('/invites', { auth: 'key', as: cook.profile_id, body: {} });
+    const token = new URL(inv.invite.url).searchParams.get('t');
+    const joined = await C.request('/invites/accept', { auth: 'none', body: { token, device_label: `Test phone ${run}` } });
+    assert.equal(joined.profile_id, null, 'a phone with no person yet');
+    newPhone = { device_key: joined.device_key, profile_id: null };
+    appPhone(newPhone);
+    const asked = await M.moveApi.ask(nani.id);
+    assert.deepEqual([asked.status, asked.profile_id], ['pending', nani.id]);
+    const waiting = await M.moveApi.mine();
+    assert.deepEqual([waiting.id, waiting.status], [asked.id, 'pending']);
+    assert.ok(waiting.asked.includes(`Test Cook ${run}`), 'the cook is one who can let it in');
+    appPhone(cook);
+    const list = await M.moveApi.list();
+    assert.ok(list.some((r) => r.id === asked.id && r.profile.id === nani.id), 'the cook sees the ask');
+    assert.deepEqual(await M.moveApi.approve(asked.id), { ok: true });
+    const again = await refused(M.moveApi.decline(asked.id));
+    assert.equal(again.status, 409, 'answered once');
+    appPhone(newPhone);
+    const done = await M.moveApi.mine();
+    assert.deepEqual([done.status, done.let_in_by], ['approved', `Test Cook ${run}`]);
+    newPhone = { ...newPhone, profile_id: nani.id };
+    phone(newPhone);
+    assert.equal((await A.accounts.family(nani.id)).device_profile_id, nani.id, 'the new phone is Nani\'s');
+    phone(cook); // the next steps are the cook's
+    return asked.id.slice(0, 8);
+  });
+
   await check('turning the link off: peek says revoked, and the next link is new', async () => {
     const t = new URL(link.url).searchParams.get('t');
     await A.accounts.revokeJoinLink(cook.profile_id);
@@ -154,8 +189,10 @@ try {
     off();
   });
 } finally {
-  // Delete everyone: Nani from the cook's phone, then the kid, then the cook (whose family then ends).
-  const order = [nani && cook && { key: cook.device_key, personId: cook.profile_id, as: nani.id }, kid && { key: kid.device_key, personId: kid.profile_id }, cook && { key: cook.device_key, personId: cook.profile_id }].filter(Boolean);
+  // Delete everyone: Nani (from her new phone once she moved to it, else from the cook's), then the kid, then the
+  // cook (whose family then ends).
+  const naniFrom = newPhone?.profile_id ? { key: newPhone.device_key, personId: nani.id } : nani && cook && { key: cook.device_key, personId: cook.profile_id, as: nani.id };
+  const order = [naniFrom, kid && { key: kid.device_key, personId: kid.profile_id }, cook && { key: cook.device_key, personId: cook.profile_id }].filter(Boolean);
   for (const d of order) {
     C.setAwsCredentials({ deviceKey: d.key, personId: d.personId });
     try {
@@ -172,4 +209,4 @@ await check('after deleting, the cook\'s key is dead', async () => {
   assert.equal(e.status, 401);
 });
 
-console.log(`\n${passed} passed (test people made and deleted: cook, Nani, kid)`);
+console.log(`\n${passed} passed (test people made and deleted: cook, Nani, kid; Nani moved to a new phone)`);
