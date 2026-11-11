@@ -37,12 +37,13 @@ tags:
 - assertVisible: ".*Boil the water.*"
 - takeScreenshot: 05-recipe
 - tapOn: "Start cooking"
-# Step 1 and its clip: tap play, then wait for the video's own clock to move.
+# Step 1 and its clip ("Watch this step: Boil the water, 0:08", cook/[id].tsx): tap play, then wait for the video's own
+# clock to move.
 - extendedWaitUntil:
-    visible: "Watch this step"
+    visible: ".*Watch this step.*"
     timeout: 20000
 - takeScreenshot: 05-step-1
-- tapOn: "Watch this step"
+- tapOn: ".*Watch this step.*"
 - extendedWaitUntil:
     visible: "0:0[1-7]"
     timeout: 30000
