@@ -2,69 +2,21 @@
 // own face): the new phone asks, anyone settled in the family (a day in, or the one who started it)
 // lets him in from their own phone.
 //
-//   moveApi.ask(profileId)   POST /move-requests            (the new phone; no person yet)
-//   moveApi.mine()           GET  /move-requests/mine       (the new phone, while it waits)
-//   moveApi.approve(id)      POST /move-requests/:id/approve (someone on their own phone)
-//   moveApi.decline(id)      POST /move-requests/:id/decline
+//   moveApi                  the five calls (lib/moveApi.ts: ask, mine, list, approve, decline), to the
+//                            Supabase api off the switch and the AWS api under AWS_ON (1.1)
 //   useMoveRequests()        the requests this person may answer, shared by the Home pop-up and the
 //                            parent updates card; refreshed on open, on return to the app, every 3 s
 //                            while a request waits (an answer anywhere closes it everywhere) and every
 //                            30 s otherwise. Empty when this phone isn't its own person's
 //                            (lent or shared), before their first day (session `canManage`), and
 //                            when the server doesn't have the routes yet.
-// The calls go through their own small fetch so lib/api.ts stays as it is; the headers are the
-// same ones the api client sends (getApiAuth).
 import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
-import { API_URL, getApiAuth, type Profile } from './api';
+import { moveApi, type MoveRequest } from './moveApi';
 import { useSession } from './session';
 
-export type MoveStatus = 'pending' | 'approved' | 'declined' | 'expired';
-/**
- * `asked`: while pending, up to 3 names who can let this phone in ("Waiting for Mom or Dad");
- * `let_in_by`: who did, once approved. Both missing on older servers.
- */
-export type MyMoveRequest = { id: string; profile_id: string; status: MoveStatus; asked?: string[]; let_in_by?: string | null };
-export type MoveRequest = { id: string; profile: Profile; created_at: string };
-
-export class MoveError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-async function call<T>(path: string, opts: { method?: 'GET' | 'POST'; body?: unknown; asPerson?: boolean } = {}): Promise<T> {
-  const auth = getApiAuth();
-  const headers: Record<string, string> = { accept: 'application/json' };
-  if (auth.key) headers['x-device-key'] = auth.key;
-  else if (auth.code) headers['x-family-code'] = auth.code;
-  if (opts.asPerson && auth.profileId) headers['x-profile-id'] = auth.profileId;
-  if (opts.body !== undefined) headers['content-type'] = 'application/json';
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}${path}`, {
-      method: opts.method ?? 'GET',
-      headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    });
-  } catch {
-    throw new MoveError(0, 'Can’t reach your family right now. Try again.');
-  }
-  const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok) throw new MoveError(res.status, data?.error || 'Something went wrong. Try again.');
-  return data as T;
-}
-
-export const moveApi = {
-  ask: (profileId: string) => call<MyMoveRequest>('/move-requests', { method: 'POST', body: { profile_id: profileId } }),
-  mine: () => call<MyMoveRequest | null>('/move-requests/mine'),
-  approve: (id: string) => call<{ ok: true }>(`/move-requests/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {}, asPerson: true }),
-  decline: (id: string) => call<{ ok: true }>(`/move-requests/${encodeURIComponent(id)}/decline`, { method: 'POST', body: {}, asPerson: true }),
-};
+export { MoveError, moveApi, type MoveRequest, type MoveStatus, type MyMoveRequest } from './moveApi';
 
 // --- The requests to answer: one small shared store -----------------------------------------
 type Store = { forId: string | null; requests: MoveRequest[] };
@@ -82,7 +34,8 @@ const subscribe = (l: () => void) => {
 let loading: Promise<void> | null = null;
 async function load(forId: string) {
   if (loading) return loading;
-  loading = call<MoveRequest[]>('/move-requests', { asPerson: true })
+  loading = moveApi
+    .list()
     .then((list) => emit({ forId, requests: Array.isArray(list) ? list : [] }))
     // A server without the routes yet (404), offline, or not allowed: nothing to show.
     .catch(() => emit({ forId, requests: store.forId === forId ? store.requests : [] }))
