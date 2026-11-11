@@ -200,18 +200,21 @@ GitHub's notice on these jobs said macOS arm64 runners were under capacity press
 
 The fix: `scripts/journey-xcrun.sh` is Maestro's `xcrun` in the Journeys step (first on its PATH). Every call goes straight
 to the real one, except a `simctl openurl` that fails. That open counts as opened only when the step's log stream shows
-lsd's Code=60 timeout and the app receiving a link (its own `UIOpenURLAction` line) within 30 s of the open, the time
-`open-link.yaml` would wait for its screen anyway. Then the flow goes on, and its own wait for that screen is still the
+lsd's Code=60 timeout and the app receiving a link (its own `UIOpenURLAction` line) within 45 s of the open (`LAND_S`,
+30 s until Nov 10; see below). Then the flow goes on, and its own wait for that screen is still the
 proof. Anything else fails as before, with simctl's own error. Each failed open, passed or not, gets a "Journey retry"
 warning naming the journey, when iOS gave up and when the link landed (`journey-retries.mjs`, from report.xml's times).
-The 30 s run from the open to the app's own line, not to simctl returning, and a link that never arrives fails as before.
-Of the five above, the four that landed within 30 s would have passed with a warning, and 42847823481's first would
-still fail. A link that starts the app arrives at launch, without that line, so a failed open of one isn't excused.
+The 45 s run from the open to the app's own line, not to simctl returning, and a link that never arrives fails as before.
+It was 30 s until 42939750084 attempt 2, where iOS gave up after 24.2 s and the link reached the app at 30.3 s. The six
+landings seen after a Code=60 were 14.2, 15.8, 16.4, 21.5, 30.3 and 53.0 s: five pass at 45 s, 53.0 s still fails. Only an
+open iOS gave up on gets them; one that didn't throw keeps its own limits. A link that starts the app arrives at launch,
+without that line, so a failed open of one isn't excused.
 
 Every open is logged, not only the failed ones, so a slow open shows even when nothing threw (the 64 s one above). The
 "Link opens" table, in the job summary and the job log (`gh run view --log`; a summary needs a signed-in browser), lists each: the journey, when, how long simctl took or how it failed, and when the app
 got the link, which includes iOS's "Open in homecookd?" dialog and Maestro's tap on it when iOS asked (0.0–0.4 s without
-the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning. The stream
+the dialog and 12.6–17.2 s with it in 42872308399). An open whose link took more than 30 s is also a warning (`SLOW_S`,
+still 30 s), so a link that lands at 30-45 s passes but always shows. The stream
 keeps only those two kinds of line, neither holds the link, and it stays on the runner. The `openurl_fault` input treats
 the first open whose link the app received on its own (within 3 s) as one iOS gave up on, to check the landing check on
 a real simulator. Not an open iOS asks about ("Open in homecookd?"): its link lands only after Maestro taps Open, which
@@ -365,8 +368,29 @@ video plays.
   that failed is under a second before), or other processes failed too. A failure while trustd kept checking reads as
   the api's certificate, and a run with no trustd line at all says it can't tell, with no re-run advice. Each rebuild or lock gets a summary line, with when trustd checked again, if it did. The kept
   `trustd-summary.txt` holds times, pids, versions and per-minute counts only (tested with made-up hostnames, links and
-  keys in the lines it reads), and goes through the same scrub as the logs. No wait or re-run is built on it until a
-  run shows when the rebuild ends.
+  keys in the lines it reads), and goes through the same scrub as the logs.
+  A failed journey with no failed check counted is named too, by its failure time, when that falls where trustd had
+  checked nothing for 5 s with a rebuild still open: a download that hangs counts nothing (42939750084's journey 4: its
+  stand-in clip download hung after the rebuild began at 01:50:21, trustd's last check was 01:50:39, and it failed at
+  01:51). The line gives the gap's length and other processes' checks in it. It says "the simulator, not the app
+  (re-run the job)" only when another process's check failed in the gap (a check wanted and not given, as 42939750084
+  had); otherwise it hedges ("It may be the stall: re-run once, and if the same step fails again, it's the app"), because
+  a quiet trustd is also what an app making no requests looks like. A journey that passed never gets either.
+  **The wait** (Master Agent, Nov 10; `scripts/journey-trust-wait.mjs`, `flows/trustd-ready.yaml`): before each fresh
+  launch and before journey 4 starts filming, the flow asks a server on the runner (127.0.0.1 only, started and stopped
+  with each round's Maestro) whether a rebuild is open, that is, "Pinning database should update" with no check 60 s or
+  more after it began (in 42939750084 trustd still checked 18 s in, then nothing; the two seen to end took 1 m 54 s and
+  6 m 20 s). None open: it answers at once. Open: before a launch, Safari provokes a check every 15 s, as the readiness
+  gate does, so a healthy idle trustd shows it's checking, and Safari is closed 4 s after each probe and once more when
+  the wait ends. Left over: a probe's open can land late (the link-open fault), and if one lands after that last close,
+  Safari covers the app's first screen and that journey fails on it. Inside journey 4 it only watches (Safari would take
+  the app's place) and gives up on a rebuild 10 minutes old. Journey 4 waits on its ready screen, before filming, not
+  on the filming screen: filming cuts a new file every 5 minutes (CHUNK_MS), and each cut makes the stand-in download
+  its clip again, the very request a rebuild breaks. The ready screen keeps the phone awake (recording.tsx), and nothing
+  on it times out. One budget of 12 minutes for the whole job, across both rounds,
+  keeps the worst case inside the 75 min timeout (about 56 min without waits). Each wait that held is a "Trust wait"
+  warning with how long and why; a spent budget, a missing stream or an error answers at once and says so, never as a
+  silent "ready". A wait never changes a journey's result: it only delays the next step.
 - **Maestro loses the simulator's driver**: `maestro.DeviceUnreachableException: Device became unreachable during
   deviceInfo`, then every journey after it fails in seconds (42751395869 attempt 1, 42825898600, 42887110283 attempt 1,
   42872308399 attempt 3). In the last two the driver's own log says why: "Failed to get screenshot: Timed out while
@@ -397,7 +421,7 @@ video plays.
   simctl's 10 s timeout fails the journey. 42851642925 (journey 4: the app got it at +16.4 s) had a clean gate with 0
   trustd restarts, so a restart isn't needed for it (the Master Agent withdrew that lead). All the failed opens fell
   between 15:58 and 16:26 UTC on Nov 10, while GitHub said macOS arm64 runners were under capacity pressure: a guess at
-  most. Since #482, an `openLink` that throws while the link lands within 30 s passes with a warning ("A link open iOS
+  most. Since #482, an `openLink` that throws while the link lands within 45 s (30 s until Nov 10) passes with a warning ("A link open iOS
   gives up on", above).
 - **"Copied" lasts 2 s, and an iOS tap waits for a still screen first** (Nov 10, not a simulator fault: a race in
   journey 3's check). ExternalRow shows "Copied" (label "Link copied") for `COPIED_MS` = 2000 ms. On iOS, Maestro's

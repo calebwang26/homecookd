@@ -16,7 +16,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { events, LAND_S } from './journey-openurl.mjs';
+import { events, LAND_S, SLOW_S } from './journey-openurl.mjs';
 
 const unescape = (s) => s.replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
@@ -62,7 +62,7 @@ export function opens(records, xml) {
     if (r.unreadable) return ['A journey: a link open failed, and its line in the open log can’t be read'];
     const name = journeyAt(win, Date.parse(r.at));
     if (r.exit === 0 && !r.simulated) {
-      return r.gotS > LAND_S ? [`${name}: the link opened, but the app received it only ${r.gotS} s after the open (more than ${LAND_S} s)`] : [];
+      return r.gotS > SLOW_S ? [`${name}: the link opened, but the app received it only ${r.gotS} s after the open (more than ${SLOW_S} s)`] : [];
     }
     const why = r.simulated ? 'simulated by the openurl_fault input' : r.gaveUpS !== null ? `iOS gave up on it after ${r.gaveUpS} s, Code=60` : `simctl exit ${r.exit}, not iOS's 10 s timeout`;
     if (r.passed) return [`${name}: the link open threw (${why}), but the app received the link ${r.landedS} s after the open, so the journey went on to check its screen`];
@@ -79,7 +79,7 @@ export function table(records, xml) {
   const win = [...windows(xml)];
   const s = (n) => (typeof n === 'number' ? `${n} s` : '?');
   return [
-    `### Link opens: from the open to the app's own "received a link" line (iOS's Open dialog and Maestro's tap on it included, when iOS asked); more than ${LAND_S} s is a warning`,
+    `### Link opens: from the open to the app's own "received a link" line (iOS's Open dialog and Maestro's tap on it included, when iOS asked); more than ${SLOW_S} s is a warning`,
     '| Journey | Open (UTC) | simctl | App got the link |',
     '|---|---|---|---|',
     ...rows.map((r) => {
@@ -91,7 +91,7 @@ export function table(records, xml) {
             ? `failed after ${s(r.simctlS)}: iOS gave up at ${r.gaveUpS} s (Code=60)`
             : `failed after ${s(r.simctlS)}: exit ${r.exit}`;
       const got = r.gotS ?? r.landedS;
-      const gotText = got === null || got === undefined ? 'not in the log' : `${got} s${got > LAND_S ? ' ⚠️' : ''}`;
+      const gotText = got === null || got === undefined ? 'not in the log' : `${got} s${got > SLOW_S ? ' ⚠️' : ''}`;
       return `| ${journeyAt(win, Date.parse(r.at)).replace(/\|/g, '\\|')} | ${r.at.slice(11, 19)} | ${how} | ${gotText} |`;
     }),
   ];

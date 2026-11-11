@@ -10,6 +10,13 @@ name: A fresh install, signed out, on the first screen
 # - A permission prompt a failed journey left up (iOS keeps it over the next launch, run 42839865165) is answered
 #   first, or the next journey can't reach its first screen. (launchApp's `permissions` didn't pre-grant the camera
 #   there, so journey 4 answers the prompts itself, as a cook would.)
+# - trustd rebuilding its pinning database (no certificate checked for minutes) is waited out before the app is up
+#   (trustd-ready.yaml, MODE launch: Safari provokes a check, as the readiness gate does).
+- runFlow:
+    file: trustd-ready.yaml
+    env:
+      MODE: launch
+      WHY: a fresh launch
 - launchApp:
     clearState: true
     clearKeychain: true

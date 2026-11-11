@@ -49,6 +49,39 @@ test('a journey that got through the stall says so, with no re-run advice (run 4
   assert.match(failedLine, /not the app \(re-run the job\)$/);
 });
 
+// 42939750084 (#488): the rebuild began at 01:50:21, trustd still checked until 01:50:39, then nothing; journey 4's clip
+// download hung (no failed check counted) and it failed at 01:51:20.
+const STALL_488 = [EVAL('01:50:10.000'), UPDATE('01:50:21.000'), SIGN('01:50:30.000'), EVAL('01:50:39.000'), XPC('01:51:05.000')].join('\n');
+const atMs = (t) => Date.parse(`2026-11-10T${t}Z`);
+
+test("a failed journey with no failed check counted is named by its failure time in a stall (42939750084's journey 4)", () => {
+  // Other processes' checks failed in the quiet gap (01:51 had others 0/2): a check was wanted and not given.
+  const log = [CHECK('01:49:50.000', 'homecookd', true), CHECK('01:50:55.000', 'nsurlsessiond', false), CHECK('01:51:10.000', 'nsurlsessiond', false)].join('\n');
+  const j4 = { name: 'Record, film, send', log, passed: false, endMs: atMs('01:51:20') };
+  assert.deepEqual(journeyLines([j4], trustd(STALL_488), atMs('01:49:20')), [
+    "Record, film, send: failed at 01:51:20 with no failed check of its own counted; trustd had checked nothing for 41 s (since 01:50:39 (1 m 19 s after the simulator check passed)), during a pinning database update (121 → 131) from 01:50:21; other processes' checks in that gap: 2 failed, 0 passed: the simulator stopped checking certificates, not the app (re-run the job)",
+  ]);
+});
+
+test('a quiet gap with no failed check from anyone only hedges: it may be the stall, and the same step failing again is the app', () => {
+  // The Master's point: 5 quiet seconds is normal for an app making no requests, and a rebuild is "open" for its first
+  // 60 s whatever trustd does, so a real failure there mustn't read as the simulator.
+  const j = { name: 'J', log: CHECK('01:51:00.000', 'nsurlsessiond', true).replace('result: true', 'result: true'), passed: false, endMs: atMs('01:51:20') };
+  const [line] = journeyLines([j], trustd(STALL_488), null);
+  assert.equal(line, "J: failed at 01:51:20 with no failed check of its own counted; trustd had checked nothing for 41 s (since 01:50:39), during a pinning database update (121 → 131) from 01:50:21; other processes' checks in that gap: 0 failed, 1 passed. It may be the stall: re-run once, and if the same step fails again, it's the app");
+  assert.doesNotMatch(line, /not the app|re-run the job/);
+});
+
+test('no such line for a journey that passed, one that failed after trustd checked again, or one with no end time', () => {
+  const j = (o) => ({ name: 'J', log: '', ...o });
+  assert.deepEqual(journeyLines([j({ passed: true, endMs: atMs('01:51:20') })], trustd(STALL_488), null), []);
+  const settled = `${STALL_488}\n${EVAL('01:51:25.000')}\n${EVAL('01:52:10.000')}`; // checking again 109 s after the rebuild began
+  assert.deepEqual(journeyLines([j({ passed: false, endMs: atMs('01:52:30') })], trustd(settled), null), []);
+  assert.deepEqual(journeyLines([j({ passed: false, endMs: atMs('01:50:41') })], trustd(STALL_488), null), [], 'only 2 s after the last check');
+  assert.deepEqual(journeyLines([j({ passed: false })], trustd(STALL_488), null), []);
+  assert.deepEqual(journeyLines([j({ passed: false, endMs: atMs('01:51:20') })], trustd(EVAL('01:50:10.000')), null), [], 'no rebuild at all');
+});
+
 test("trustd evaluating while only the app fails points at the api's certificate, not the simulator", () => {
   const stream = [EVAL('21:09:00.000'), EVAL('21:09:40.000'), EVAL('21:10:30.000')].join('\n');
   const log = [CHECK('21:09:30.000', 'homecookd', false), CHECK('21:09:45.000', 'nsurlsessiond', true), CHECK('21:10:40.000', 'homecookd', false)].join('\n');

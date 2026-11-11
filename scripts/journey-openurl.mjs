@@ -5,9 +5,9 @@
 // "UIOpenURLAction" lines (the app receiving a link). Neither kind holds the link.
 //   node scripts/journey-openurl.mjs --since <ms> --stream <file> [--log <file>] [--exit <code>] [--wait <s>] [--simulated]
 //   node scripts/journey-openurl.mjs --since <ms> --stream <file> --landed-within <s>
-// Exits 0 when iOS gave up on the open and the app still received a link within --wait s (30: what open-link.yaml waits
-// for its screen anyway) of --since, the moment the open started; else 1. The 30 s are counted to the app's own line,
-// not to simctl returning. Either way it adds one JSON line to --log for the job summary (journey-retries.mjs):
+// Exits 0 when iOS gave up on the open and the app still received a link within --wait s (LAND_S, 45: raised from 30 s on
+// Nov 10) of --since, the moment the open started; else 1. The seconds are counted to the app's own line, not to simctl
+// returning. Either way it adds one JSON line to --log for the job summary (journey-retries.mjs):
 // { at, exit, simctlS, gaveUpS, landedS, passed, simulated, wait }.
 // --exit 0 (an open that worked) only adds its line, with how long simctl took, and exits 0 at once: the Times step reads
 // when the app got that link from the same stream, so a slow open shows even when nothing failed.
@@ -17,7 +17,13 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-export const LAND_S = 30;
+// How long after an open iOS gave up on (Code=60) the app may still receive its link and the open count as made. 45 s,
+// raised from 30 s (the Master, Nov 10) on the six landings seen: 14.2, 15.8, 16.4, 21.5, 30.3 and 53.0 s after the open
+// (42872308399 attempt 2, 42847823481 attempt 2 twice, 42851642925, 42939750084 attempt 2, 42847823481 attempt 1). Five
+// pass at 45 s; 53.0 s still fails. Only for an open iOS gave up on: one that didn't throw keeps its own limits.
+export const LAND_S = 45;
+/** A link that reached the app later than this after its open is a warning, excused or not (journey-retries.mjs). */
+export const SLOW_S = 30;
 // How long to wait for lsd's line after simctl failed, before calling it some other failure.
 const GAVE_UP_GRACE_MS = 3000;
 

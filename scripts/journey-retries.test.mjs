@@ -238,3 +238,14 @@ test('the CLI: --table with the stream, and the warnings read the stream too', (
   const noStream = spawnSync(process.execPath, [SCRIPT, dir, log, path.join(dir, 'none')], { encoding: 'utf8' });
   assert.equal(noStream.stdout, '');
 });
+
+test('the slow-open warning stays at 30 s while an excused open may land up to 45 s: a 30-45 s landing passes but always shows', () => {
+  // An open that worked, its link 35 s later: a warning, and ⚠️ in the table.
+  const recs = landings([ok('2026-11-10T16:20:53.000Z')], gotAt('2026-11-10T16:21:28.000Z'));
+  assert.deepEqual(opens(recs, REPORT), [`${J3}: the link opened, but the app received it only 35 s after the open (more than 30 s)`]);
+  assert.match(table(recs, REPORT)[3], /\| 35 s ⚠️ \|$/);
+  // One iOS gave up on, landing at 30.3 s (42939750084 attempt 2): excused, and still a warning with its time.
+  const excused = landings([rec({ landedS: 30.3, passed: true })], gotAt('2026-11-10T16:25:54.187Z'));
+  assert.match(opens(excused, REPORT)[0], /the app received the link 30.3 s after the open, so the journey went on to check its screen$/);
+  assert.match(table(excused, REPORT)[3], /\| 30.3 s ⚠️ \|$/);
+});
