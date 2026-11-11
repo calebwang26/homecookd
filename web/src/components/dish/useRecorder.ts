@@ -5,7 +5,7 @@
 // one that delivered nothing) comes back `silent`, so it is never sent. The stream is let go when the page
 // goes away (pagehide) or the questions are done (unmount), so the browser's "recording" dot never lingers.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { silentClip } from './silentClip';
+import { silentWithin } from './silentClip';
 
 /**
  * Best first; '' lets the browser pick its own default. webm leads because Chrome's mp4 carries
@@ -63,9 +63,7 @@ function pickType(): string {
  * too small to hold any audio (silentClip.ts: a mic that delivered nothing leaves only a file's header).
  */
 function isSilent(blob: Blob, durationS: number): Promise<boolean> {
-  return Promise.race([measure(blob), new Promise<null>((r) => window.setTimeout(() => r(null), 2000))]).then((decoded) =>
-    silentClip(decoded, blob.size, durationS),
-  );
+  return silentWithin(measure(blob), blob.size, durationS);
 }
 
 /** True: nothing louder than a faint hiss; false: something was; null: this browser couldn't decode it. */
