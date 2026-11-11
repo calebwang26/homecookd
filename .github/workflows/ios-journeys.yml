@@ -134,9 +134,14 @@ jobs:
           # minutes (run 42786504171: from about 70 s after the first check, 09:13:33-09:17:40, every check waited and
           # failed). So the first check happens here, once the simulator is up, and the rebuild runs during npm ci, Pods
           # and the build. "Wait for the simulator's trust check" then waits for the lock to be gone.
+          # trustd's own log from boot to the end of the job, for "Name a certificate stall" (scripts/journey-trust.mjs): the
+          # rebuild can also start long after the first check (42898927696: 58 s after the trust check passed), and then
+          # trustd checks nothing for minutes. The stream stays on the runner; only counts from it are kept.
           HOST=${EXPO_PUBLIC_AWS_URL#https://}; HOST=${HOST%%/*}
           # (bootstatus without -b, so it never races the boot above; it waits for the boot to finish)
           nohup bash -c "for i in \$(seq 1 240); do xcrun simctl bootstatus '$UDID' > /dev/null 2>&1 && break; sleep 5; done; \
+            xcrun simctl spawn '$UDID' log stream --style syslog --level debug --predicate 'process == \"trustd\"' \
+              > '$RUNNER_TEMP/trustd-stream.log' 2>/dev/null & \
             sleep 5; xcrun simctl openurl '$UDID' 'https://$HOST/?trust-first-use' && date +%s > '$RUNNER_TEMP/trust-first-use'" \
             > "$RUNNER_TEMP/trust-first-use.log" 2>&1 &
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -498,6 +503,26 @@ jobs:
             echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY"
           done
           node scripts/journey-retries.mjs --table "${OPENS[@]}" | tee -a "$GITHUB_STEP_SUMMARY" || true
+      # A certificate stall names itself (Master Agent, Nov 10; scripts/journey-trust.mjs, tested). trustd, the
+      # simulator's certificate service, sometimes stops checking anything for minutes, even after the trust check
+      # passed (42898927696: it started rebuilding its pinning database 58 s later), and every handshake then fails, the
+      # app's included. Each journey whose app had a check fail gets a warning: when trustd last checked anything,
+      # whether it was rebuilding or locked, and other processes' results beside the app's. It names the simulator only
+      # when trustd was quiet at least 5 s before the app's first failure and through them, or others failed too; a
+      # failure while trustd kept checking reads as the api's certificate, and no trustd log at all says it can't tell. Each rebuild or lock in the run gets a
+      # line too, with when trustd checked again, if it did: what a fix would need to know. The kept file has times,
+      # pids, versions and per-minute counts only, and goes through the same scrub as every log below.
+      - name: Name a certificate stall
+        if: always()
+        run: |
+          [ -d "$RUNNER_TEMP/maestro-out" ] || exit 0
+          node scripts/journey-trust.mjs "$RUNNER_TEMP/maestro-out" "$RUNNER_TEMP/trustd-stream.log" "${T_WARM:-}" \
+            --summary "$RUNNER_TEMP/maestro-out/trustd-summary.txt" | while IFS= read -r LINE; do
+            case "$LINE" in
+              trustd*) echo "$LINE"; echo "> $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
+              *) echo "::warning title=Certificate checks failed::$LINE"; echo "> ⚠️ $LINE" >> "$GITHUB_STEP_SUMMARY" ;;
+            esac
+          done
       # Maestro echoes an opened link, and every -e value, in each flow's commands.json and logs. So when the keyed
       # journeys ran, every flow keeps only its screenshots and the simulator's log (report.xml stays): commands.json,
       # Maestro's own logs and the screen dumps go. In the simulator's log, which shows a stall's cause (trustd, #456),
@@ -510,7 +535,7 @@ jobs:
         id: scrub
         if: always()
         run: |
-          trap 'rm -rf "$RUNNER_TEMP"/maestro-out/*/*/logs; echo "::warning title=Journey files::the scrub failed, so every log was removed and nothing is uploaded"' ERR
+          trap 'rm -rf "$RUNNER_TEMP"/maestro-out/*/*/logs "$RUNNER_TEMP"/maestro-out/trustd-summary.txt; echo "::warning title=Journey files::the scrub failed, so every log was removed and nothing is uploaded"' ERR
           shopt -s nullglob
           for d in "$RUNNER_TEMP"/maestro-out/*/*/; do
             if [ -z "${KID_KEY:-}" ] && [ "$(basename "$d")" = "Launch, then a link that doesn't work" ]; then continue; fi
@@ -521,7 +546,9 @@ jobs:
           # Each kept log (scripts/journey-scrub.mjs, tested): every value above, an S3 address's query string (a presigned
           # upload URL holds a temporary key id and session token: run 42852281034 logged one, cut short by iOS) and any
           # X-Amz value become ***. A log it can't read and rewrite, or that still holds one, is deleted with a warning.
-          DROPS=$(JOURNEY_SCRUB_VALUES="$(printf '%s\n' "${SECRETS[@]}")" node scripts/journey-scrub.mjs "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log)
+          # (trustd-summary.tx[t]: a glob, so with nullglob a run that never wrote it passes nothing, not a missing file)
+          DROPS=$(JOURNEY_SCRUB_VALUES="$(printf '%s\n' "${SECRETS[@]}")" node scripts/journey-scrub.mjs \
+            "$RUNNER_TEMP"/maestro-out/*/*/logs/device-simulator.log "$RUNNER_TEMP"/maestro-out/trustd-summary.tx[t])
           while IFS= read -r LINE; do [ -z "$LINE" ] || echo "::warning title=Journey files::$LINE"; done <<< "$DROPS"
           for v in "${KID_KEY:-}" "${COOK_KEY:-}" "${FAMILY_LINK#*t=}"; do
             [ -n "$v" ] || continue
