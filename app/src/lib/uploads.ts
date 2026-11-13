@@ -13,7 +13,7 @@ import { webGetItem, webSetItem } from './legacyKeys';
 import { api, ApiError } from './api';
 import { awsPersonId } from './aws/client';
 import { AWS_ON } from './aws/config';
-import { checkVideos, jobs as awsJobs, partRange, type UploadLink } from './aws/jobs';
+import { checkVideos, jobs as awsJobs, LIMITS, partRange, type UploadLink } from './aws/jobs';
 import { cacheBuster, fetchJson } from './http';
 import { convexSession, convexSignedIn } from './live/convex';
 
@@ -590,7 +590,7 @@ async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
   const problem = checkVideos(videos);
   if (problem === 'size') throw new Error(MISSING_VIDEO);
   if (problem === 'length') throw new Error(`That's more than ${MAX_RECORDING_HOURS} hours of video. Pick fewer videos.`);
-  if (problem) throw new Error('Pick 1 to 20 videos.');
+  if (problem) throw new Error(`Pick 1 to ${LIMITS.videos} videos.`);
   const made = await awsJobs.newUpload(videos, newKey(), input.as);
   const jobId = made.uploadId;
   const stored: StoredJob = {
