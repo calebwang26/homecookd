@@ -22,7 +22,7 @@ Nov 2, 2026. Read from `aws-migration` at `a1816615b`, and checked against stagi
 2. 1.1 makes no recording row: no route starts one (homie is off). So send the dish, the kids and the language on the job itself, and leave out `recordingId`.
 3. Make an `Idempotency-Key` (a uuid) for this upload. Save it on the phone with each video's path, `contentType`, exact `size` and `durationS`, before the first call.
 4. `POST /v1/video-uploads {videos: [{contentType, size, durationS}]}`. Save `uploadId`.
-5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds, dishAskId?}` straight away (`dishAskId` only when she's filming for a request card), before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
+5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds, dishAskId?, filmedInApp?}` straight away (`dishAskId` only when she's filming for a request card), before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
 6. If she picked people to send it to: `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}` with its own `Idempotency-Key` (Messages area). It's delivered by itself when the recipe is ready (MESSAGES.md, flow 10).
 7. For each entry in `uploads`:
    - `method: "PUT"`: a background PUT of the whole file to `url`, with exactly `headers` (`Content-Type`) and the file's exact bytes. The link is signed for that type and that length, so a different size is refused by S3.
@@ -90,7 +90,7 @@ Flow 1, with these differences:
 - `size` is the file's exact byte count. The app's `fileSizeFor` fallback of 0 is refused now.
 - `durationS` when the picker knows it. The api adds up only the ones sent (4 hours at most). The worker measures again and fails a job over 4 hours.
 - `source: "phone"`, and `title` is the dish she typed, if any.
-- Check before sending: 1 to 20 videos, each a `video/*`, each at most 20 GiB, 4 hours in all.
+- Check before sending: 1 to 99 videos, each a `video/*`, each at most 20 GiB, 4 hours in all.
 - Each video over 5 GiB comes back as `PARTS` (flow 8).
 
 ### 7. Resuming after the app dies mid-upload
@@ -146,7 +146,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 
 | Field | Rule |
 |---|---|
-| `videos` | 1 to 20, in the order the worker will read them. `index` in the answer is the place here, from 1 |
+| `videos` | 1 to 99, in the order the worker will read them. `index` in the answer is the place here, from 1 |
 | `contentType` | `video/<type>`, at most 100 characters. Stored lowercase |
 | `size` | The exact bytes, a whole number from 1 to 21,474,836,480 (20 GiB) |
 | `durationS` | Optional. Seconds, 0 to 86,400 each; at most 14,400 (4 hours) for those sent |
@@ -168,7 +168,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 |---|---|---|
 | `forbidden` (403) | A kid | Don't offer Record to kids |
 | `invalid` (400), `field: "Idempotency-Key"` | Missing: "Send an Idempotency-Key with this write." Malformed: "An Idempotency-Key is 8 to 128 letters, digits, - or _.", as on every write | A bug |
-| `invalid` (400), `field: "videos"` | "Pick 1 to 20 videos.", "Every file must be a video.", "A video's length doesn't look right.", "That's more than 4 hours of video. Please pick fewer videos." | Check before sending |
+| `invalid` (400), `field: "videos"` | "Pick 1 to 99 videos.", "Every file must be a video.", "A video's length doesn't look right.", "That's more than 4 hours of video. Please pick fewer videos." | Check before sending |
 | `too_large` (413) | A video over 20 GiB | Check the size before sending |
 | `idempotency_conflict` (409) | This key with other videos, or on another route | A bug: a new upload needs a new key |
 | `not_found` (404) | The upload behind this key was cancelled | Start again with a new key |
@@ -246,6 +246,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 | `forKidIds` | Optional: up to 20 kids of this family, by `personId`. `forKidId` is the older single form |
 | `recordingId` | Optional: her own recording. 1.1 has none: leave it out |
 | `dishAskId` | Optional: the request card this recording answers, when she films from it (`/record?ask=<id>`). Once the recipe is ready, the card's kid gets the `filmed` push (MESSAGES.md, flow 9). Kept only for a card asked of her in her family; any other is left off, with no error, and the job is made all the same |
+| `filmedInApp` | Optional, default `false`: `true` only when every clip came from the app's own camera. The worker then keeps the clips in the order she filmed them and never reorders them by what's in them (PR #496) |
 
 **Answer:** 201 `{jobId, recipeId}` for a new job; 200 with the same job for the same `uploadId` (the body isn't compared: the first call's title and kids stay). `recipeId` is the "processing" card's id while recipe writes are on, and null otherwise (staging today); the job carries it once it's `done`. The job starts `uploading`, or `queued` if every video is already marked in.
 

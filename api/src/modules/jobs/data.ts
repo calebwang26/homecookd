@@ -129,13 +129,14 @@ export async function insertJob(
     language: string;
     forKidIds: string[];
     dishAskId: string | null;
+    filmedInApp: boolean;
   },
 ): Promise<string> {
   const { rows } = await c.query(
-    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, dish_ask_id, stage, progress, idempotency_key)
-     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, $10, 'uploading', 0, $5::text)
+    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, dish_ask_id, filmed_in_app, stage, progress, idempotency_key)
+     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, $10, $11, 'uploading', 0, $5::text)
      returning id`,
-    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds, j.dishAskId],
+    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds, j.dishAskId, j.filmedInApp],
   );
   return rows[0].id;
 }

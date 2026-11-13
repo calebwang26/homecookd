@@ -26,7 +26,9 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   await t.test("the signer's checks and sentences, before anything is written", async () => {
     const before = (await db().query(`select count(*)::int as n from files`)).rows[0].n;
     assert.equal((await ask([])).status, 400);
-    assert.equal((await ask(Array(21).fill(video))).status, 400);
+    const tooMany = await ask(Array(100).fill(video));
+    assert.equal(tooMany.status, 400);
+    assert.equal(tooMany.data.message, "Pick 1 to 99 videos.");
     assert.equal((await ask([{ contentType: "image/png", size: 5 }])).data.message, "Every file must be a video.");
     assert.equal((await ask([{ contentType: "video/mp4", size: 0 }])).status, 400);
     assert.equal((await ask([{ ...video, durationS: 25 * 3600 }])).data.message, "A video's length doesn't look right.");
@@ -38,6 +40,15 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     assert.equal((await db().query(`select count(*)::int as n from files`)).rows[0].n, before + 1);
     const noKey = await call(app, dad, "POST", "/v1/video-uploads", { videos: [video] });
     assert.equal(noKey.status, 400, "a write a phone retries needs its key");
+  });
+
+  await t.test("99 videos, a long cook paused often: their keys sort in the order she filmed them", async () => {
+    const res = await ask(Array(99).fill(video));
+    assert.equal(res.status, 201);
+    const { rows } = await db().query(`select key from files where upload_id = $1`, [res.data.uploadId]);
+    const keys = rows.map((r) => r.key as string);
+    assert.equal(keys.length, 99);
+    assert.deepEqual([...keys].sort(), Array.from({ length: 99 }, (_, i) => `${res.data.uploadId}/${String(i + 1).padStart(2, "0")}.mov`), "S3's lexical order is the filmed order");
   });
 
   await t.test("a link per video, its ledger row, and a key that holds nothing she typed", async () => {

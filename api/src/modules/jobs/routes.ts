@@ -68,6 +68,7 @@ const newJob = {
     forKidIds: { type: "array", maxItems: 100, items: ID },
     recordingId: ID,
     dishAskId: ID,
+    filmedInApp: { type: "boolean" },
   },
 };
 

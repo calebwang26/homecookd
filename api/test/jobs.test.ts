@@ -288,6 +288,20 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     assert.equal((await make("x".repeat(101))).status, 400);
   });
 
+  await t.test("a job says it was filmed in the app only when the phone says so; anything but a boolean is refused", async () => {
+    await clearLimits();
+    const make = async (extra: Record<string, unknown>) => await newJob(app, dad, (await askLinks(app, dad)).uploadId, extra);
+    const filmed = await make({ filmedInApp: true });
+    assert.equal(filmed.status, 201);
+    assert.equal((await job(filmed.data.jobId)).filmed_in_app, true);
+    for (const extra of [{}, { filmedInApp: false }]) {
+      const res = await make(extra);
+      assert.equal(res.status, 201);
+      assert.equal((await job(res.data.jobId)).filmed_in_app, false, JSON.stringify(extra));
+    }
+    assert.equal((await make({ filmedInApp: "yes" })).status, 400);
+  });
+
   await t.test("a recording attaches only for its own cook, and a language must be a code", async () => {
     const hers = (await db().query(
       `insert into recordings (family_id, cook_id, language, source, status) values ($1, $2, 'en', 'phone', 'ended') returning id`,

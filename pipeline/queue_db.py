@@ -202,7 +202,7 @@ class PostgresStore:
                       and (stage = 'queued' or (stage = any(%s) and
                            coalesce(heartbeat_at, claimed_at, updated_at) < now() - make_interval(secs => %s)))
                     returning id, attempts, failures, created_at, family_id, cook_id, recipe_id, recording_id, upload_key, title,
-                              language, video_gaps, cost_usd""",
+                              language, video_gaps, cost_usd, filmed_in_app""",
                 (job_id, RUNNING, lease_s)).fetchone()
             return dict(row) if row else None
         claim = self._do(work)
