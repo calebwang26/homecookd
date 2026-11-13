@@ -2343,6 +2343,14 @@ def test_postgres_reconnects_after_a_lost_connection():
     assert ctx.store.conn.info.backend_pid != pid
 
 
+
+def test_postgres_claim_says_when_it_was_filmed_in_the_app():
+    ctx = _postgres()
+    job_id = ctx.new_job()
+    ctx.admin.execute("update jobs set filmed_in_app = true where id = %s", (job_id,))
+    claim = ctx.store.claim(job_id, qw.LEASE_S)
+    assert claim["filmed_in_app"] is True
+
 def test_postgres_claim_brings_what_the_steps_need():
     import prompts
     ctx = _postgres()
@@ -2359,6 +2367,7 @@ def test_postgres_claim_brings_what_the_steps_need():
     ctx.admin.execute("update jobs set recording_id = %s, video_gaps = %s::jsonb where id = %s",
                       (recording, '[{"startS": 1, "endS": 2}]', job_id))
     claim = ctx.store.claim(job_id, qw.LEASE_S)
+    assert claim["filmed_in_app"] is False  # the column's default: older phones keep today's order
     assert claim["cook_name"] == "Aaji Pawar" and claim["cook_language"] == "mr"
     assert claim["memories_opt_in"] is True and claim["cover_key"] == "covers/plate.jpg"
     assert claim["video_gaps"] == [{"startS": 1, "endS": 2}]
