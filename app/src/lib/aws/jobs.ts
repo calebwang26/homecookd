@@ -74,7 +74,7 @@ const enc = encodeURIComponent;
 const up = (uploadId: string, rest: string) => `/v1/video-uploads/${enc(uploadId)}${rest}`;
 
 export const jobs = {
-  /** Links for one upload (1 to 20 videos, in the order the worker reads them). One Idempotency-Key per upload, saved before the call. */
+  /** Links for one upload (1 to LIMITS.videos videos, in the order the worker reads them). One Idempotency-Key per upload, saved before the call. */
   newUpload: (videos: VideoSpec[], idempotencyKey: string, as?: string | null) =>
     request<NewUpload>('/v1/video-uploads', { auth: 'session', as, body: { videos }, idempotencyKey }),
   /** Fresh links for the videos not in yet (a PUT answered 403: its link ran out). */
@@ -92,7 +92,7 @@ export const jobs = {
   cancelUpload: (uploadId: string, as?: string | null) =>
     request<{ stopped: boolean }>(up(uploadId, '/cancel'), { auth: 'session', as, body: {} }),
   /** The job, made straight after the links (before the bytes land). The same uploadId answers the same job. */
-  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[]; dishAskId?: string }, as?: string | null) =>
+  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[]; dishAskId?: string; filmedInApp?: boolean }, as?: string | null) =>
     request<{ jobId: string; recipeId: string | null }>('/v1/jobs', { auth: 'session', as, body: { ...input, source: 'phone' } }),
   list: (cursor?: string | null, as?: string | null) =>
     request<{ jobs: Job[]; nextCursor: string | null }>(`/v1/jobs${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session', as }),
@@ -125,8 +125,11 @@ export const recipes = {
   unshare: (id: string, as?: string | null) => request<{ ok: true }>(`/v1/recipes/${enc(id)}/unshare`, { auth: 'session', as, body: {} }),
 };
 
-/** Before asking for links (JOBS.md flow 6): 1 to 20 videos, each a video/* of 1 byte to 20 GiB, 4 hours in all. */
-export const LIMITS = { videos: 20, bytes: 21_474_836_480, totalS: 14_400 } as const;
+/**
+ * Before asking for links (JOBS.md flow 6): 1 to 99 videos, each a video/* of 1 byte to 20 GiB, 4 hours in all. 99, not
+ * 20, since every Pause starts a new file (pauseFlow; the api's MAX_VIDEOS rises with it). Must match the api's.
+ */
+export const LIMITS = { videos: 99, bytes: 21_474_836_480, totalS: 14_400 } as const;
 
 export type VideoProblem = 'count' | 'type' | 'size' | 'length';
 

@@ -22,7 +22,7 @@ import type { Profile } from '@/lib/api';
 import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { clipFile, keepAfterGiveUp, keepWhenGone, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
+import { clipFile, keepAfterGiveUp, keepWhenGone, noteFilmedInApp, resendStep, sendsBySelf, type ResendStep, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
 import {
   cleanOrphanCopies,
   clipsHere,
@@ -100,7 +100,7 @@ async function resendNote(u: Unsent, cook: Profile, profiles: Profile[], learner
   }
   if (step === 'create') {
     countResend(u.recordingId);
-    await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: !!u.glasses, language: u.language, recordingId, title });
+    await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: !!u.glasses, language: u.language, recordingId, title, filmedInApp: noteFilmedInApp(u) });
     dropUnsent(u.recordingId);
     return step;
   }

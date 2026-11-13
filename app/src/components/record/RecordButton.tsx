@@ -3,8 +3,9 @@
 // While filming (`live`) two faint red rings pulse outward from it on a loop (one every 0.8 s, each
 // growing and fading over 1.6 s, out to the mockup's outer ring); Reduce Motion keeps them still.
 // Before filming starts and after it ends it rests, dimmed and without rings. `resume`: filming in the
-// app stopped while she was away: the button is bright again, with a cream dot (record) in place of the
-// stop square, and a tap films again.
+// app is paused (her Pause, leaving the app, a camera that stopped): the button is bright again, with a cream
+// dot (record) in place of the stop square, and a tap films again. `pause`: filming in the app, where the one
+// button is Pause (Caleb, Nov 12): two cream bars in place of the stop square, the rings still pulsing.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -22,7 +23,7 @@ export const PULSE_MS = 1600;
 const RING_GROWTH = (2 * 46) / RECORD_SIZE;
 const RING = 'rgba(154,79,71,0.22)';
 
-export function RecordButton({ live, resume = false, disabled, onPress, accessibilityLabel }: { live: boolean; resume?: boolean; disabled?: boolean; onPress: () => void; accessibilityLabel: string }) {
+export function RecordButton({ live, resume = false, pause = false, disabled, onPress, accessibilityLabel }: { live: boolean; resume?: boolean; pause?: boolean; disabled?: boolean; onPress: () => void; accessibilityLabel: string }) {
   const reduce = useReducedMotion();
   const pulse = useSharedValue(0);
   const breathing = live && !reduce;
@@ -52,8 +53,16 @@ export function RecordButton({ live, resume = false, disabled, onPress, accessib
           scaleTo={0.97}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          testID="record-button"
           style={[styles.button, !live && !resume && styles.flat]}>
-          <View style={resume ? styles.dot : styles.square} />
+          {pause && live ? (
+            <View style={styles.bars}>
+              <View style={styles.bar} />
+              <View style={styles.bar} />
+            </View>
+          ) : (
+            <View style={resume ? styles.dot : styles.square} />
+          )}
         </PressableScale>
       </View>
     </View>
@@ -88,5 +97,7 @@ const styles = StyleSheet.create({
   resting: { opacity: 0.55 },
   flat: { boxShadow: 'none' },
   square: { width: SQUARE, height: SQUARE, borderRadius: 18, backgroundColor: colors.card },
+  bars: { flexDirection: 'row', gap: 22 },
+  bar: { width: 26, height: 84, borderRadius: 9, backgroundColor: colors.card },
   dot: { width: SQUARE, height: SQUARE, borderRadius: SQUARE / 2, backgroundColor: colors.card },
 });

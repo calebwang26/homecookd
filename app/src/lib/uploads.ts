@@ -13,7 +13,7 @@ import { webGetItem, webSetItem } from './legacyKeys';
 import { api, ApiError } from './api';
 import { awsPersonId } from './aws/client';
 import { AWS_ON } from './aws/config';
-import { checkVideos, jobs as awsJobs, partRange, type UploadLink } from './aws/jobs';
+import { checkVideos, jobs as awsJobs, LIMITS, partRange, type UploadLink } from './aws/jobs';
 import { cacheBuster, fetchJson } from './http';
 import { convexSession, convexSignedIn } from './live/convex';
 
@@ -94,7 +94,7 @@ export type JobMeta = {
    * What jobs.create needs, kept so the home card can make the Convex job again until it lands
    * (components/record/jobRetry). Rows from older builds have none and aren't retried.
    */
-  job_fields?: { glasses: boolean; language: string | null; title: string; kids: { id: string; name: string }[]; dishAskId?: string | null } | null;
+  job_fields?: { glasses: boolean; language: string | null; title: string; kids: { id: string; name: string }[]; dishAskId?: string | null; filmedInApp?: boolean } | null;
   /** 'ok' once Convex has this upload's job; 'failed' once every try failed (the row says so). */
   convex_job?: 'ok' | 'failed' | null;
   convex_job_attempts?: number;
@@ -590,7 +590,7 @@ async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
   const problem = checkVideos(videos);
   if (problem === 'size') throw new Error(MISSING_VIDEO);
   if (problem === 'length') throw new Error(`That's more than ${MAX_RECORDING_HOURS} hours of video. Pick fewer videos.`);
-  if (problem) throw new Error('Pick 1 to 20 videos.');
+  if (problem) throw new Error(`Pick 1 to ${LIMITS.videos} videos.`);
   const made = await awsJobs.newUpload(videos, newKey(), input.as);
   const jobId = made.uploadId;
   const stored: StoredJob = {

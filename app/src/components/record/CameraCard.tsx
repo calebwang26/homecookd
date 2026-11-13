@@ -1,6 +1,7 @@
 // What the phone's camera sees while she films in the app (components/record/useInAppCamera): a rounded
 // portrait card above the record button, so she can check the stove is in the shot. A small pill on it
-// says "● 4:07" while filming and "Stopped" while paused. The one camera view lives here for the whole
+// says "● Recording · 4:07" while filming, "Paused · 4:07" while paused and "Stopped" when the camera stopped by
+// itself (pauseFlow pillLabel). The one camera view lives here for the whole
 // recording (the camera can only show in one place): for homie's plate photo the same card grows from
 // its slot into the middle of the screen (`big`), on the UI thread (Reanimated), and shrinks back after.
 // It's positioned absolutely over the slot the screen reserves for it (CAMERA_SLOT), so the plate
@@ -18,6 +19,7 @@ import { Txt } from '@/components/ui';
 import { colors, motion, radii } from '@/theme/tokens';
 
 import { clockLabel } from './cameraLogic';
+import { pillLabel, type PauseFlowState } from './pauseFlow';
 import type { CameraHandle, InAppCamera } from './useInAppCamera';
 
 export type SlotFrame = { x: number; y: number; width: number; height: number };
@@ -45,7 +47,10 @@ export function CameraCard({
   side,
   photo,
   standIn = null,
+  flow,
 }: {
+  /** The cook's view of filming (pauseFlow), from the screen (its dev previews included). */
+  flow: PauseFlowState;
   cam: InAppCamera;
   /** cam.setCamera: the <Camera> element's ref. */
   attach: (camera: CameraHandle | null) => void;
@@ -102,16 +107,16 @@ export function CameraCard({
         />
       ) : null}
       {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Your plate" /> : null}
-      {!big ? <Status cam={cam} preview={!!standIn} /> : null}
+      {!big ? <Status cam={cam} preview={!!standIn} flow={flow} /> : null}
     </Animated.View>
   );
 }
 
-/** "● 4:07" while filming (the dot breathes), "Stopped" while paused. */
-function Status({ cam, preview }: { cam: InAppCamera; preview: boolean }) {
+/** "● Recording · 4:07" while filming (the dot breathes), "Paused · 4:07" while paused, "Stopped" (pauseFlow pillLabel). */
+function Status({ cam, preview, flow }: { cam: InAppCamera; preview: boolean; flow: PauseFlowState }) {
   const reduce = useReducedMotion();
   const [now, setNow] = useState(() => Date.now());
-  const filming = preview || cam.phase === 'filming';
+  const filming = flow === 'filming';
   useEffect(() => {
     if (!filming) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -123,13 +128,14 @@ function Status({ cam, preview }: { cam: InAppCamera; preview: boolean }) {
     dot.set(withRepeat(withSequence(withTiming(0.35, { duration: 700 }), withTiming(1, { duration: 700 })), -1, false));
   }, [filming, reduce, dot]);
   const dotStyle = useAnimatedStyle(() => ({ opacity: dot.value }));
-  if (!preview && (cam.phase === 'idle' || cam.phase === 'done')) return null;
   const clock = clockLabel(preview ? 247_000 : cam.filmedMs(now));
+  const label = pillLabel(flow, clock);
+  if (!label) return null;
   return (
-    <View style={styles.pill} accessible accessibilityLabel={filming ? `Recording, ${clock}` : 'Recording stopped'}>
+    <View style={styles.pill} accessible accessibilityLabel={label}>
       <Animated.View style={[styles.dot, filming ? dotStyle : styles.dotOff]} />
       <Txt variant="meta" size={13} weight={700} color={colors.card}>
-        {filming ? clock : 'Stopped'}
+        {label}
       </Txt>
     </View>
   );
