@@ -90,6 +90,8 @@ export type JobInput = {
   recordingId?: string;
   /** The request card this recording answers (V2-LINKING.md §1.4), for its "filmed" push. */
   dishAskId?: string;
+  /** Every clip came from the app's camera: the worker keeps the filmed order (PR #496). */
+  filmedInApp?: boolean;
 };
 
 /**
@@ -140,6 +142,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
       language,
       forKidIds: kids,
       dishAskId,
+      filmedInApp: input.filmedInApp === true,
     });
     if (recording) await noteRecordingJob(c, recording.id, jobId);
     await data.attachUpload(c, uploadId);

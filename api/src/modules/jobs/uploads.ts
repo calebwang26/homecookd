@@ -13,7 +13,9 @@ import { hit, subjectKey } from "../../rateLimit.js";
 import { uploadStore } from "../../storage.js";
 import * as data from "./data.js";
 
-const MAX_VIDEOS = 20; // cloud/signer MAX_FILES
+// The app's camera starts a new file every 5 minutes and on every Pause, so an hour with pauses is past the signer's 20 (cloud/signer MAX_FILES, 1.0 phones only).
+// 99 is the ceiling while keys are padded to 2 digits: the worker reads them in S3's lexical order, and 100 would sort before 11.
+const MAX_VIDEOS = 99;
 const MAX_HOURS = 4; // cloud/signer MAX_HOURS, pipeline/worker.py
 /** The signer's limit (Caleb, Nov 1). A 3-hour iPhone recording is about 10 GB. */
 export const MAX_VIDEO_BYTES = 20 * 1024 ** 3;
