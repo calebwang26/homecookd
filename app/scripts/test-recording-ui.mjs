@@ -1054,7 +1054,7 @@ await atest('filming: every saved file is reported with all the files so far (th
   const r = rig();
   await r.f.start();
   await r.f.flip();
-  await r.f.pause();
+  await r.f.pause('away');
   await r.f.resume();
   const clips = await r.f.stop();
   assert.deepEqual(r.saves, ['part-01.mp4', 'part-01.mp4 part-02.mp4', 'part-01.mp4 part-02.mp4 part-03.mp4']);
@@ -1126,7 +1126,7 @@ await atest('filming: leaving the app during a flip starts no file; coming back 
   await r.f.start();
   const flipping = r.f.flip();
   await until(() => r.f.snapshot().facing === 'front', 'the switch');
-  await r.f.pause();
+  await r.f.pause('away');
   await flipping;
   await wait(30);
   assert.equal(r.f.phase, 'paused');
@@ -1152,7 +1152,7 @@ await atest('filming: a flip after "I’m done" waits for the last file to be sa
 await atest('filming: coming back right after leaving: the mic restarts only once the file is saved', async () => {
   const r = rig({ saveMs: 30 });
   await r.f.start();
-  void r.f.pause();
+  void r.f.pause('away');
   assert.equal(await r.f.resume(), true);
   assert.deepEqual(r.events, ['pause', 'beforeResume', 'goesOn true', 'resume']);
   r.rulesKept();

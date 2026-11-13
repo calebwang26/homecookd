@@ -126,11 +126,12 @@ await test('links, parts, finish, complete and both cancels go to their paths wi
   assert.deepEqual(own.map((c) => c.body), [{}, { index: 2, partNumbers: [1, 2, 3] }, { index: 2, parts: [{ partNumber: 1, etag: '"abc"' }] }, {}, {}, {}]);
 });
 
-await test('checking videos before asking: 1 to 20, video/*, 1 byte to 20 GiB, 4 hours in all', () => {
+await test('checking videos before asking: 1 to 99 (every Pause is a new file), video/*, 1 byte to 20 GiB, 4 hours in all', () => {
   const v = (o = {}) => ({ contentType: 'video/mp4', size: 10, durationS: 60, ...o });
   assert.equal(J.checkVideos([v()]), null);
   assert.equal(J.checkVideos([]), 'count');
-  assert.equal(J.checkVideos(Array.from({ length: 21 }, () => v())), 'count');
+  assert.equal(J.checkVideos(Array.from({ length: 99 }, () => v({ durationS: 120 }))), null, 'a long cook with many pauses');
+  assert.equal(J.checkVideos(Array.from({ length: 100 }, () => v({ durationS: 10 }))), 'count');
   assert.equal(J.checkVideos([v({ contentType: 'image/jpeg' })]), 'type');
   assert.equal(J.checkVideos([v({ size: 0 })]), 'size', 'the old fileSizeFor fallback of 0 is refused');
   assert.equal(J.checkVideos([v({ size: 21_474_836_481 })]), 'size');

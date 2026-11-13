@@ -2,7 +2,7 @@
 // with sound, saved in 5-minute files (CHUNK_MS) under documents/recordings/<recordingId>/, so a crash or
 // a kill loses at most the file it was writing. Leaving the app (a lock, a call, the home screen) finishes
 // the current file at once and the camera waits ("paused"); back in the app it films again by itself after
-// a short trip (Control Center), else when she taps. Every FRAME_EVERY_MS while filming, a small still
+// a short trip (Control Center), else when she taps. Her own Pause (cam.pause) never films again by itself. Every FRAME_EVERY_MS while filming, a small still
 // (640 px JPEG, base64) goes to `onFrame` for homie. The files themselves (start, roll, pause, resume, stop,
 // flip, and what happens when the camera doesn't come back) are filming.ts; this wires it to VisionCamera.
 //
@@ -11,11 +11,12 @@
 //   <CameraCard cam={cam} />          the preview (it must be on screen for the camera to run)
 //   await cam.start()                 filming begins (waits for the camera to be ready)
 //   const clips = await cam.stop()    finishes the last file: the draft clips, in order
+//   await cam.pause()                 her Pause: the file ends; the picture stays live so she can move the phone
 //   await cam.resume()                after a pause: beforeResume (homie's mic restarts), then a new file
 //   const uri = await cam.still()     a full-size still (the plate photo), or null
 //   await cam.flip()                  the other camera (cameraLogic flipSteps); while filming, a file boundary
 //   cam.facing 'back' | 'front'    cam.canFlip (both cameras, ready, no flip running)    cam.flipping
-//   cam.phase  'idle' | 'filming' | 'paused' | 'done'    cam.filmedMs()    cam.error    cam.trouble
+//   cam.phase  'idle' | 'filming' | 'paused' | 'done'    cam.flow (pauseFlow)    cam.filmedMs()    cam.error    cam.trouble
 //   onSaved(clips)                    each file saved in documents/: every file so far (the crash note)
 //
 // The audio session (lib/live/camera CAMERA_AUDIO_SESSION): homie's mic must already be running before a
@@ -38,8 +39,9 @@ import type { Camera, CameraDevice, CameraDeviceFormat } from 'react-native-visi
 import { imageManipulator, visionCamera } from '@/lib/live/camera';
 
 import type { DraftClip } from './draft';
-import { chunkName, FRAME_EVERY_MS, FRAME_WIDTH, resumesBySelf, stopsFilming, type CameraPhase, type Facing } from './cameraLogic';
+import { chunkName, FRAME_EVERY_MS, FRAME_WIDTH, stopsFilming, type CameraPhase, type Facing } from './cameraLogic';
 import { Filming, type FilmingCamera, type Recorded } from './filming';
+import { flowState, resumesOnReturn } from './pauseFlow';
 
 export const VIDEO_BITRATE_MBPS = 6; // 1080p30 H.264: ~2 GB for 45 minutes (the pipeline makes a 720p copy anyway)
 const FPS = 30;
@@ -201,6 +203,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
   const start = useCallback(() => filming.start(), [filming]);
   const stop = useCallback(() => filming.stop(), [filming]);
   const resume = useCallback(() => filming.resume(), [filming]);
+  const pause = useCallback(() => filming.pause('her'), [filming]);
   const flip = useCallback(() => (twoCameras ? filming.flip() : Promise.resolve(false)), [filming, twoCameras]);
 
   // Leaving the app ends the file at once; coming back films again by itself after a short trip.
@@ -211,13 +214,14 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
       if (stopsFilming(s)) {
         if (filming.phase === 'filming') {
           away.current = { since: Date.now(), background: s === 'background' };
-          void filming.pause();
+          void filming.pause('away');
         } else if (away.current && s === 'background') away.current.background = true;
         return;
       }
       const trip = away.current;
       away.current = null;
-      if (trip && filming.phase === 'paused' && resumesBySelf(Date.now() - trip.since, trip.background)) void filming.resume();
+      // Only a pause that leaving made: never her own Pause (pauseFlow resumesOnReturn).
+      if (trip && resumesOnReturn(flowState(filming.snapshot()), Date.now() - trip.since, trip.background)) void filming.resume();
     });
     return () => sub.remove();
   }, [filming]);
@@ -279,6 +283,8 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     /** The camera runs while the app is in front and the screen still needs it. */
     active: appActive && on,
     phase: view.phase,
+    /** The cook's view of filming (pauseFlow): filming, paused, away, stopped… */
+    flow: flowState(view),
     error: view.error,
     /** The camera stopped by itself (filming is paused): "The camera stopped. Your video so far is saved." */
     trouble: view.trouble,
@@ -294,6 +300,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     start,
     stop,
     resume,
+    pause,
     flip,
     still,
     /** Video filmed by `now` (render it with a ticking clock). */

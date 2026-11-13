@@ -386,7 +386,7 @@ export async function token(as?: string): Promise<string> {
   return t;
 }
 
-export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string; dishAskId?: string };
+export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string; dishAskId?: string; filmedInApp?: boolean };
 
 /** Drops unset and empty fields (Convex validators refuse `undefined`-only noise and empty ids). */
 const present = (o: Record<string, unknown>) =>
@@ -411,12 +411,13 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   if (AWS_ON) {
     // POST /v1/jobs: by uploadId (no slash), and no recordingId (1.1 makes no recording rows: JOBS.md flow 1).
     // dishAskId: the kid's card she filmed for, so the kid gets `filmed` (DISH.md); a card not asked of her is dropped.
-    const { title, language, forKidIds, dishAskId } = present(extras) as { title?: string; language?: string; forKidIds?: string[]; dishAskId?: string };
-    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds, dishAskId }, as);
+    // filmedInApp: every clip filmed in the app, so the pipeline keeps their order and never reorders them by content (#496).
+    const { title, language, forKidIds, dishAskId, filmedInApp } = present(extras) as { title?: string; language?: string; forKidIds?: string[]; dishAskId?: string; filmedInApp?: boolean };
+    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds, dishAskId, filmedInApp }, as);
     return;
   }
   const sessionToken = await token(as);
-  const extra = present({ ...extras, dishAskId: undefined }); // Convex's jobs.create doesn't take the card
+  const extra = present({ ...extras, dishAskId: undefined, filmedInApp: undefined }); // Convex's jobs.create takes neither
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
   try {
     await run(extra);

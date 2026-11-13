@@ -131,6 +131,9 @@ export function orphanCopies(paths: string[], notes: Pick<Unsent, 'clips'>[], bu
 export const sendsBySelf = (u: Pick<Unsent, 'state'>) => u.state !== 'filming';
 
 /** How much was filmed (ms). */
+/** A note's clips were all filmed in the app (none a camera-roll copy, not glasses): its job says so, and the pipeline keeps their order (#496). */
+export const noteFilmedInApp = (u: Pick<Unsent, 'clips' | 'glasses'>) => u.clips.length > 0 && !u.glasses && u.clips.every((c) => !c.copy);
+
 export const filmedLength = (clips: Pick<UnsentClip, 'durationMs'>[]) => clips.reduce((a, c) => a + (c.durationMs || 0), 0);
 
 /** A Send-screen note's own id (no Convex recording behind it). */

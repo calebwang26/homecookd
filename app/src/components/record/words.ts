@@ -52,6 +52,10 @@ const WORDS = {
   // Filming in the app (components/record/useInAppCamera, PlateMoment).
   stopped: { en: 'Recording stopped while you were away', hint: 'Your video so far is saved' },
   keepFilming: { en: 'Keep filming' },
+  // Her Pause while filming in the app (pauseFlow, Caleb Nov 12). The line says what a tap does, never a state.
+  tapToPause: { en: 'Tap to pause' },
+  moveCamera: { en: 'Then you can move the camera' },
+  pausedMove: { en: 'Paused. Move the camera if you need to.' },
   imDone: { en: 'I’m done' },
   takePhoto: { en: 'Take the photo' },
   notNow: { en: 'Not now' },

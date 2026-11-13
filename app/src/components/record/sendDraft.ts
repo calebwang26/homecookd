@@ -59,7 +59,16 @@ export type SendInput = {
   onStarted?: () => void;
 };
 
-export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string; dishAskId?: string | null };
+export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & {
+  kids: { id: string; name: string }[];
+  title: string;
+  dishAskId?: string | null;
+  /** Every clip was filmed in the app (the parts of one recording, in order): the pipeline keeps their order (#496). */
+  filmedInApp?: boolean;
+};
+
+/** Filmed in the app: every clip from the camera (the app's own, or the phone's from the recording screen), none picked from the library. */
+export const filmedInApp = (clips: { source: 'camera' | 'library' }[]) => clips.length > 0 && clips.every((c) => c.source === 'camera');
 
 /**
  * Convex said no to what was asked (a ConvexError carries its sentence in `data`): not a dropped line,
@@ -76,13 +85,14 @@ const refused = (e: unknown) => {
  * (not from a recording, whose job must stay linked to it for the resend after a crash) with nothing
  * but the folder: the recipe matters more than who it's for.
  */
-export async function makeJob(uploadId: string, as: string, { kids, glasses, language, recordingId, title, dishAskId }: JobFields): Promise<void> {
+export async function makeJob(uploadId: string, as: string, { kids, glasses, language, recordingId, title, dishAskId, filmedInApp: inApp }: JobFields): Promise<void> {
   const path = `${uploadId}/`;
   const source = glasses ? 'glasses' : 'phone';
   const forKidIds = await convexKidIds(kids, as);
   const tries: Record<string, unknown>[] = [
-    { title: title || undefined, language: language ?? undefined, forKidIds, recordingId: recordingId ?? undefined, dishAskId: dishAskId ?? undefined },
-    { title: title || undefined, recordingId: recordingId ?? undefined },
+    { title: title || undefined, language: language ?? undefined, forKidIds, recordingId: recordingId ?? undefined, dishAskId: dishAskId ?? undefined, filmedInApp: inApp || undefined },
+    // The clips' order outlasts the details: a recipe in the wrong order is worse than one for nobody.
+    { title: title || undefined, recordingId: recordingId ?? undefined, filmedInApp: inApp || undefined },
   ];
   if (!recordingId) tries.push({});
   for (let i = 0; ; i++) {
@@ -155,7 +165,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       thumb_video_uri: thumb ?? clips[0]?.asset.uri ?? null,
       recording_id: recordingId ?? null,
       unsent_id: noteId !== recordingId ? noteId : null,
-      job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })), dishAskId },
+      job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })), dishAskId, filmedInApp: filmedInApp(clips) },
     },
   });
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure
