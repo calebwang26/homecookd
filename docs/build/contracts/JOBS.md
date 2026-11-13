@@ -90,7 +90,7 @@ Flow 1, with these differences:
 - `size` is the file's exact byte count. The app's `fileSizeFor` fallback of 0 is refused now.
 - `durationS` when the picker knows it. The api adds up only the ones sent (4 hours at most). The worker measures again and fails a job over 4 hours.
 - `source: "phone"`, and `title` is the dish she typed, if any.
-- Check before sending: 1 to 20 videos, each a `video/*`, each at most 20 GiB, 4 hours in all.
+- Check before sending: 1 to 99 videos, each a `video/*`, each at most 20 GiB, 4 hours in all.
 - Each video over 5 GiB comes back as `PARTS` (flow 8).
 
 ### 7. Resuming after the app dies mid-upload
@@ -146,7 +146,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 
 | Field | Rule |
 |---|---|
-| `videos` | 1 to 20, in the order the worker will read them. `index` in the answer is the place here, from 1 |
+| `videos` | 1 to 99, in the order the worker will read them. `index` in the answer is the place here, from 1 |
 | `contentType` | `video/<type>`, at most 100 characters. Stored lowercase |
 | `size` | The exact bytes, a whole number from 1 to 21,474,836,480 (20 GiB) |
 | `durationS` | Optional. Seconds, 0 to 86,400 each; at most 14,400 (4 hours) for those sent |
@@ -168,7 +168,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 |---|---|---|
 | `forbidden` (403) | A kid | Don't offer Record to kids |
 | `invalid` (400), `field: "Idempotency-Key"` | Missing: "Send an Idempotency-Key with this write." Malformed: "An Idempotency-Key is 8 to 128 letters, digits, - or _.", as on every write | A bug |
-| `invalid` (400), `field: "videos"` | "Pick 1 to 20 videos.", "Every file must be a video.", "A video's length doesn't look right.", "That's more than 4 hours of video. Please pick fewer videos." | Check before sending |
+| `invalid` (400), `field: "videos"` | "Pick 1 to 99 videos.", "Every file must be a video.", "A video's length doesn't look right.", "That's more than 4 hours of video. Please pick fewer videos." | Check before sending |
 | `too_large` (413) | A video over 20 GiB | Check the size before sending |
 | `idempotency_conflict` (409) | This key with other videos, or on another route | A bug: a new upload needs a new key |
 | `not_found` (404) | The upload behind this key was cancelled | Start again with a new key |
