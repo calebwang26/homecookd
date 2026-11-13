@@ -94,7 +94,7 @@ export type JobMeta = {
    * What jobs.create needs, kept so the home card can make the Convex job again until it lands
    * (components/record/jobRetry). Rows from older builds have none and aren't retried.
    */
-  job_fields?: { glasses: boolean; language: string | null; title: string; kids: { id: string; name: string }[]; dishAskId?: string | null } | null;
+  job_fields?: { glasses: boolean; language: string | null; title: string; kids: { id: string; name: string }[]; dishAskId?: string | null; filmedInApp?: boolean } | null;
   /** 'ok' once Convex has this upload's job; 'failed' once every try failed (the row says so). */
   convex_job?: 'ok' | 'failed' | null;
   convex_job_attempts?: number;

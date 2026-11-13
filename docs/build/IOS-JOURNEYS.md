@@ -17,7 +17,7 @@ Plan approved by the Master Agent, Nov 8, 2026, in three steps:
 3. **Journeys 2–5 and the gate.**
    - Messages → New message → Add family → Copy link → X → a chat → Home (journey 3, `03-add-family-copy-link.yaml`;
      "Journey 3" below).
-   - Record → film 5 s → send (journey 4, `04-record-send.yaml`; "Journey 4" below).
+   - Record → film → pause → keep filming → pause → I'm done → send (journey 4, `04-record-send.yaml`; "Journey 4" below).
    - Family link → name → sign in (journey 2, `02-family-link.yaml`; "Test people" below).
    - A shared recipe's video plays.
    - Kid Home.
@@ -317,8 +317,11 @@ phones.
   journey left up".
 - The cook signs in through the hook, picks English, takes her welcome's "Start recording now" → Record → "Start
   recording" → the AI consent sheet a new cook sees first ("homecookd uses AI for this": OK, continue) → the pre-record
-  sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about
-  6 s → "I'm done" → "Done! Sending it to …" → her Home.
+  sheet (the dish "Journey dal"; Leo starts ticked) → Phone camera → the red button → about 4 s ("Tap to pause",
+  "Recording · …", no "I'm done" while filming) → Pause ("Paused · …", "I'm done" shows) → Keep filming → about 4 s
+  → Pause → "I'm done" → "Done! Sending it to …" → her Home. The two parts are two files, sent as one recording
+  (Caleb's Pause, Nov 12: `components/record/pauseFlow.ts`). The big button is tapped by its `testID`
+  (`record-button`): its words under it aren't the button.
 - Staging runs no worker, so the job stays queued on the server. The proof the videos went up and the job exists is
   the row's hint moving past "Sending your videos · N%" to the server's stage ("Writing it down · …" or "Waiting its
   turn"). The row's "Still being made." shows while it's still sending too, so it proves nothing (run 42847961184 passed

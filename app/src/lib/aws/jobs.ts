@@ -92,7 +92,7 @@ export const jobs = {
   cancelUpload: (uploadId: string, as?: string | null) =>
     request<{ stopped: boolean }>(up(uploadId, '/cancel'), { auth: 'session', as, body: {} }),
   /** The job, made straight after the links (before the bytes land). The same uploadId answers the same job. */
-  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[]; dishAskId?: string }, as?: string | null) =>
+  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[]; dishAskId?: string; filmedInApp?: boolean }, as?: string | null) =>
     request<{ jobId: string; recipeId: string | null }>('/v1/jobs', { auth: 'session', as, body: { ...input, source: 'phone' } }),
   list: (cursor?: string | null, as?: string | null) =>
     request<{ jobs: Job[]; nextCursor: string | null }>(`/v1/jobs${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session', as }),

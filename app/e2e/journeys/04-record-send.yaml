@@ -1,6 +1,6 @@
-# Journey 4 (docs/build/IOS-JOURNEYS.md): Record → film → send, as the cook. A simulator has no camera, so this build
+# Journey 4 (docs/build/IOS-JOURNEYS.md): Record → film → pause → keep filming → pause → I'm done → send, as the cook. A simulator has no camera, so this build
 # (EXPO_PUBLIC_E2E=1) films with the stand-in camera (components/record/useInAppCamera e2eCamera): when filming stops,
-# each file is a real 5 s clip from staging media (EXPO_PUBLIC_E2E_CLIP_URL), so the recording uploads and makes a job
+# each file (one per part) is a real 5 s clip from staging media (EXPO_PUBLIC_E2E_CLIP_URL), so the recording uploads and makes a job
 # exactly as a phone's does. Staging runs no worker, so the job stays "Still being made": seeing that row on her Home
 # is the proof the videos went up and the job exists. The cook and everything she sent go with the test people.
 # Signed in as the cook ("Asha (test)", with the kid "Leo (test)") through the simulator-only sign-in hook; COOK_KEY
@@ -70,16 +70,44 @@ tags:
       MODE: watch
       WHY: journey 4's filming
 - tapOn: "Start recording"
+# While filming the one button is Pause ("Tap to pause"); "I'm done" shows only once she has paused (Caleb, Nov 12).
 - extendedWaitUntil:
-    visible: ".*Tap when you.re done.*"
+    visible: "Tap to pause"
     timeout: 15000
+- assertVisible: "Recording · .*"
+- assertNotVisible: "I.m done"
 - takeScreenshot: 04-filming
-# About 6 s of filming (nothing is waited for: a pause), then "I'm done".
+# About 4 s of filming (nothing is waited for: a pause), then Pause. The picture stays, the button says Keep filming.
 - extendedWaitUntil:
     visible: "this text never appears"
-    timeout: 6000
+    timeout: 4000
     optional: true
-- tapOn: ".*Tap when you.re done.*"
+- tapOn:
+    id: "record-button"
+- extendedWaitUntil:
+    visible: ".*Move the camera if you need to.*"
+    timeout: 15000
+- assertVisible: "Paused · .*"
+- assertVisible: "I.m done"
+- takeScreenshot: 04-paused
+# She moved the phone: Keep filming starts the second part (a new file), about 4 s more, then Pause and "I'm done".
+# Both parts go as one recording, in order.
+- tapOn:
+    id: "record-button"
+- extendedWaitUntil:
+    visible: "Tap to pause"
+    timeout: 15000
+- assertNotVisible: "I.m done"
+- extendedWaitUntil:
+    visible: "this text never appears"
+    timeout: 4000
+    optional: true
+- tapOn:
+    id: "record-button"
+- extendedWaitUntil:
+    visible: "I.m done"
+    timeout: 15000
+- tapOn: "I.m done"
 # The done view says it's sending, then her Home shows the dish being made: uploaded, and the job made.
 - extendedWaitUntil:
     visible: ".*Done! Sending it to.*"

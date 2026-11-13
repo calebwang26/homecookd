@@ -1,4 +1,5 @@
 // The in-app camera's files, without React: start, the 5-minute roll, pause, resume, stop and the flip.
+// A pause is hers (the Pause button, Caleb Nov 12) or leaving the app; `pausedBy` says which (pauseFlow.ts reads it).
 // useInAppCamera wires it to VisionCamera's <Camera> and to React (useSyncExternalStore on `snapshot`);
 // node scripts/test-recording-ui.mjs drives it with a fake camera. The rules it keeps:
 //   - homie's mic may restart only while no file is open (being written or still being saved):
@@ -16,10 +17,11 @@
 //     them while she films (lib/unsentRecordings): a crash before "I'm done" loses only the open file.
 //
 //   const f = new Filming(); f.connect(camera, events)    camera: start/stop a file, keep a finished one
-//   f.start() / f.pause() / f.resume() / f.flip() / await f.stop() -> the clips, in order
+//   f.start() / f.pause('her' | 'away') / f.resume() / f.flip() / await f.stop() -> the clips, in order
 //   f.initialized()   from <Camera onInitialized>     f.snapshot()   what the screen shows
 import { CHUNK_MS, chunkClip, END_WAIT_MS, filmedMs, FLIP_SETTLE_MS, FLIP_WAIT_MS, flipSteps, gapS, otherFacing, READY_WAIT_MS, type CameraPhase, type Chunk, type Facing } from './cameraLogic';
 import type { DraftClip } from './draft';
+import type { PausedBy } from './pauseFlow';
 
 /** A finished file as the camera reports it (seconds, pixels). */
 export type Recorded = { path: string; duration: number; width: number; height: number };
@@ -58,6 +60,8 @@ export type FilmingView = {
   flipping: boolean;
   /** The camera stopped by itself: "The camera stopped. Your video so far is saved." */
   trouble: boolean;
+  /** Whose pause it is while paused: her tap or leaving the app (null otherwise, and for a camera that stopped). */
+  pausedBy: PausedBy | null;
   error: string | null;
   /** The clock: the finished files' length, and since when the open one runs (null = none). */
   doneMs: number;
@@ -83,7 +87,7 @@ function deferred() {
 }
 
 export class Filming {
-  private view: FilmingView = { phase: 'idle', facing: 'back', cameraKey: 0, ready: false, flipping: false, trouble: false, error: null, doneMs: 0, since: null };
+  private view: FilmingView = { phase: 'idle', facing: 'back', cameraKey: 0, ready: false, flipping: false, trouble: false, pausedBy: null, error: null, doneMs: 0, since: null };
   private listeners = new Set<() => void>();
   private chunks: Chunk[] = [];
   private open: OpenFile | null = null;
@@ -299,10 +303,10 @@ export class Filming {
     });
   }
 
-  /** Leaving the app: the file ends at once (never waits for the queue). */
-  async pause() {
+  /** Her Pause, or leaving the app: the file ends at once (never waits for the queue). */
+  async pause(by: PausedBy) {
     if (this.view.phase !== 'filming') return;
-    this.setPhase('paused');
+    this.set({ phase: 'paused', pausedBy: by });
     this.on.onPause?.();
     await this.endFile();
   }
@@ -324,8 +328,7 @@ export class Filming {
         this.stuck();
         return false;
       }
-      this.setPhase('filming');
-      this.set({ trouble: false });
+      this.set({ phase: 'filming', trouble: false, pausedBy: null });
       this.on.onResume?.(gapS(this.chunks.at(-1), at));
       return true;
     });

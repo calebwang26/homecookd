@@ -80,6 +80,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [uptime-first](memory/uptime-first.md) | Nov 7: the app never crashes, about 99.9% uptime; the reliable production option by default, cost beside it |
 | [send-again-failed-upload](memory/send-again-failed-upload.md) | Nov 10: a recording whose upload gave up gets a real Send again on Home (Caleb: "if he'll upload, should say send again") |
 | [app-update-card](memory/app-update-card.md) | Nov 10: 1.1 gets an "Update homecookd" popup (App Store button, Later) when Apple's lookup has a newer version; Caleb, that evening: centred, over blurred glass; not built for 1.0 |
+| [pause-filming](memory/pause-filming.md) | Nov 12: filming in the app, the one button is Pause ("Tap to pause"); paused: Keep filming and "I'm done"; every part sent in order as one recording; while filming no word reads as a state |
 
 Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "The App UI session" and
 "the other session" in these notes were other Claude Code sessions, so they no longer exist.

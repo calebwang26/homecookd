@@ -16,7 +16,11 @@
 //                      the app (a build with VisionCamera, lib/live/camera): the back camera films at
 //                      1080p into 5-minute files (components/record/useInAppCamera) while homie stays
 //                      live: the mic and the /record socket stay open, a small still goes to homie
-//                      every 5 s, and the camera card above the button shows the shot ("● 4:07"). The
+//                      every 5 s, and the camera card above the button shows the shot ("● Recording ·
+//                      4:07"). The one button is Pause ("Tap to pause"; Caleb, Nov 12: she pauses, moves
+//                      the phone to the chopping board, keeps filming): paused, the picture stays live,
+//                      the button is Keep filming and "I'm done" shows (components/record/pauseFlow). Each
+//                      part is its own file, and "I'm done" sends them all, in order, as one recording. The
 //                      card shows from the hello on, so she can set the phone up. Beside it, a big
 //                      flip-camera button ("कॅमेरा बदला" / "Flip camera", components/record/
 //                      FlipCameraButton) swaps the back and the front camera at any time: before filming,
@@ -30,7 +34,7 @@
 //                      filming pauses with "The camera stopped. Your video so far is saved." and the
 //                      button films again (components/record/filming.ts). Leaving the app (a
 //                      lock, a call) finishes the file at once: "Recording stopped while you were away",
-//                      the button films again, "I'm done" ends. Each saved file updates a note on the
+//                      the same paused screen; a short trip films again by itself, her own Pause never does. Each saved file updates a note on the
 //                      phone (lib/unsentRecordings saveFilming): if the app dies (or this screen closes)
 //                      before "I'm done", her Home asks "Your recording stopped early. Send what was
 //                      filmed?" (components/record/StoppedEarlyCard). The stop button finishes the last
@@ -61,7 +65,8 @@
 // awake, and can't be swiped away once filming started.
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
 // shows a made-up question from homie as a phone with a microphone would (the listening bars);
-// ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
+// ?preview=camera filming in the app, ?preview=paused her Pause, ?preview=away after she came back,
+// ?preview=stopped the camera stopped by itself, ?preview=plate the plate
 // photo (a kitchen picture stands in for the camera; the flip button only spins its icon), ?preview=wrapup
 // the stub's whole wrap-up through the real hook (homie held across two questions and the opt-in, then
 // the plate photo and the goodbye; a tap skips a question; &plate=0 without the plate photo, as filmed
@@ -84,6 +89,7 @@ import { addClips, useDraft } from '@/components/record/draft';
 import { PLATE_FLIP_SIDE, PlateControls, PlateDim } from '@/components/record/PlateMoment';
 import { RecordButton } from '@/components/record/RecordButton';
 import { canStartFilming, momentView, recordingView, startPrompt, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
+import { flowLine, pressAction, showsImDone, type PauseFlowState } from '@/components/record/pauseFlow';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { useInAppCamera } from '@/components/record/useInAppCamera';
 import { usePickVideos } from '@/components/record/usePickVideos';
@@ -108,7 +114,9 @@ const PREVIEW_ASK: Ask = {
   kind: 'cue',
 };
 const PREVIEW_PLATE: Ask = { promptId: 'preview-plate', text: 'शेवटचं, आजी. ताट कॅमेऱ्यासमोर धरा, म्हणजे Shreya ला दिसेल ते कसं दिसतं.', textEn: 'Last thing, Aaji. Hold the plate up to the camera, so Shreya can see how it looks.', kind: 'plate' };
-const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate', 'wrapup'] as const;
+const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'away', 'stopped', 'plate', 'wrapup'] as const;
+/** The dev previews' pause flow (pauseFlow): what the screen shows for each. */
+const PREVIEW_FLOW: Partial<Record<(typeof PREVIEWS)[number], PauseFlowState>> = { camera: 'filming', ask: 'filming', paused: 'paused', away: 'away', stopped: 'stopped' };
 const KITCHEN = require('@/components/record/tripod.jpg') as number;
 // homie live while she films, or (switched off: lib/homie/switch) the same flow with no voice, no socket, no mic.
 const useRecordingVoice = HOMIE_ON ? useHomieRecording : useQuietRecording;
@@ -141,7 +149,7 @@ export default function RecordingScreen() {
   useRecordingAwake();
   const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string; preview?: string; plate?: string }>();
   const devPreview = __DEV__ && Platform.OS === 'web' ? (PREVIEWS.find((p) => p === params.preview) ?? null) : null;
-  const previewCamera = devPreview === 'camera' || devPreview === 'paused' || devPreview === 'plate' || devPreview === 'ask' || devPreview === 'wrapup';
+  const previewCamera = !!devPreview && devPreview !== 'done';
   // ?preview=wrapup: the stub voice service runs its wrap-up for this made-up recording (one per page load).
   const [wrapupId] = useState(() => `${STUB_WRAPUP_PREFIX}${params.plate === '0' ? STUB_NO_PLATE : ''}${Date.now()}`);
   const preview = devPreview === 'done';
@@ -220,9 +228,11 @@ export default function RecordingScreen() {
     },
   });
   const inApp = inAppPossible && cam.usable === true;
-  const camPaused = (inApp && cam.phase === 'paused') || devPreview === 'paused';
-  // Paused because she left the app, or because the camera stopped by itself (filming.ts `trouble`).
-  const pausedLine = words.line(inApp && cam.trouble ? 'cameraTrouble' : 'stopped');
+  // Filming in the app (components/record/pauseFlow): the one button is Pause; paused (hers, leaving the app, or a
+  // camera that stopped by itself) it is Keep filming, and "I'm done" shows.
+  const flow: PauseFlowState = devPreview ? (PREVIEW_FLOW[devPreview] ?? 'idle') : inApp ? cam.flow : 'idle';
+  const camPaused = pressAction(flow) === 'keepFilming';
+  const flowSays = flowLine(flow, words);
   const plateAsk = devPreview === 'plate' ? PREVIEW_PLATE : homie.ask?.kind === 'plate' ? homie.ask : null;
   const [photo, setPhoto] = useState<string | null>(null);
   const [shooting, setShooting] = useState(false);
@@ -399,8 +409,9 @@ export default function RecordingScreen() {
   };
   const press = () => {
     if (devPreview) return;
-    if (camPaused) return void cam.resume();
-    if (inApp && cam.phase === 'filming') return void doneInApp();
+    const act = pressAction(flow);
+    if (act === 'pause') return void cam.pause();
+    if (act === 'keepFilming') return void cam.resume();
     if (canStart) return startFilmingNow();
     if (!glasses) return homie.done();
     void (glassesFilming ? stopGlasses() : startGlasses());
@@ -457,16 +468,17 @@ export default function RecordingScreen() {
             <RecordButton
               live={view.live && !camPaused}
               resume={camPaused}
+              pause={flow === 'filming'}
               disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !(view.live || camPaused || canStart) || !!pick.busy}
               onPress={press}
-              accessibilityLabel={camPaused ? 'Keep filming' : view.live ? 'Recording. Tap when you’re done.' : canStart ? 'Start recording' : view.line.en ?? view.line.text}
+              accessibilityLabel={camPaused ? 'Keep filming' : flow === 'filming' ? 'Recording. Tap to pause.' : view.live ? 'Recording. Tap when you’re done.' : canStart ? 'Start recording' : view.line.en ?? view.line.text}
             />
-            <Animated.View key={camPaused ? pausedLine.text : view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
-              <BiLine line={camPaused ? pausedLine : view.line} size={camPaused ? 24 : 30} weight={700} enSize={15} leading={1.3} />
+            <Animated.View key={`${flow} ${(flowSays ?? view.line).text}`} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
+              <BiLine line={flowSays ?? view.line} size={30} weight={700} enSize={flowSays ? 18 : 15} leading={1.3} />
             </Animated.View>
-            {camPaused ? (
+            {showsImDone(flow) ? (
               <View style={styles.skip}>
-                <ActionButton label={both(words.line('imDone'))} variant="outline" size="sm" onPress={() => {
+                <ActionButton label={both(words.line('imDone'))} variant="outline" size="lg" onPress={() => {
                     if (!devPreview) void doneInApp();
                   }} />
               </View>
@@ -489,7 +501,7 @@ export default function RecordingScreen() {
           </View>
           {showCamera ? <PlateDim on={!!plateAsk} /> : null}
           {showCamera ? (
-            <CameraCard cam={cam} attach={cam.setCamera} slot={slot} big={!!plateAsk} side={COLUMN.side} photo={photo} standIn={previewCamera ? KITCHEN : null} />
+            <CameraCard cam={cam} attach={cam.setCamera} slot={slot} big={!!plateAsk} side={COLUMN.side} photo={photo} standIn={previewCamera ? KITCHEN : null} flow={flow} />
           ) : null}
           {flipAt === 'card' && beside ? (
             <Animated.View entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={[styles.flip, beside]}>
