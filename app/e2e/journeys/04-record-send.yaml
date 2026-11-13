@@ -71,11 +71,13 @@ tags:
       WHY: journey 4's filming
 - tapOn: "Start recording"
 # While filming the one button is Pause ("Tap to pause"); "I'm done" shows only once she has paused (Caleb, Nov 12).
+# The line under the button is one accessibility label, both its lines ("Tap to pause. Then you can move the camera":
+# components/record/BiLine), so each check matches inside it (run 43364246268 failed on the bare text).
 - extendedWaitUntil:
-    visible: "Tap to pause"
+    visible: ".*Tap to pause.*"
     timeout: 15000
-- assertVisible: "Recording · .*"
-- assertNotVisible: "I.m done"
+- assertVisible: ".*Recording · .*"
+- assertNotVisible: ".*I.m done.*"
 - takeScreenshot: 04-filming
 # About 4 s of filming (nothing is waited for: a pause), then Pause. The picture stays, the button says Keep filming.
 - extendedWaitUntil:
@@ -87,17 +89,17 @@ tags:
 - extendedWaitUntil:
     visible: ".*Move the camera if you need to.*"
     timeout: 15000
-- assertVisible: "Paused · .*"
-- assertVisible: "I.m done"
+- assertVisible: ".*Paused · .*"
+- assertVisible: ".*I.m done.*"
 - takeScreenshot: 04-paused
 # She moved the phone: Keep filming starts the second part (a new file), about 4 s more, then Pause and "I'm done".
 # Both parts go as one recording, in order.
 - tapOn:
     id: "record-button"
 - extendedWaitUntil:
-    visible: "Tap to pause"
+    visible: ".*Tap to pause.*"
     timeout: 15000
-- assertNotVisible: "I.m done"
+- assertNotVisible: ".*I.m done.*"
 - extendedWaitUntil:
     visible: "this text never appears"
     timeout: 4000
@@ -105,9 +107,9 @@ tags:
 - tapOn:
     id: "record-button"
 - extendedWaitUntil:
-    visible: "I.m done"
+    visible: ".*I.m done.*"
     timeout: 15000
-- tapOn: "I.m done"
+- tapOn: ".*I.m done.*"
 # The done view says it's sending, then her Home shows the dish being made: uploaded, and the job made.
 - extendedWaitUntil:
     visible: ".*Done! Sending it to.*"
