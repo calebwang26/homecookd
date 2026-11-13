@@ -123,6 +123,8 @@ def spec_for(claim: dict, objects: list[dict]) -> dict:
             "cook_name": claim.get("cook_name"), "relation": claim.get("relation"),
             "language": claim.get("language") or claim.get("cook_language") or "en",
             "homie_log": claim.get("homie_log") or [], "cover_key": claim.get("cover_key"),
+            # Filmed in the app: the files are in the order she filmed them; prep and order.py never reorder them.
+            "keep_order": bool(claim.get("filmed_in_app")),
             "live": {"liveLog": [], "liveGaps": [], "videoGaps": gaps} if gaps else None}
 
 

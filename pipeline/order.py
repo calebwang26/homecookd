@@ -1,5 +1,8 @@
 """Put camera-roll clips in cooking order (docs/build/FEEDBACK-OCT16.md, section B).
 
+Never a recording filmed in the app (manifest "keep_order", from prep.run): its files come in the order she filmed
+them (5-minute rolls, a Pause, a flip), so a stove-then-chopping recording stays that way.
+
 prep.py orders clips by file date. Phone dates can be missing, identical or wrong, so after extraction
 process.py calls order_sessions(), which decides the cooking order from what happens in each clip:
 
@@ -426,6 +429,9 @@ def order_sessions(out_dir: Path, manifest: dict, events: list[dict], not_proces
     it returns None when the model gave no usable answer. The decision is cached in the manifest and
     reused (no model call) while the extracted steps are unchanged, unless force."""
     if len(manifest["sessions"]) < 2:
+        return manifest, events, not_processed
+    if manifest.get("keep_order"):
+        log("[order] filmed in the app: keeping the order it was filmed in")
         return manifest, events, not_processed
     recorded = sorted(current_order(manifest))
     prompt = build_prompt(manifest, events)

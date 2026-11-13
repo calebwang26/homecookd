@@ -273,8 +273,11 @@ def _layout(manifest: dict) -> tuple:
 # ---------- main ----------
 
 def run(recipe_id: str, title: str, cook: str, relation: str, inputs: list[Path],
-        source: str | None = None, sample: bool = False, force: bool = False) -> Path:
-    """Prepare media for one recipe. Returns the path of work/manifest.json. Raises PrepError on failure."""
+        source: str | None = None, sample: bool = False, force: bool = False, keep_order: bool = False) -> Path:
+    """Prepare media for one recipe. Returns the path of work/manifest.json. Raises PrepError on failure.
+
+    keep_order: the inputs are already in the order they were filmed (a recording made in the app), so they are
+    never sorted by file date here nor put in cooking order by process.py (order.order_sessions)."""
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", recipe_id):
         raise PrepError(f"recipe id {recipe_id!r} must be lowercase letters, digits and hyphens (e.g. weed-pancakes)")
     if not inputs:
@@ -292,12 +295,16 @@ def run(recipe_id: str, title: str, cook: str, relation: str, inputs: list[Path]
     manifest_path = work / "manifest.json"
     t_start = time.monotonic()
 
-    print(f"[prep {recipe_id}] inventory")
-    items = sorted((inventory(p) for p in paths), key=lambda it: it["recorded"])
+    old_manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+    keep_order = keep_order or bool(not force and old_manifest and old_manifest.get("keep_order"))
+    print(f"[prep {recipe_id}] inventory" + (" (filmed in the app: kept in upload order)" if keep_order else ""))
+    items = [inventory(p) for p in paths]
+    if not keep_order:
+        items.sort(key=lambda it: it["recorded"])
     for n, it in enumerate(items, 1):
         print(f"  {n:02d}  {it['path'].name}  {it['duration']:.1f} s  recorded {it['recorded'].isoformat(timespec='seconds')}"
               f"  (from {it['recorded_source']})")
-        if it["recorded_source"] == "file mtime" and len(items) > 1:
+        if it["recorded_source"] == "file mtime" and len(items) > 1 and not keep_order:
             print(f"      warning: no creation date in {it['path'].name}; order uses file mtime, check it is right")
 
     if (work / SWAP_PENDING).exists():
@@ -306,7 +313,6 @@ def run(recipe_id: str, title: str, cook: str, relation: str, inputs: list[Path]
                             "(it finishes or undoes it), or prep.py --force")
         for name in (SWAP_PENDING, PREV_PLAY, PREV_VOICE):
             (work / name).unlink(missing_ok=True)
-    old_manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     previous_manifest = old_manifest if not force else None
     if previous_manifest:
         # Compare in recorded order: process.py may have put the sessions in cooking order.
@@ -382,6 +388,8 @@ def run(recipe_id: str, title: str, cook: str, relation: str, inputs: list[Path]
         "id": recipe_id, "title": title, "cook": cook, "relation": relation, "source": source,
         "sample": sample, "duration_s": math.floor(total), "sessions": sessions,
     }
+    if keep_order:
+        manifest["keep_order"] = True
     if order:
         manifest["order"] = order
     # recipe.json times point into the old play.mp4. If its layout changed (--force dropped a cooking

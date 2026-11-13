@@ -575,7 +575,8 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             _capped.pop(job_id, None)
             cook = job.get("cookName") or "Cook"
             # The dish the cook named; without one the writer names it (process.NO_TITLE).
-            prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
+            prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs,
+                     keep_order=bool(job.get("filmedInApp")))  # filmed in the app: never reordered (order.py)
             live = {k: job.get(k) or [] for k in ("liveLog", "liveGaps", "videoGaps")}
             photo = _download_cover(job["coverUrl"], folder / "plate-photo.jpg") if job.get("coverUrl") else None
             process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [],

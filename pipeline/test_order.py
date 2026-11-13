@@ -249,12 +249,12 @@ LENGTHS = {"plate": 3, "prep": 4, "cook": 5}
 INPUT_ORDER = ["plate", "prep", "cook"]  # same file dates, so prep.py keeps this (wrong) order
 
 
-def make_clip(path: Path, role: str) -> None:
+def make_clip(path: Path, role: str, created: str = "2026-10-11T17:00:00Z") -> None:
     d = LENGTHS[role]
     prep.ffmpeg("-f", "lavfi", "-i", f"color=c={COLORS[role]}:s=320x240:r=10:d={d}",
                 "-f", "lavfi", "-i", f"sine=frequency=440:duration={d}:sample_rate=48000",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
-                "-metadata", "creation_time=2026-10-11T17:00:00Z", str(path))
+                "-metadata", f"creation_time={created}", str(path))
 
 
 def color_at(video: Path, t: float) -> str:
@@ -555,6 +555,32 @@ def test_failed_rebuild_keeps_recorded_order():
         assert (out / "play.mp4").stat().st_ino == inode and color_at(out / "play.mp4", 1) == "red"
         assert (out / "recipe.json").exists()
         assert_no_swap_files(work)
+
+
+def test_filmed_in_app_keeps_the_filmed_order():
+    """Caleb's case (Nov 11): she films the stove, pauses, moves the camera and chops. The files have good, distinct
+    dates, the keywords say "chopping first" and a sure model agrees. A camera-roll upload is put in cooking order;
+    a recording filmed in the app (keep_order) keeps the order it was filmed in, and the model is never asked."""
+    def run(rid: str, keep: bool, created: tuple[str, str]) -> tuple:
+        fake = FakeGemini({1: "cook", 2: "prep"}, {"order": [2, 1], "confidence": "high", "reason": "chop, then cook"})
+        with sandbox(fake) as (out_root, _clips):
+            parts = [out_root.parent / "part-01.mp4", out_root.parent / "part-02.mp4"]
+            for part, role, at in zip(parts, ("cook", "prep"), created):
+                make_clip(part, role, at)
+            prep.run(rid, "Test Dish", "Mom", "Mom", parts, keep_order=keep)
+            process.run(rid)
+            m = json.loads((out_root / rid / "work" / "manifest.json").read_text())
+            return fake, m, out_root / rid / "play.mp4", color_at(out_root / rid / "play.mp4", 1)
+
+    filmed = ("2026-11-11T17:00:00Z", "2026-11-11T17:10:00Z")
+    fake, m, _play, first = run("t-roll", False, filmed)  # the same files from the camera roll: cooking order
+    assert m["order"]["chosen"] == [2, 1] and first == "green", m["order"]
+    fake, m, _play, first = run("t-inapp", True, filmed)
+    assert first == "blue" and [s["recorded_index"] for s in m["sessions"]] == [1, 2], m["sessions"]
+    assert m["keep_order"] is True and "order" not in m and fake.calls["order"] == 0, (m.get("order"), fake.calls)
+    # in-app: the upload's order wins over the files' dates (a phone clock that jumped, a file with no date)
+    fake, m, _play, first = run("t-clock", True, tuple(reversed(filmed)))
+    assert first == "blue" and [s["input"].rsplit("/", 1)[1] for s in m["sessions"]] == ["part-01.mp4", "part-02.mp4"]
 
 
 def test_single_clip_is_untouched():

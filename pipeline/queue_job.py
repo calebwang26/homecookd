@@ -49,7 +49,8 @@ class RealSteps:
 
     def prepare(self, recipe_id: str, spec: dict, inputs: list[Path]) -> None:
         cook = spec.get("cook_name") or "Cook"
-        self.prep.run(recipe_id, spec.get("title") or "", cook, spec.get("relation") or cook, inputs)
+        self.prep.run(recipe_id, spec.get("title") or "", cook, spec.get("relation") or cook, inputs,
+                      keep_order=bool(spec.get("keep_order")))
 
     def process_video(self, recipe_id: str, spec: dict, report, cover: Path | None) -> Path:
         return self.process.run(recipe_id, report=report, language=spec.get("language"),
