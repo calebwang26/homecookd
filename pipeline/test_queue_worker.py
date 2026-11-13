@@ -1539,19 +1539,25 @@ def test_spec_holds_what_the_steps_need():
     assert spec["live"] == {"liveLog": [], "liveGaps": [], "videoGaps": [{"startS": 1, "endS": 2}]}
     json.dumps(spec)  # the child reads it from a file
     assert qw.spec_for({**claim, "video_gaps": None}, [])["live"] is None
+    # filmed in the app: the clips keep the order she filmed them in (order.py never moves them)
+    assert spec["keep_order"] is False and qw.spec_for({**claim, "filmed_in_app": True}, [])["keep_order"] is True
 
 
 def test_steps_are_called_with_what_they_accept():
     """The seam: if prep, process or publish change shape, this fails instead of a real job."""
     steps = queue_job.RealSteps()
-    inspect.signature(steps.prep.run).bind("id", "t", "c", "r", [Path("a")])
+    inspect.signature(steps.prep.run).bind("id", "t", "c", "r", [Path("a")], keep_order=True)
     inspect.signature(steps.process.run).bind("id", report=print, language="en", homie_log=[], live=None, cover_photo=None)
     inspect.signature(steps.publish_mod.publish_recipe).bind("id", bucket=object(), family=True)
     calls = {}
-    steps.prep = SimpleNamespace(run=lambda *a: calls.setdefault("prep", a), probe_duration=lambda p: 3.0, OUT_ROOT=steps.prep.OUT_ROOT)
+    steps.prep = SimpleNamespace(run=lambda *a, **kw: calls.setdefault("prep", (a, kw)), probe_duration=lambda p: 3.0,
+                                 OUT_ROOT=steps.prep.OUT_ROOT)
     steps.process = SimpleNamespace(run=lambda rid, **kw: calls.setdefault("process", (rid, kw)))
     steps.prepare("rid", {"title": None, "cook_name": None, "relation": None}, [Path("a")])
-    assert calls["prep"] == ("rid", "", "Cook", "Cook", [Path("a")])  # worker.py's defaults
+    assert calls["prep"] == (("rid", "", "Cook", "Cook", [Path("a")]), {"keep_order": False})  # worker.py's defaults
+    calls.clear()
+    steps.prepare("rid", {"title": None, "cook_name": None, "relation": None, "keep_order": True}, [Path("a")])
+    assert calls["prep"][1] == {"keep_order": True}
     steps.process_video("rid", {"language": "mr", "homie_log": None, "live": None}, print, None)
     assert calls["process"][1]["homie_log"] == [] and calls["process"][1]["language"] == "mr"
 

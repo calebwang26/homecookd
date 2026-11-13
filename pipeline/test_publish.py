@@ -266,7 +266,7 @@ def test_worker_publishes_a_family_recipe():
     with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()), \
             patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
                     _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0), \
-            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.prep, run=lambda *_a, **_k: None, probe_duration=lambda _p: 60.0), \
             patched(worker.process, run=lambda *_a, **kw: calls.setdefault("process", []).append(kw)), \
             patched(worker, _download_cover=lambda url, dest: calls.setdefault("cover", []).append(url) or dest), \
             patched(publish, publish_recipe=publish_recipe):
@@ -307,7 +307,7 @@ def test_worker_stops_a_job_the_cook_cancelled():
             patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
                     _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0,
                     _purge_uploads=lambda _b, folder: calls["purged"].append(folder) or 1), \
-            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.prep, run=lambda *_a, **_k: None, probe_duration=lambda _p: 60.0), \
             patched(worker.process, run=process_run), \
             patched(publish, publish_recipe=publish_recipe):
         worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
@@ -348,7 +348,7 @@ def test_worker_at_the_spend_cap_requeues_the_job_without_touching_the_bucket_ag
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()), \
                 patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=listed, _capped={},
                         _download=downloaded, spend_cap=lambda: cap["usd"], spent_usd=lambda: spent), \
-                patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+                patched(worker.prep, run=lambda *_a, **_k: None, probe_duration=lambda _p: 60.0), \
                 patched(worker.process, run=lambda *_a, **_k: calls["ran"].append(1)), \
                 patched(publish, publish_recipe=lambda *_a, **_k: SimpleNamespace(model_dump=lambda mode: {})):
             for _ in range(3):
@@ -388,7 +388,7 @@ def test_worker_stopped_right_after_publishing_trashes_the_media_and_keeps_runni
             patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
                     _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0,
                     _trash_recipe=lambda _m, rid: calls["trashed"].append(rid) or 3), \
-            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.prep, run=lambda *_a, **_k: None, probe_duration=lambda _p: 60.0), \
             patched(worker.process, run=lambda *_a, **_kw: None), \
             patched(publish, publish_recipe=lambda *_a, **_kw: full):
         worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())  # trashes, then logs the 503
@@ -440,7 +440,7 @@ def test_worker_tells_the_cook_when_a_video_has_no_cooking():
                 contextlib.redirect_stderr(io.StringIO()), \
                 patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
                         _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0), \
-                patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 6.0), \
+                patched(worker.prep, run=lambda *_a, **_k: None, probe_duration=lambda _p: 6.0), \
                 patched(worker.process, run=run):
             worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
     assert failures == [worker.MSG_NO_STEPS, worker.MSG_FAILED], failures
